@@ -5,6 +5,9 @@
 #   ./scripts/release-local.sh v1.2.0                    # macOS only
 #   ./scripts/release-local.sh v1.2.0 --windows <dir>    # also attach a Windows build made from the same tag
 #
+# The Windows installer usually comes from the Build Windows workflow instead, run on the same tag before or after
+# this; each adds its own entry to the release's latest.json.
+#
 # The tag comes from the Version Bump workflow (see docs/RELEASING.md). The draft gets the universal .dmg,
 # the signed update bundle and latest.json; installed copies update once you publish it.
 #
@@ -118,20 +121,17 @@ if [ -n "$WIN_EXE" ]; then
   cp "$WIN_EXE" "$WIN_EXE.sig" "$OUT/"
 fi
 
-# latest.json: what the in-app updater reads. Each platform points at its file on this release.
-OUT="$OUT" VERSION="$VERSION" TAG="$TAG" REPO="$REPO" WIN="${WIN_EXE:+yes}" node -e '
-  const fs = require("fs"), path = require("path")
-  const { OUT, VERSION, TAG, REPO, WIN } = process.env
-  const asset = (name) => ({
-    signature: fs.readFileSync(path.join(OUT, name + ".sig"), "utf8").trim(),
-    url: `https://github.com/${REPO}/releases/download/${TAG}/${name}`,
-  })
-  const mac = asset(`Boards_${VERSION}_universal.app.tar.gz`)
-  const platforms = { "darwin-aarch64": mac, "darwin-x86_64": mac }
-  if (WIN) platforms["windows-x86_64"] = asset(`Boards_${VERSION}_x64-setup.exe`)
-  const latest = { version: VERSION, notes: `See https://github.com/${REPO}/releases/tag/${TAG}`, pub_date: new Date().toISOString(), platforms }
-  fs.writeFileSync(path.join(OUT, "latest.json"), JSON.stringify(latest, null, 2) + "\n")
-'
+# latest.json: what the in-app updater reads. Start from the one already on the release, if any,
+# so a Windows entry added by the Build Windows workflow is kept.
+gh release download "$TAG" --pattern latest.json --dir "$OUT" 2>/dev/null || true
+URL="https://github.com/$REPO/releases/download/$TAG"
+MAC="Boards_${VERSION}_universal.app.tar.gz"
+ENTRIES=(darwin-aarch64 "$URL/$MAC" "$OUT/$MAC.sig" darwin-x86_64 "$URL/$MAC" "$OUT/$MAC.sig")
+if [ -n "$WIN_EXE" ]; then
+  WIN="Boards_${VERSION}_x64-setup.exe"
+  ENTRIES+=(windows-x86_64 "$URL/$WIN" "$OUT/$WIN.sig")
+fi
+node scripts/latest-json.mjs "$OUT/latest.json" "$VERSION" "See https://github.com/$REPO/releases/tag/$TAG" "${ENTRIES[@]}"
 
 FILES=("$OUT"/*)
 PRERELEASE=()
@@ -146,6 +146,6 @@ fi
 
 echo
 echo "Done. Check the draft, then publish it: https://github.com/$REPO/releases/tag/$TAG"
-if [ -z "$WIN_EXE" ]; then
-  echo "This release has no Windows build, so Windows copies will not see it as an update."
+if [ -z "$WIN_EXE" ] && ! grep -q windows-x86_64 "$OUT/latest.json"; then
+  echo "No Windows build yet: run Build Windows from the Actions tab on $TAG (see docs/RELEASING.md) before publishing."
 fi
