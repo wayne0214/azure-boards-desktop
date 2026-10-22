@@ -44,6 +44,18 @@ Add these under **Settings → Secrets and variables → Actions**. Never put th
 
 If the Apple secrets are missing, the release still builds, but the Mac app is signed ad hoc. If the updater key is missing, the release builds without self-update.
 
+### Updater key
+
+Updates are signed with a key of your own, separate from Apple code signing. Create it once, and choose a password when asked:
+
+```bash
+npm run tauri signer generate -- -w ~/.tauri/boards.key
+```
+
+Put the contents of `~/.tauri/boards.key` in `TAURI_SIGNING_PRIVATE_KEY`, its password in `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and `~/.tauri/boards.key.pub` in the `UPDATER_PUBKEY` variable. The app looks for `latest.json` on this repository's latest release; to host it elsewhere, set the variable `UPDATER_ENDPOINT` to an `https://` URL.
+
+Keep the private key safe. If you lose it, installed copies can no longer update, and users have to install the next version by hand. A release built without the key works, but it doesn't update itself, so users of that version have to install the next one by hand.
+
 ### Repository settings
 
 - **General → Pull Requests**: allow squash merging only, with the default message set to **Pull request title**. Turn off merge commits and rebase merging.
