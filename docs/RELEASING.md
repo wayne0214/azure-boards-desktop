@@ -20,9 +20,10 @@ The production branch is `master`, not `main`. git-tools only promotes stable ve
 |---|---|---|
 | `.github/workflows/ci.yml` | PRs into `master`, `develop`, `release/**` and `hotfix/**`; pushes to `develop` | `npm test`, `npm run build`, `cargo test` (macOS) and `cargo check` (Windows) |
 | `.github/workflows/version-bump.yml` | Pushes to the Git Flow branches | git-tools release-led flow: a signed bump commit and tag, pushed over SSH as the bot |
+| `.github/workflows/release-windows.yml` | A manual run only, given a tag | **Build Windows**: builds the Windows installer for that tag and adds it, with its `latest.json` entry, to the tag's release |
 | `.github/workflows/release.yml` | A manual run only, on a tag | Fallback: builds both platforms on GitHub's runners into a draft release. It needs the optional secrets below. |
 
-No workflow builds installers on its own; releases come from [your Mac](#releasing-from-your-mac).
+No workflow builds installers on its own. The macOS build comes from [your Mac](#releasing-from-your-mac); the Windows build comes from [Build Windows](#windows).
 
 ## One-time setup
 
@@ -36,16 +37,21 @@ Add these under **Settings → Secrets and variables → Actions**. Never put th
 | `BOT_GPG_SECRETKEY` | secret | A new, passphrase-less GPG key for the bot: `gpg --export-secret-key -a <KEYID>`. |
 | `GIT_BOT_NAME`, `GIT_BOT_EMAIL` | variables | The name and email on that GPG key. To get the commits shown as Verified, add the public GPG key to a GitHub account that owns that email. |
 
-Only the fallback `release.yml` uses the rest. Skip them if you always release from your Mac:
+**Build Windows** needs these:
+
+| Name | Kind | What it is |
+|---|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | secrets | The updater key's contents (`~/.tauri/boards.key`) and its password; see [Updater key](#updater-key). |
+| `UPDATER_PUBKEY` | variable | The contents of `~/.tauri/boards.key.pub`. |
+| `TEAMUP_API_KEY` | secret | The Teamup API key built into the app for Meeting Rooms (the same value as `src-tauri/teamup.key`). Without it, the Windows build has no room booking. |
+
+Only the fallback `release.yml` also needs these. Skip them if you release the Mac app from your Mac:
 
 | Name | Kind | What it is |
 |---|---|---|
 | `APPLE_CERTIFICATE` | secret | The "Developer ID Application: Jia Hao Lai (96JNPWR556)" certificate and its private key, exported from Keychain Access as `.p12`, then `base64 -i cert.p12 \| pbcopy`. |
 | `APPLE_CERTIFICATE_PASSWORD` | secret | The password you chose when exporting the `.p12`. |
 | `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | secrets | Used for notarization: your Apple ID, an app-specific password from appleid.apple.com, and `96JNPWR556`. |
-| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | secrets | The updater key; see [Updater key](#updater-key). |
-| `UPDATER_PUBKEY` | variable | Public half of the updater key. |
-| `TEAMUP_API_KEY` | secret | The Teamup API key built into the app for Meeting Rooms (the same value as `src-tauri/teamup.key`). Without it, released builds have no room booking. |
 
 For the fallback: if the Apple secrets are missing, the Mac app is signed ad hoc; if the updater key is missing, the release doesn't update itself.
 
@@ -57,7 +63,7 @@ Updates are signed with a key of your own, separate from Apple code signing. Cre
 npm run tauri signer generate -- -w ~/.tauri/boards.key
 ```
 
-`scripts/release-local.sh` uses `~/.tauri/boards.key` and `boards.key.pub` from there. Copy them to the GitHub secrets only if you use the fallback workflow. The app looks for `latest.json` on this repository's latest release; to host it elsewhere, set `UPDATER_ENDPOINT` to an `https://` URL.
+`scripts/release-local.sh` uses `~/.tauri/boards.key` and `boards.key.pub` from there. **Build Windows** needs the same key as GitHub secrets, so that both platforms' updates verify against the one public key built into the app. The app looks for `latest.json` on this repository's latest release; to host it elsewhere, set `UPDATER_ENDPOINT` to an `https://` URL.
 
 Keep the private key safe. If you lose it, installed copies can no longer update, and users have to install the next version by hand. A release built without the key works, but it doesn't update itself, so users of that version have to install the next one by hand.
 
@@ -111,7 +117,7 @@ git push -u origin release/1.1.0      # CI: v1.1.0-rc.0
 2. Run `git-tools pr --base master --release-pr`.
 3. Open the PR `release/1.1.0` → `master` titled exactly `Release 1.1.0`, and squash-merge it. Keep the source branch for now.
 4. CI commits the version `1.1.0` and pushes the tag `v1.1.0`.
-5. Build and upload it from your Mac; see [Releasing from your Mac](#releasing-from-your-mac). Check the draft, then click **Publish**. The in-app updater sees the new version once the release is published.
+5. Build and upload the macOS app from your Mac ([Releasing from your Mac](#releasing-from-your-mac)), and run **Build Windows** on the tag ([Windows](#windows)). Check the draft has both, then click **Publish**. The in-app updater sees the new version once the release is published.
 6. Back-merge into `develop`; see [Back-merge](#back-merge).
 
 ### Hotfix
@@ -125,7 +131,7 @@ git-tools pr --hotfix-pr
 ```
 
 1. Open the PR into `master` titled `Hotfix 1.1.1` and squash-merge it. CI tags `v1.1.1`.
-2. Release it from your Mac, as for a release.
+2. Release it from your Mac and with **Build Windows**, as for a release.
 3. Back-merge into `develop`.
 
 ### Releasing from your Mac
@@ -143,33 +149,29 @@ The script checks that you're on a clean checkout of exactly that tag, and that 
 
 1. builds the universal app, signs it with your Developer ID and notarizes it;
 2. signs the update bundle with the updater key;
-3. writes `latest.json`;
+3. adds the macOS entries to `latest.json`, keeping a Windows entry already on the release;
 4. uploads all of it to a draft release on the tag.
 
 It asks for the updater key's password unless `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is set. Run it again to replace the files on a draft. A prerelease tag (`v1.1.0-rc.0`) makes a prerelease, which the in-app updater ignores. Put `teamup.key` in `src-tauri/` first, or the build has no room booking.
 
 #### Windows
 
-The Windows installer must be built on Windows, from the same tag and with the same updater key:
+GitHub builds the Windows installer:
 
-1. Copy `~/.tauri/boards.key` to the Windows machine.
-2. Create `src-tauri/tauri.release.conf.json`. Use the content the script writes, with your `boards.key.pub` contents as `pubkey`:
+1. In the Actions tab, open **Build Windows** and choose **Run workflow**.
+2. Enter the tag (`v1.1.0`) and run it.
 
-   ```json
-   {"bundle":{"createUpdaterArtifacts":true},"plugins":{"updater":{"pubkey":"<boards.key.pub contents>","endpoints":["https://github.com/wayne0214/azure-boards-desktop/releases/latest/download/latest.json"]}}}
-   ```
+Until this workflow reaches `master` with the first release that includes it, GitHub shows no **Run workflow** button. Start it from `develop` instead:
 
-3. Build:
+```bash
+gh workflow run release-windows.yml --ref develop -f tag=v1.0.0
+```
 
-   ```powershell
-   $env:TAURI_SIGNING_PRIVATE_KEY = "$HOME\.tauri\boards.key"; $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "<password>"
-   npx tauri build --bundles nsis --config src-tauri/tauri.release.conf.json
-   ```
+It takes about 15 minutes. It builds that tag with the updater key, adds `Boards_<version>_x64-setup.exe` and its `.sig` to the tag's release, and adds the Windows entry to the release's `latest.json`. If the release doesn't exist yet, it creates the draft.
 
-4. Copy `Boards_<version>_x64-setup.exe` and its `.sig` from `src-tauri\target\release\bundle\nsis\` to your Mac.
-5. Pass that folder with `--windows <dir>`; `latest.json` then covers Windows too.
+Run it before or after `release-local.sh`, but not at the same time, because both rewrite `latest.json`. Publish once both are on the draft: a release without the Windows entry has no Windows download, and Windows copies don't see it as an update.
 
-Without a Windows build, the release has no Windows download, and Windows copies don't update.
+If you build on a Windows machine instead, pass the folder with the installer and its `.sig` to `release-local.sh --windows <dir>`.
 
 As a fallback, run **Build installers** from the Actions tab on the tag. It builds both platforms on GitHub's runners, once the optional secrets are set.
 

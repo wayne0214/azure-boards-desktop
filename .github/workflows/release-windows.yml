@@ -1,0 +1,105 @@
+name: Build Windows
+
+# Builds the Windows installer for a release tag and adds it to that tag's GitHub release, next to the macOS build
+# from scripts/release-local.sh. Either can go first; each adds its own entry to the release's latest.json.
+# Run one at a time: both rewrite latest.json. See docs/RELEASING.md.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build, like v1.2.0
+        required: true
+  # Only so GitHub registers this workflow before it reaches master (until then it can only be started with
+  # gh workflow run --ref develop); the job below is skipped for pull requests.
+  pull_request:
+    paths: ['.github/workflows/release-windows.yml']
+
+permissions:
+  contents: write # create the draft release and upload to it
+
+concurrency:
+  group: release-windows-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    env:
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Check the tag
+        shell: bash
+        run: |
+          case "$TAG" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "::error::The tag should look like v1.2.0, not '$TAG'."; exit 1 ;; esac
+          git ls-remote --exit-code --tags "https://github.com/$GH_REPO.git" "refs/tags/$TAG" >/dev/null \
+            || { echo "::error::No tag $TAG on GitHub."; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+      # The feed helper comes from this workflow's branch, since older tags don't have it.
+      - uses: actions/checkout@v4
+        with:
+          path: .release-tools
+          sparse-checkout: scripts/latest-json.mjs
+          sparse-checkout-cone-mode: false
+      - name: Version matches the tag
+        shell: bash
+        run: |
+          VERSION="${TAG#v}"
+          PKG="$(node -p 'require("./package.json").version')"
+          [ "$PKG" = "$VERSION" ] || { echo "::error::package.json says $PKG, but the tag is $TAG."; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      # Same release-only overrides as the macOS build: updater artifacts, the public key and the feed.
+      - name: Release config
+        shell: bash
+        env:
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          PUBKEY: ${{ vars.UPDATER_PUBKEY }}
+          ENDPOINT: ${{ vars.UPDATER_ENDPOINT || format('https://github.com/{0}/releases/latest/download/latest.json', github.repository) }}
+        run: |
+          if [ "$HAS_KEY" != "true" ] || [ -z "$PUBKEY" ]; then
+            echo "::error::Set the TAURI_SIGNING_PRIVATE_KEY secret and the UPDATER_PUBKEY variable (docs/RELEASING.md, Updater key)."
+            exit 1
+          fi
+          # The updater refuses a non-https feed at startup, which would stop the app from opening at all.
+          case "$ENDPOINT" in https://*) ;; *) echo "::error::UPDATER_ENDPOINT must start with https://"; exit 1 ;; esac
+          node -e '
+            const conf = { bundle: { createUpdaterArtifacts: true }, plugins: { updater: { pubkey: process.env.PUBKEY, endpoints: [process.env.ENDPOINT] } } }
+            require("fs").writeFileSync("src-tauri/tauri.release.conf.json", JSON.stringify(conf))
+          '
+      - name: Build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Built into the app for Meeting Rooms (src-tauri/build.rs); empty builds an app without rooms.
+          TEAMUP_API_KEY: ${{ secrets.TEAMUP_API_KEY }}
+        run: npx tauri build --bundles nsis --config src-tauri/tauri.release.conf.json
+      - name: Add to the release
+        shell: bash
+        run: |
+          OUT=src-tauri/target/release/bundle/nsis
+          EXE="Boards_${VERSION}_x64-setup.exe"
+          [ -f "$OUT/$EXE" ] && [ -f "$OUT/$EXE.sig" ] || { echo "::error::Expected $OUT/$EXE and its .sig."; ls "$OUT"; exit 1; }
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            PRERELEASE=""
+            case "$VERSION" in *-*) PRERELEASE="--prerelease" ;; esac
+            gh release create "$TAG" --verify-tag --draft $PRERELEASE --title "Boards $TAG" --generate-notes
+          fi
+          mkdir -p feed
+          gh release download "$TAG" --pattern latest.json --dir feed 2>/dev/null || true
+          node .release-tools/scripts/latest-json.mjs feed/latest.json "$VERSION" "See https://github.com/$GH_REPO/releases/tag/$TAG" \
+            windows-x86_64 "https://github.com/$GH_REPO/releases/download/$TAG/$EXE" "$OUT/$EXE.sig"
+          gh release upload "$TAG" "$OUT/$EXE" "$OUT/$EXE.sig" feed/latest.json --clobber
+          echo "Added $EXE to $TAG: https://github.com/$GH_REPO/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
