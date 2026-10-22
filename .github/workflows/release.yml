@@ -1,11 +1,12 @@
 name: Build installers
 
 on:
-  push:
-    # Stable vX.Y.Z only. The version-bump workflow also tags vX.Y.Z-alpha.N / -rc.N prereleases;
-    # those are skipped here (run this workflow by hand on such a tag to get test installers).
-    tags: ['v*', '!v*-*']
+  # Releases are built on a Mac with scripts/release-local.sh (see docs/RELEASING.md). This stays as a
+  # fallback: run it by hand from the Actions tab on a vX.Y.Z tag to build both platforms here.
   workflow_dispatch:
+
+permissions:
+  contents: write # tauri-action creates the draft release and uploads to it
 
 jobs:
   build:
