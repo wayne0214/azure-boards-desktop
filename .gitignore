@@ -1,0 +1,10 @@
+node_modules
+dist
+src-tauri/target
+src-tauri/gen/schemas
+.DS_Store
+*.log
+
+# Teamup API key, built into the app (see src-tauri/build.rs)
+src-tauri/teamup.key
+src-tauri/tauri.release.conf.json

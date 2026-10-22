@@ -1,0 +1,199 @@
+import type {
+  Board,
+  BoardQuery,
+  BoardRef,
+  CacheEntry,
+  Comment,
+  ConnectionInfo,
+  CsvData,
+  Identity,
+  ImportResult,
+  ImportRow,
+  Project,
+  RecentTarget,
+  Settings,
+  Team,
+  TeamContext,
+  WorkItem,
+  WorkItemType,
+} from './types'
+import type { BranchWorkItem, PrDetail, PullRequest, Repo, Thread } from './pr/types'
+import type { Booking, NewBooking, Room } from './rooms/types'
+import { useUiStore } from '@/store/useUiStore'
+
+export interface Api {
+  getSettings(): Promise<Settings>
+  testConnection(org: string, pat: string): Promise<ConnectionInfo>
+  addAccount(org: string, pat: string): Promise<Settings>
+  removeAccount(org: string): Promise<Settings>
+  setActiveOrg(org: string): Promise<Settings>
+  rememberTarget(target: RecentTarget): Promise<Settings>
+  togglePinnedProject(key: string): Promise<Settings>
+
+  listProjects(org: string): Promise<Project[]>
+  listTeams(org: string, projectId: string): Promise<Team[]>
+  defaultTeam(org: string, projectId: string): Promise<Team | null>
+  listBoards(org: string, project: string, team: string): Promise<BoardRef[]>
+  getBoard(org: string, project: string, team: string, boardId: string): Promise<Board>
+  getTeamContext(org: string, projectId: string, project: string, team: string): Promise<TeamContext>
+  queryBoardItems(org: string, query: BoardQuery): Promise<WorkItem[]>
+  myWork(org: string): Promise<WorkItem[]>
+  /** Work items that mentioned the user in the last week. */
+  mentionedItems(org: string): Promise<WorkItem[]>
+  /** Every item of these types in a project, across all teams (for the requirements tree). */
+  projectItems(org: string, project: string, types: string[], excludeStates: string[], extraFields: string[], withRelations?: boolean): Promise<WorkItem[]>
+  /** Link `id` to `targetId`, e.g. a change request that Affects a requirement. */
+  addLink(org: string, project: string, id: number, targetId: number, rel: 'Microsoft.VSTS.Common.Affects-Forward' | 'System.LinkTypes.Related' | 'Microsoft.VSTS.Common.TestedBy-Reverse'): Promise<WorkItem>
+  /** Remove one link from `id` to `targetId`; does nothing when it is not there. */
+  removeLink(org: string, project: string, id: number, targetId: number, rel: string): Promise<WorkItem>
+  /** Field-change history of a work item, raw from Azure DevOps. */
+  getUpdates(org: string, project: string, id: number): Promise<unknown[]>
+  /** Copy a recorded test run to Azure Test Plans; resolves with why not when the user has no access. */
+  tpMirrorResult(org: string, project: string, input: { release: string; testCaseId: number; outcome: 'Passed' | 'Failed'; comment: string; attachments: { name: string; dataBase64: string }[] }): Promise<{ mirrored: boolean; reason?: string }>
+  /** A project's work item types with their states (no field definitions). */
+  workItemTypes(org: string, project: string): Promise<WorkItemType[]>
+  searchWorkItems(org: string, project: string | null, text: string): Promise<WorkItem[]>
+  getWorkItem(org: string, project: string, id: number): Promise<WorkItem>
+  getChildren(org: string, project: string, id: number): Promise<WorkItem[]>
+  getComments(org: string, project: string, id: number): Promise<Comment[]>
+  /** The project's area tree (modules), raw from Azure DevOps. */
+  getAreaTree(org: string, project: string): Promise<AreaNode>
+  /** Add a module under `parent` (path below the project root, '' for the root). */
+  createArea(org: string, project: string, parent: string, name: string): Promise<AreaNode>
+  /** The areas a team's board shows. */
+  teamAreas(org: string, project: string, team: string): Promise<{ path: string; includeChildren: boolean }[]>
+
+  createWorkItem(org: string, project: string, type: string, fields: Record<string, unknown>, parentId: number | null): Promise<WorkItem>
+  updateWorkItem(org: string, project: string, id: number, rev: number | null, fields: Record<string, unknown>): Promise<WorkItem>
+  setParent(org: string, project: string, id: number, parentId: number | null): Promise<WorkItem>
+  deleteWorkItem(org: string, project: string, id: number): Promise<void>
+  addComment(org: string, project: string, id: number, text: string): Promise<Comment>
+
+  /** Returns a data: URL for an Azure DevOps attachment, fetched with the user's token. */
+  fetchAttachment(org: string, url: string): Promise<string>
+  /** Upload a file as a work item attachment; the returned URL can be an image source in rich text. */
+  uploadAttachment(org: string, project: string, fileName: string, dataBase64: string): Promise<{ id: string; url: string }>
+
+  cacheGet<T>(key: string): Promise<CacheEntry<T> | null>
+  cacheSet(key: string, value: unknown): Promise<void>
+  cacheClear(): Promise<void>
+
+  readCsv(path: string): Promise<CsvData>
+  writeTextFile(path: string, content: string): Promise<void>
+  importWorkItems(org: string, project: string, rows: ImportRow[]): Promise<ImportResult[]>
+
+  // ----- Pull requests -----
+  prListRepos(org: string, project: string): Promise<Repo[]>
+  /** An empty project lists across the whole organization. */
+  prList(org: string, project: string, status: string, opts?: { creatorId?: string; reviewerId?: string; repoId?: string; top?: number }): Promise<PullRequest[]>
+  prDetail(org: string, projectId: string, repoId: string, prId: number): Promise<PrDetail>
+  prWorkItemIds(org: string, repoId: string, prId: number): Promise<number[]>
+  /** Work items linked to the source branch, its commits, or named as "#123" in its commit messages. */
+  prBranchWorkItems(org: string, projectId: string, repoId: string, source: string, target: string): Promise<BranchWorkItem[]>
+  /** Link a work item to a pull request, or remove the link. */
+  prLinkWorkItem(org: string, projectId: string, repoId: string, prId: number, workItemId: number, linked: boolean): Promise<void>
+  prChanges(org: string, repoId: string, prId: number, iteration: number, compareTo?: number): Promise<{ changeEntries: import('./pr/types').ChangeEntry[] }>
+  prThreads(org: string, repoId: string, prId: number): Promise<Thread[]>
+  prCreateThread(org: string, repoId: string, prId: number, body: unknown): Promise<Thread>
+  prReply(org: string, repoId: string, prId: number, threadId: number, parentId: number, content: string): Promise<import('./pr/types').Comment>
+  prUpdateThread(org: string, repoId: string, prId: number, threadId: number, body: unknown): Promise<Thread>
+  prUpdateComment(org: string, repoId: string, prId: number, threadId: number, commentId: number, content: string): Promise<import('./pr/types').Comment>
+  prDeleteComment(org: string, repoId: string, prId: number, threadId: number, commentId: number): Promise<void>
+  prVote(org: string, repoId: string, prId: number, reviewerId: string, vote: number): Promise<unknown>
+  prAddReviewer(org: string, repoId: string, prId: number, reviewerId: string, required: boolean): Promise<unknown>
+  prRemoveReviewer(org: string, repoId: string, prId: number, reviewerId: string): Promise<void>
+  prUpdate(org: string, repoId: string, prId: number, body: unknown): Promise<PullRequest>
+  prCreate(org: string, repoId: string, body: unknown): Promise<PullRequest>
+  prBranches(org: string, repoId: string): Promise<{ name: string; objectId: string }[]>
+  prGet(org: string, repoId: string, prId: number): Promise<PullRequest>
+  prChecks(org: string, projectId: string, repoId: string, prId: number): Promise<Pick<PrDetail, 'statuses' | 'policies'>>
+  /** Create a branch from `base` and link it to the work item; `linked` is false when only the link failed. */
+  prStartBranch(org: string, projectId: string, repoId: string, name: string, base: string, workItemId: number): Promise<{ name: string; linked: boolean; linkError?: string | null }>
+  prFile(org: string, repoId: string, path: string, commit: string): Promise<string | null>
+  prProjectMembers(org: string, projectId: string): Promise<Identity[]>
+
+  // ----- Meeting rooms (Teamup) -----
+  /** Whether this build has a Teamup API key built in. */
+  roomsHasKey(): Promise<boolean>
+  roomsList(calendar: string): Promise<{ subcalendars: Room[] }>
+  /** Dates are YYYY-MM-DD, both inclusive. */
+  roomsEvents(calendar: string, startDate: string, endDate: string): Promise<{ events: Booking[] }>
+  /** Raw custom field definitions; refused unless the calendar key has admin rights. */
+  roomsFields(calendar: string): Promise<{ definitions?: unknown[] }>
+  roomsBook(calendar: string, event: NewBooking): Promise<{ event: Booking }>
+  roomsCancel(calendar: string, eventId: string, version?: string): Promise<void>
+
+  // ----- Local tools -----
+  gitCurrentBranch(repoPath: string): Promise<string>
+  /** Fetch a branch from origin and check it out in the local repository. */
+  gitCheckoutBranch(repoPath: string, branch: string): Promise<string>
+  /** Runs git-tools; `onOutput` receives each line it prints while it runs. */
+  runGitTools(repoPath: string, bin: string | null, args: string[], onOutput?: (line: ToolLine) => void): Promise<{ code: number; stdout: string; stderr: string; clipboard: string | null }>
+  /** Stop the running git-tools; its runGitTools call then rejects with "cancelled". */
+  cancelGitTools(): Promise<boolean>
+  pickFolder(): Promise<string | null>
+
+  pickCsvFile(): Promise<string | null>
+  pickSavePath(defaultName: string, filter?: { name: string; extensions: string[] }): Promise<string | null>
+  openUrl(url: string): Promise<void>
+  onMenu(handler: (id: string) => void): () => void
+  onImportProgress(handler: (r: ImportResult) => void): () => void
+  showContextMenu(items: ContextMenuItem[]): Promise<void>
+}
+
+export interface ToolLine {
+  stream: 'stdout' | 'stderr'
+  text: string
+}
+
+export interface AreaNode {
+  name: string
+  /** Like "\\Contoso Mobile\\Area\\Audit". */
+  path: string
+  children?: AreaNode[]
+}
+
+export interface ContextMenuItem {
+  id?: string
+  label?: string
+  enabled?: boolean
+  separator?: boolean
+  action?: () => void
+  submenu?: ContextMenuItem[]
+}
+
+export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
+let impl: Api | null = null
+
+// Calls that change something in Azure DevOps; while one is out, the app shows it is working.
+const MUTATING = /^(add|remove|create|update|set|delete|import|upload|tpMirror|roomsBook|roomsCancel|pr(CreateThread|Reply|UpdateThread|UpdateComment|DeleteComment|Vote|AddReviewer|RemoveReviewer|Update|Create|LinkWorkItem|StartBranch)$)/
+
+const tracked = (inner: Api): Api =>
+  new Proxy(inner, {
+    get(target, key, receiver) {
+      const value = Reflect.get(target, key, receiver)
+      if (typeof key !== 'string' || typeof value !== 'function' || !MUTATING.test(key)) return value
+      return (...args: unknown[]) => {
+        const out = value.apply(target, args)
+        return out instanceof Promise ? useUiStore.getState().trackPending(out) : out
+      }
+    },
+  })
+
+export async function loadApi(): Promise<Api> {
+  if (impl) return impl
+  if (isTauri) {
+    const mod = await import('./api.tauri')
+    impl = tracked(mod.tauriApi)
+  } else {
+    const mod = await import('./api.mock')
+    impl = tracked(mod.mockApi)
+  }
+  return impl
+}
+
+export function api(): Api {
+  if (!impl) throw new Error('API not loaded yet')
+  return impl
+}

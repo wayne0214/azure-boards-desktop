@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master, develop, 'release/**', 'hotfix/**']
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # Type-checks (tsc --noEmit) and bundles.
+      - run: npm run build
+
+  rust:
+    name: rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS runs the tests; Windows only has to compile, since the release builds it too.
+          - os: macos-latest
+            cmd: cargo test --locked
+          - os: windows-latest
+            cmd: cargo check --locked
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # tauri::generate_context! needs frontendDist to exist; the Rust side does not need a real bundle.
+      - name: Placeholder frontend
+        shell: bash
+        run: mkdir -p dist && echo '<!doctype html>' > dist/index.html
+      - name: ${{ matrix.cmd }}
+        working-directory: src-tauri
+        run: ${{ matrix.cmd }}

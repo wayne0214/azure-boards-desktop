@@ -1,0 +1,111 @@
+name: Build installers
+
+on:
+  push:
+    # Stable vX.Y.Z only. The version-bump workflow also tags vX.Y.Z-alpha.N / -rc.N prereleases;
+    # those are skipped here (run this workflow by hand on such a tag to get test installers).
+    tags: ['v*', '!v*-*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: '--target universal-apple-darwin --bundles app,dmg'
+            setup: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          - os: windows-latest
+            args: '--bundles nsis'
+            setup: ''
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Extra Rust targets
+        if: matrix.setup != ''
+        run: ${{ matrix.setup }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      # Release-only config overrides, written to src-tauri/tauri.release.conf.json:
+      # - switches the in-app updater on when the signing key is set up (see README, "Updates");
+      #   without it the build still succeeds, as an app that does not update itself.
+      # - signs ad hoc on macOS when the Developer ID certificate secret is missing, since the
+      #   signingIdentity in tauri.conf.json only exists on a Mac that has the certificate.
+      - name: Release config
+        shell: bash
+        env:
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          HAS_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
+          PUBKEY: ${{ vars.UPDATER_PUBKEY }}
+          ENDPOINT: ${{ vars.UPDATER_ENDPOINT || format('https://github.com/{0}/releases/latest/download/latest.json', github.repository) }}
+        run: |
+          UPDATER=false
+          if [ "$HAS_KEY" = "true" ] && [ -n "$PUBKEY" ]; then
+            # The updater refuses a non-https feed at startup, which would stop the app from opening at all.
+            case "$ENDPOINT" in https://*) ;; *) echo "::error::UPDATER_ENDPOINT must start with https://"; exit 1 ;; esac
+            UPDATER=true
+            echo "Updater on: $ENDPOINT"
+          else
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY secret or UPDATER_PUBKEY variable missing; building without updates."
+          fi
+          ADHOC=false
+          if [ "$RUNNER_OS" = "macOS" ] && [ "$HAS_CERT" != "true" ]; then
+            ADHOC=true
+            echo "::warning::APPLE_CERTIFICATE secret missing; signing the macOS app ad hoc, not notarized."
+          fi
+          UPDATER=$UPDATER ADHOC=$ADHOC node -e '
+            const conf = {}
+            if (process.env.UPDATER === "true") {
+              conf.bundle = { createUpdaterArtifacts: true }
+              conf.plugins = { updater: { pubkey: process.env.PUBKEY, endpoints: [process.env.ENDPOINT] } }
+            }
+            if (process.env.ADHOC === "true") conf.bundle = { ...conf.bundle, macOS: { signingIdentity: "-" } }
+            require("fs").writeFileSync("src-tauri/tauri.release.conf.json", JSON.stringify(conf))
+          '
+      # Developer ID signing: the Tauri CLI imports the base64 .p12 into a temporary keychain and signs
+      # with bundle.macOS.signingIdentity; with APPLE_ID, APPLE_PASSWORD (app-specific password) and
+      # APPLE_TEAM_ID it also notarizes. Exported only when set, since an empty APPLE_* still counts as set.
+      - name: Apple signing env
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -n "${!v}" ]; then
+              { echo "$v<<__EOF__"; echo "${!v}"; echo "__EOF__"; } >> "$GITHUB_ENV"
+            fi
+          done
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Built into the app for Meeting Rooms (src-tauri/build.rs); empty builds an app without rooms.
+          TEAMUP_API_KEY: ${{ secrets.TEAMUP_API_KEY }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: 'Boards ${{ github.ref_name }}'
+          releaseDraft: true
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }} --config src-tauri/tauri.release.conf.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          path: |
+            src-tauri/target/**/release/bundle/dmg/*.dmg
+            src-tauri/target/**/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: ignore

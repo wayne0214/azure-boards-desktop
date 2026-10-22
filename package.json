@@ -1,0 +1,46 @@
+{
+  "name": "azure-boards-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "tauri": "tauri",
+    "app:dev": "tauri dev",
+    "app:build": "tauri build",
+    "installer:mac": "bash scripts/build-installer.sh mac",
+    "installer:win": "powershell -ExecutionPolicy Bypass -File scripts/build-installer.ps1",
+    "icons": "tauri icon assets/icon.svg"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-dialog": "^2.7.2",
+    "@tauri-apps/plugin-notification": "^2.7.0",
+    "@tauri-apps/plugin-opener": "^2.5.0",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.0",
+    "diff": "^8.0.4",
+    "dompurify": "^3.2.6",
+    "lucide-react": "^1.60.0",
+    "marked": "^16.4.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zustand": "^5.0.9"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.3",
+    "@types/diff": "^8.0.0",
+    "@types/dompurify": "^3.0.5",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.9.0",
+    "vite": "^7.3.7",
+    "vitest": "^5.0.5"
+  }
+}
