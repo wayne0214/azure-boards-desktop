@@ -159,7 +159,13 @@ It asks for the updater key's password unless `TAURI_SIGNING_PRIVATE_KEY_PASSWOR
 GitHub builds the Windows installer:
 
 1. In the Actions tab, open **Build Windows** and choose **Run workflow**.
-2. Leave "Use workflow from" on `develop`, enter the tag (`v1.1.0`) and run it.
+2. Enter the tag (`v1.1.0`) and run it.
+
+Until this workflow reaches `master` with the first release that includes it, GitHub shows no **Run workflow** button. Start it from `develop` instead:
+
+```bash
+gh workflow run release-windows.yml --ref develop -f tag=v1.0.0
+```
 
 It takes about 15 minutes. It builds that tag with the updater key, adds `Boards_<version>_x64-setup.exe` and its `.sig` to the tag's release, and adds the Windows entry to the release's `latest.json`. If the release doesn't exist yet, it creates the draft.
 

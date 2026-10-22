@@ -9,16 +9,21 @@ on:
       tag:
         description: Release tag to build, like v1.2.0
         required: true
+  # Only so GitHub registers this workflow before it reaches master (until then it can only be started with
+  # gh workflow run --ref develop); the job below is skipped for pull requests.
+  pull_request:
+    paths: ['.github/workflows/release-windows.yml']
 
 permissions:
   contents: write # create the draft release and upload to it
 
 concurrency:
-  group: release-windows-${{ inputs.tag }}
+  group: release-windows-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
   windows:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     env:
       TAG: ${{ inputs.tag }}
