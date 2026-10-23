@@ -254,6 +254,7 @@ kbd {
 .sidebar-foot .me:hover { background: var(--bg-hover); }
 .sidebar-foot .me .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-foot .me .sub { font-size: var(--fs-xs); color: var(--text-3); }
+.sidebar-foot .update-btn, .sidebar-foot .update-btn:hover { color: var(--accent); }
 
 /* ---------- Toolbar ---------- */
 .toolbar {

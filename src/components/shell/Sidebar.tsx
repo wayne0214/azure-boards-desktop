@@ -1,7 +1,8 @@
-import { ChevronDown, ClipboardList, Clock3, Columns3, DoorOpen, FlaskConical, GitPullRequest, FolderKanban, ListTree, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
+import { ChevronDown, CircleArrowUp, ClipboardList, Clock3, Columns3, DoorOpen, FlaskConical, GitPullRequest, FolderKanban, ListTree, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { api } from '@/lib/api'
+import { installUpdate, useUpdateStore } from '@/lib/updater'
 import { useAppStore } from '@/store/useAppStore'
 import { attentionCount, useMyWorkStore } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
@@ -10,6 +11,7 @@ import type { Project } from '@/lib/types'
 
 export function Sidebar() {
   const settings = useAppStore((s) => s.settings)
+  const update = useUpdateStore((s) => s.available)
   const activeOrg = useAppStore((s) => s.activeOrg)
   const projects = useAppStore((s) => s.projects)
   const projectsLoading = useAppStore((s) => s.projectsLoading)
@@ -218,6 +220,11 @@ export function Sidebar() {
             <div className="label">{account?.userName ?? 'Account'}</div>
           </span>
         </button>
+        {update && (
+          <button type="button" className="icon-btn update-btn" onClick={() => void installUpdate(update)} title={`Boards ${update.version} is available. Update and restart`}>
+            <CircleArrowUp size={16} />
+          </button>
+        )}
         <button type="button" className="icon-btn" onClick={() => openSheet('settings')} title="Settings">
           <Settings size={16} />
         </button>
