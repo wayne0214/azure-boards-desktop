@@ -9,6 +9,7 @@ mod settings;
 mod state;
 mod timesheet;
 mod pr_commands;
+mod plan_commands;
 mod rooms;
 mod tools;
 mod updater;
@@ -81,6 +82,8 @@ pub fn run() {
             commands::cache_clear,
             commands::pick_save_path,
             commands::pick_csv_file,
+            commands::pick_open_file,
+            commands::read_text_file,
             commands::read_csv,
             commands::write_text_file,
             commands::import_work_items,
@@ -116,6 +119,19 @@ pub fn run() {
             pr_commands::pr_checks,
             pr_commands::pr_file,
             pr_commands::pr_project_members,
+            plan_commands::tp_plans,
+            plan_commands::tp_create_plan,
+            plan_commands::tp_suites,
+            plan_commands::tp_create_suite,
+            plan_commands::tp_add_cases,
+            plan_commands::tp_remove_cases,
+            plan_commands::tp_configurations,
+            plan_commands::tp_points,
+            plan_commands::tp_update_points,
+            plan_commands::tp_publish_run,
+            plan_commands::tp_runs,
+            plan_commands::tp_run_results,
+            plan_commands::tp_set_plan_state,
             rooms::rooms_has_key,
             rooms::rooms_list,
             rooms::rooms_fields,

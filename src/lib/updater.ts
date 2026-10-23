@@ -1,5 +1,11 @@
 import { isTauri } from './api'
+import { create } from 'zustand'
 import { useUiStore } from '@/store/useUiStore'
+
+type Update = import('@tauri-apps/plugin-updater').Update
+
+/** The release found by the last check, so the sidebar can offer it after its toast is gone. */
+export const useUpdateStore = create<{ available: Update | null }>(() => ({ available: null }))
 
 const EVERY = 6 * 60 * 60 * 1000
 let checking = false
@@ -23,6 +29,7 @@ export async function checkForUpdates(manual = false): Promise<void> {
     }
     const { check } = await import('@tauri-apps/plugin-updater')
     const update = await check()
+    useUpdateStore.setState({ available: update })
     if (!update) {
       if (manual) ui.toast({ kind: 'success', title: 'Boards is up to date' })
       return
@@ -34,7 +41,7 @@ export async function checkForUpdates(manual = false): Promise<void> {
       title: `Boards ${update.version} is available`,
       detail: update.body?.trim() ? update.body.trim().split('\n')[0] : 'Restart to update.',
       sticky: true,
-      action: { label: 'Update and restart', onClick: () => void install(update) },
+      action: { label: 'Update and restart', onClick: () => void installUpdate(update) },
     })
   } catch (e) {
     if (manual) ui.toast({ kind: 'error', title: 'Could not check for updates', detail: String((e as { message?: string }).message ?? e) })
@@ -43,7 +50,11 @@ export async function checkForUpdates(manual = false): Promise<void> {
   }
 }
 
-async function install(update: import('@tauri-apps/plugin-updater').Update) {
+let installing = false
+
+export async function installUpdate(update: Update) {
+  if (installing) return
+  installing = true
   const ui = useUiStore.getState()
   ui.toast({ kind: 'info', title: `Downloading Boards ${update.version}…` })
   try {
@@ -52,6 +63,8 @@ async function install(update: import('@tauri-apps/plugin-updater').Update) {
     await relaunch()
   } catch (e) {
     ui.toast({ kind: 'error', title: 'The update did not install', detail: String((e as { message?: string }).message ?? e) })
+  } finally {
+    installing = false
   }
 }
 

@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronDown, Clock3, DoorOpen, FlaskConical, ListTree, Users, GitPullRequest, Columns3, ExternalLink, Filter, LayoutList, PanelLeft, PanelRight, Plus, RefreshCw, Search, User, X } from 'lucide-react'
+import { CalendarDays, ChevronDown, ClipboardList, Clock3, DoorOpen, FlaskConical, ListTree, Users, GitPullRequest, Columns3, ExternalLink, Filter, LayoutList, PanelLeft, PanelRight, Plus, RefreshCw, Search, User, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { boardUrl } from '@/lib/format'
@@ -112,9 +112,11 @@ export function Toolbar() {
   const isTimesheet = view === 'timesheet'
   const isPrs = view === 'prs'
   const isRooms = view === 'rooms'
-  // Test Cases sits beside Requirements and shares its toolbar.
-  const isReqs = view === 'reqs' || view === 'tests'
+  // Test Cases and Test Plans sit beside Requirements and share its toolbar.
+  const isReqs = view === 'reqs' || view === 'tests' || view === 'plans'
   const isTests = view === 'tests'
+  const isPlans = view === 'plans'
+  const section = isPlans ? 'Test Plans' : isTests ? 'Test Cases' : 'Requirements'
   const isTeam = view === 'team'
   const refreshing = isMine ? mineLoading : boardRefreshing
 
@@ -138,8 +140,8 @@ export function Toolbar() {
         </div>
       ) : isReqs ? (
         <div className="crumbs no-drag">
-          <span className="crumb">{isTests ? <FlaskConical size={16} /> : <ListTree size={16} />}<span className="txt">{project ? `${project.name}` : isTests ? 'Test Cases' : 'Requirements'}</span></span>
-          {project && <><span className="crumb-sep">/</span><span className="crumb sub"><span className="txt">{isTests ? 'Test Cases' : 'Requirements'}</span></span></>}
+          <span className="crumb">{isPlans ? <ClipboardList size={16} /> : isTests ? <FlaskConical size={16} /> : <ListTree size={16} />}<span className="txt">{project ? `${project.name}` : section}</span></span>
+          {project && <><span className="crumb-sep">/</span><span className="crumb sub"><span className="txt">{section}</span></span></>}
         </div>
       ) : isRooms ? (
         <div className="crumbs no-drag">

@@ -11,6 +11,7 @@ import { htmlFromPlain, parseSteps, serializeSteps, textToSteps, type StepItem }
 import { isAppError, type TeamContext, type WorkItem } from '@/lib/types'
 import { useAppStore } from './useAppStore'
 import { useBoardStore } from './useBoardStore'
+import { theProjectPlan, usePlanStore } from './usePlanStore'
 import { useReqStore } from './useReqStore'
 import { useUiStore } from './useUiStore'
 
@@ -64,8 +65,12 @@ interface TcState {
   linkSrs(id: number, srsId: number): Promise<void>
   unlinkSrs(id: number, srsId: number): Promise<void>
   clearFresh(): void
-  /** Record a run as a comment (with screenshots) and update Last Outcome / Last Tested Release. */
-  recordRun(id: number, r: Omit<RunRecord, 'images'>, files: File[]): Promise<{ mirrored: boolean; note?: string }>
+  /**
+   * Record a run as a comment (with screenshots) and update Last Outcome / Last Tested Release.
+   * With a test point, the result goes to that point; otherwise it is copied to the project's test plan.
+   * Either way the run is tagged with `r.release` as the version tested.
+   */
+  recordRun(id: number, r: Omit<RunRecord, 'images'>, files: File[], point?: { planId: number; pointId: number }): Promise<{ mirrored: boolean; note?: string }>
   /** The latest run of each test case in a release, read from their comments. */
   runsFor(ids: number[], release: string): Promise<Map<number, RunRecord>>
   /** File a bug for a failed run, linked to the test case and under its first SRS. */
@@ -231,7 +236,7 @@ export const useTcStore = create<TcState>((set, get) => ({
 
   clearFresh: () => set({ fresh: null }),
 
-  recordRun: async (id, r, files) => {
+  recordRun: async (id, r, files, point) => {
     const { org, project, cfg } = scope(get)
     const test = get().tests.find((t) => t.id === id)
     if (!org || !project || !cfg || !test) throw new Error('This test case is not loaded.')
@@ -258,10 +263,20 @@ export const useTcStore = create<TcState>((set, get) => ({
     try { localStorage.setItem('tc.releases', JSON.stringify(releases)) } catch { /* ignore */ }
     set({ releases })
     // Test Plans is an extra copy: whatever happens there, the run above is already saved.
+    if (point) {
+      const outcome = r.outcome === 'pass' ? 'Passed' : 'Failed'
+      const stepNote = r.steps.filter((x) => x.outcome).map((x) => `Step ${x.index}: ${x.outcome!.toUpperCase()}`).join(', ')
+      return api()
+        .tpPublishRun(org, project, { planId: point.planId, name: `Manual run ${r.release} · ${r.by}`, automated: false, buildNumber: r.release, results: [{ pointId: point.pointId, outcome, comment: [r.note.trim(), stepNote].filter(Boolean).join('\n'), attachments: uploads }] })
+        .then(() => ({ mirrored: true }), (e) => ({ mirrored: false, note: `Saved on the test case, but not to the test point: ${errorText(e)}` }))
+    }
+    const plans = usePlanStore.getState()
+    const plan = plans.scopeKey === `${org}/${project}` ? theProjectPlan(plans) : null
     const mirror = await api()
-      .tpMirrorResult(org, project, { release: r.release, testCaseId: id, outcome: r.outcome === 'pass' ? 'Passed' : 'Failed', comment: r.note, attachments: uploads })
+      .tpMirrorResult(org, project, { planId: plan?.id, release: r.release, testCaseId: id, outcome: r.outcome === 'pass' ? 'Passed' : 'Failed', comment: r.note, attachments: uploads })
       .catch((e) => ({ mirrored: false, reason: errorText(e) }))
-    return mirror.mirrored ? { mirrored: true } : { mirrored: false, note: `Not mirrored to Test Plans: ${mirror.reason ?? 'unknown reason'}` }
+    // No reason means there is no plan for the release, which is nothing to warn about.
+    return mirror.mirrored ? { mirrored: true } : { mirrored: false, note: mirror.reason ? `Not copied to Test Plans: ${mirror.reason}` : undefined }
   },
 
   runsFor: async (ids, release) => {
