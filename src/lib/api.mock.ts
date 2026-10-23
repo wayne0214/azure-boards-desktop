@@ -3,6 +3,7 @@
 import type { Api } from './api'
 import { addMockBranch, mockPr } from './api.mock.pr'
 import { mockRooms } from './api.mock.rooms'
+import { mockPlans } from './api.mock.plans'
 import { serializeSteps, type StepItem } from './testcases/steps'
 import type { Board, Comment, Identity, Iteration, Project, Settings, Team, WorkItem, WorkItemType } from './types'
 
@@ -283,9 +284,9 @@ const shared = mk(1300, 'Shared Steps', 'Login as Clinician', 'New', null, { 'Sy
 const useLogin: StepItem = { kind: 'shared', id: 2, ref: 1300 }
 items.push(
   shared,
-  tc(1301, 1, 'Upload resumes after airplane mode is toggled', [1164], [useLogin, step(3, 'Start uploading a 20 MB screening set', 'Progress bar advances'), step(4, 'Turn on airplane mode, wait 10 seconds, then turn it off', 'Upload continues from the last confirmed chunk')], { 'Custom.LastOutcome': 'Passed', 'Custom.LastTestedRelease': 'v2.0.0' }),
+  tc(1301, 1, 'Upload resumes after airplane mode is toggled', [1164], [useLogin, step(3, 'Start uploading a 20 MB screening set', 'Progress bar advances'), step(4, 'Turn on airplane mode, wait 10 seconds, then turn it off', 'Upload continues from the last confirmed chunk')], { 'Custom.LastOutcome': 'Passed', 'Custom.LastTestedRelease': 'v2.0.0', 'System.Tags': 'Smoke' }),
   tc(1302, 2, 'Interrupted upload does not lose the pose-check retake', [1164, 1182], [step(2, 'Take a photo that fails the pose check', 'Retake prompt is shown'), step(3, 'Lose the network connection and select Retake', 'A new photo is captured and queued'), step(4, 'Restore the connection', 'Only the new photo is uploaded')]),
-  tc(1303, 3, 'Retake button appears when the pose check fails', [1182], [useLogin, step(3, 'Capture a photo with the patient partly out of frame', 'Pose check fails'), step(4, 'Select Retake', 'The camera preview returns')], { 'Custom.LastOutcome': 'Passed', 'Custom.LastTestedRelease': 'v2.0.0' }),
+  tc(1303, 3, 'Retake button appears when the pose check fails', [1182], [useLogin, step(3, 'Capture a photo with the patient partly out of frame', 'Pose check fails'), step(4, 'Select Retake', 'The camera preview returns')], { 'Custom.LastOutcome': 'Passed', 'Custom.LastTestedRelease': 'v2.0.0', 'System.Tags': 'Smoke; Regression' }),
   tc(1304, 4, 'Dashboard groups pending reviews by clinic', [1171], [useLogin, step(3, 'Open the pending reviews panel', 'Reviews are grouped by clinic'), step(4, 'Compare group order with the review dates', 'Groups are sorted by oldest pending review')]),
   tc(1305, 5, 'Exploratory check of the report footer', [], [step(2, 'Open any exported report', 'Footer shows the report version')]),
   tc(1306, 6, 'Clinic grouping handles clinics with no pending reviews', [1171], [step(2, 'Open the dashboard for a clinic with no pending reviews', 'The clinic is hidden from the list'), step(3, 'Add a pending review to that clinic', 'The clinic appears with one review')], { 'Custom.LastOutcome': 'Failed', 'Custom.LastTestedRelease': 'v2.0.0' }),
@@ -324,6 +325,11 @@ const cache = new Map<string, { value: unknown; updatedAt: number }>()
 export const mockApi: Api = {
   ...mockPr,
   ...mockRooms,
+  ...mockPlans({
+    title: (id) => String(items.find((i) => i.id === id)?.fields['System.Title'] ?? `Test case ${id}`),
+    tagged: (tag) => items.filter((i) => i.fields['System.WorkItemType'] === 'Test Case' && String(i.fields['System.Tags'] ?? '').split(';').some((t) => t.trim().toLowerCase() === tag.trim().toLowerCase())).map((i) => i.id),
+    testedBy: (req) => items.filter((i) => i.fields['System.WorkItemType'] === 'Test Case' && (i.relations ?? []).some((r) => r.rel === 'Microsoft.VSTS.Common.TestedBy-Reverse' && r.url.endsWith(`/${req}`))).map((i) => i.id),
+  }),
   getSettings: async () => structuredClone(settings),
   testConnection: async (org) => {
     await delay(600)
@@ -584,6 +590,8 @@ export const mockApi: Api = {
   cancelGitTools: async () => { mockToolCancelled = true; return true },
   pickFolder: async () => '/Users/demo/code/contoso-mobile',
   pickCsvFile: async () => '/demo/import.csv',
+  pickOpenFile: async () => '/demo/test-results/results.json',
+  readTextFile: async () => { await delay(150); return JSON.stringify(demoPlaywrightReport) },
   pickSavePath: async (name) => `/demo/${name}`,
   openUrl: async (url) => {
     window.open(url, '_blank')
@@ -595,4 +603,29 @@ export const mockApi: Api = {
     const { showFallbackContextMenu } = await import('../components/ui/FallbackMenu')
     showFallbackContextMenu(menuItems)
   },
+}
+
+/** A Playwright JSON report for the demo: two projects named after the demo configurations. */
+const demoPlaywrightReport = {
+  suites: [{
+    title: 'e2e/upload.spec.ts', file: 'e2e/upload.spec.ts',
+    specs: [],
+    suites: [{
+      title: 'Uploads', file: 'e2e/upload.spec.ts',
+      specs: [
+        { title: '[1301] resumes after airplane mode', file: 'e2e/upload.spec.ts', tags: [], tests: ['macOS', 'Windows 11'].map((projectName) => ({ projectName, status: 'expected', annotations: [], results: [{ status: 'passed', duration: 4210 }] })) },
+        { title: 'keeps the retake when the network drops', file: 'e2e/upload.spec.ts', tags: ['@TC1302'], tests: [
+          { projectName: 'macOS', status: 'expected', annotations: [], results: [{ status: 'passed', duration: 3120 }] },
+          { projectName: 'Windows 11', status: 'unexpected', annotations: [], results: [{ status: 'failed', duration: 5003, error: { message: 'Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole(\'button\', { name: \'Retake\' })', stack: 'at e2e/upload.spec.ts:41:7' } }] },
+        ] },
+      ],
+    }],
+  }, {
+    title: 'e2e/dashboard.spec.ts', file: 'e2e/dashboard.spec.ts',
+    specs: [
+      { title: 'groups pending reviews by clinic SDV-0004', file: 'e2e/dashboard.spec.ts', tags: [], tests: ['macOS', 'Windows 11'].map((projectName) => ({ projectName, status: 'flaky', annotations: [], results: [{ status: 'failed', duration: 2000 }, { status: 'passed', duration: 1800 }] })) },
+      { title: 'shows the clinic letterhead', file: 'e2e/dashboard.spec.ts', tags: [], tests: [{ projectName: 'macOS', status: 'expected', annotations: [{ type: 'TestCase', description: '1307' }], results: [{ status: 'passed', duration: 900 }] }] },
+      { title: 'renders the empty state', file: 'e2e/dashboard.spec.ts', tags: [], tests: [{ projectName: 'macOS', status: 'expected', annotations: [], results: [{ status: 'passed', duration: 700 }] }] },
+    ],
+  }],
 }

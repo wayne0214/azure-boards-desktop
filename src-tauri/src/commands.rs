@@ -543,6 +543,28 @@ pub async fn pick_csv_file(app: tauri::AppHandle, state: State<'_, AppState>) ->
     picked(&state, path)
 }
 
+/// Asks for a file to open, of the given kinds; the chosen path may then be read with `read_text_file`.
+#[tauri::command]
+pub async fn pick_open_file(app: tauri::AppHandle, state: State<'_, AppState>, filter_name: String, extensions: Vec<String>) -> AppResult<Option<String>> {
+    let ext_refs: Vec<&str> = extensions.iter().map(|e| e.as_str()).collect();
+    let builder = dialog_for(&app).add_filter(filter_name, &ext_refs);
+    let path = run_dialog(|done| builder.pick_file(done)).await?;
+    picked(&state, path)
+}
+
+/// Largest text file read from disk, such as a test report.
+const MAX_TEXT_FILE: u64 = 50 * 1024 * 1024;
+
+#[tauri::command]
+pub fn read_text_file(state: State<'_, AppState>, path: String) -> AppResult<String> {
+    state.check_path(Path::new(&path))?;
+    if std::fs::metadata(&path)?.len() > MAX_TEXT_FILE {
+        return Err(AppError::validation("That file is larger than 50 MB."));
+    }
+    let bytes = std::fs::read(&path)?;
+    String::from_utf8(bytes).map_err(|_| AppError::validation("That file is not UTF-8 text."))
+}
+
 #[tauri::command]
 pub fn read_csv(state: State<'_, AppState>, path: String) -> AppResult<CsvData> {
     state.check_path(Path::new(&path))?;

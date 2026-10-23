@@ -1,5 +1,6 @@
 import { useBoardStore } from '@/store/useBoardStore'
 import { useMyWorkStore } from '@/store/useMyWorkStore'
+import { usePlanStore } from '@/store/usePlanStore'
 import { usePrStore } from '@/store/usePrStore'
 import { useRoomStore } from '@/store/useRoomStore'
 import { useReqStore } from '@/store/useReqStore'
@@ -31,6 +32,7 @@ export function refreshCurrentView() {
     case 'rooms': void useRoomStore.getState().load(); break
     case 'reqs': case 'team': void useReqStore.getState().load(); break
     case 'tests': void useReqStore.getState().load(); void useTcStore.getState().load(); break
+    case 'plans': void usePlanStore.getState().loadPlans(); void useTcStore.getState().load({ silent: true }); break
     default: void useBoardStore.getState().refresh()
   }
 }
