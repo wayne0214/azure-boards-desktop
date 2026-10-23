@@ -1,7 +1,7 @@
 import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { isTauri } from '../api'
-import { autoLoginBody, opScript, probeBody } from './agent'
+import { autoLoginBody, clearSiteStorageBody, opScript, probeBody } from './agent'
 
 export interface AgentReport<T = unknown> {
   id: string
@@ -167,6 +167,28 @@ export async function goto(url: string, opts?: { show?: boolean; timeoutMs?: num
 
 /** Resolve once the page has finished loading (at once if it already has), or after `ms`. */
 export const pageSettled = async (ms: number) => { if (lastPage.phase !== 'finished') await waitForPageLoad(ms) }
+
+/**
+ * Start over signed out: clear the site's storage in its own page, delete the site's and
+ * Microsoft sign-in cookies, and close the window so nothing of the old session stays in memory.
+ */
+export async function clearSession(baseUrl: string): Promise<void> {
+  await ensureListeners()
+  try {
+    const loaded = waitForPageLoad(10000)
+    await invoke('timesheet_open', { url: baseUrl, show: false })
+    await loaded
+    const r = await runOp<{ origin: string; done: string[] }>(clearSiteStorageBody, 5000)
+    trace(`cleared storage of ${r.origin}: ${r.done.join(' ')}`)
+  } catch (e) {
+    // A page too broken to answer still has its cookies cleared below.
+    trace(`storage clear skipped: ${(e as Error).message}`)
+  }
+  const removed = await invoke<number>('timesheet_clear_cookies', { url: baseUrl })
+  trace(`removed ${removed} cookies`)
+  await invoke('timesheet_close').catch(() => undefined)
+  lastPage = { phase: '', url: '', at: 0 }
+}
 
 export const show = () => invoke('timesheet_show')
 export const hide = () => invoke('timesheet_hide')

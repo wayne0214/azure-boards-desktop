@@ -227,6 +227,41 @@ pub fn timesheet_reload(app: AppHandle) -> AppResult<()> {
     Ok(())
 }
 
+/// Cookies of the timesheet site (or a parent domain of it) and of Microsoft sign-in.
+/// The app's own pages never set cookies, so nothing of the app is touched.
+pub fn cookie_is_timesheet(domain: &str, site_host: Option<&str>) -> bool {
+    let d = domain.trim_start_matches('.').to_ascii_lowercase();
+    if d.is_empty() {
+        return false;
+    }
+    let on_site = site_host.is_some_and(|h| {
+        let h = h.to_ascii_lowercase();
+        h == d || h.ends_with(&format!(".{d}"))
+    });
+    on_site || is_sign_in_host(&d)
+}
+
+/// Delete the timesheet site's and Microsoft sign-in cookies, so the next visit starts signed out.
+/// Unlike clearing all browsing data, this leaves the main window's storage (settings, drafts) alone.
+/// Async: reading cookies from a sync command deadlocks on Windows.
+#[tauri::command]
+pub async fn timesheet_clear_cookies(app: AppHandle, url: String) -> AppResult<usize> {
+    let parsed = parse_url(&url)?;
+    let host = parsed.host_str().map(str::to_string);
+    let win = app
+        .get_webview_window(LABEL)
+        .or_else(|| app.get_webview_window("main"))
+        .ok_or_else(|| AppError::internal("No window to clear cookies from."))?;
+    let cookies = win.cookies().map_err(|e| AppError::internal(format!("Could not read cookies: {e}")))?;
+    let mut removed = 0;
+    for c in cookies {
+        if c.domain().is_some_and(|d| cookie_is_timesheet(d, host.as_deref())) && win.delete_cookie(c).is_ok() {
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
 #[tauri::command]
 pub fn timesheet_close(app: AppHandle) -> AppResult<()> {
     if let Some(win) = app.get_webview_window(LABEL) {
@@ -261,5 +296,19 @@ mod tests {
         assert!(!allowed("https://login.microsoftonline.com.evil.com/"));
         assert!(!allowed("file:///etc/passwd"));
         assert!(!navigation_allowed(&Url::parse("https://example.com/").unwrap(), None));
+    }
+
+    #[test]
+    fn only_timesheet_and_sign_in_cookies_are_cleared() {
+        let site = Some("timesheet.example.com");
+        assert!(cookie_is_timesheet("timesheet.example.com", site));
+        assert!(cookie_is_timesheet(".timesheet.example.com", site));
+        assert!(cookie_is_timesheet(".example.com", site));
+        assert!(cookie_is_timesheet(".login.microsoftonline.com", site));
+        assert!(cookie_is_timesheet("login.live.com", None));
+        assert!(!cookie_is_timesheet("dev.azure.com", site));
+        assert!(!cookie_is_timesheet("other.example.com", site));
+        assert!(!cookie_is_timesheet("evil-example.com", site));
+        assert!(!cookie_is_timesheet("", site));
     }
 }
