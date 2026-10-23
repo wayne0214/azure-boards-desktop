@@ -51,6 +51,7 @@ You can add more organizations later, each with its own token.
 **Quality**
 - **Requirements** outline (user requirements → design inputs → software requirements) with coverage and Word/CSV export.
 - **Test Cases** linked to the requirements they verify, with a keyboard step editor (paste rows from Excel), runs with Pass/Fail and screenshots, coverage, and a test specification and traceability matrix for Word or CSV. See [Test Cases setup](#test-cases-setup).
+- **Test Plans** for verification and validation: one plan per project with Verification (a suite per requirement), Validation and tag-based suites, and a test point per configuration (Windows, macOS, a browser…). Each build you test is a version tagged on every run: start a run on chosen suites, run points step by step, mark or assign many at once, import Playwright or JUnit results, and save a version report with run IDs and a sign-off block for the release file. Automated tests link to test cases by ID in the title, such as `[1234]`.
 
 **Everyday**
 - **Notifications** while the app is open: a review request, an item assigned to you, a mention, or a failing check on your pull request, with a review count on the macOS Dock icon.
@@ -118,9 +119,10 @@ src/                    React UI (TypeScript)
   store/                Zustand stores, one per area
   lib/                  API layer (Tauri commands, plus a demo mock for the browser) and pure logic per area
 src-tauri/src/          Rust backend
-  ado/                  Azure DevOps REST client: work items, WIQL, pull requests, test plans
+  ado/                  Azure DevOps REST client: work items, WIQL, pull requests, test plans and runs
   commands.rs           commands for boards and work items
   pr_commands.rs        commands for pull requests
+  plan_commands.rs      commands for Test Plans
   timesheet.rs          the hidden timesheet window and its bridge back to the app
   rooms.rs              Teamup meeting rooms
   tools.rs              local git and git-tools runs

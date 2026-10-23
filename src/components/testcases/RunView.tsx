@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify'
 import { useShallow } from 'zustand/react/shallow'
-import { Bug, Check, ChevronRight, ImagePlus, X } from 'lucide-react'
+import { Bug, Check, ChevronRight, ClipboardList, ImagePlus, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
 import { Empty } from '@/components/ui/Empty'
 import { imageFiles } from '@/lib/attachments'
@@ -12,6 +12,7 @@ import { canPass, expectedChecklist, type Outcome, type RunRecord } from '@/lib/
 import { plain } from '@/lib/testcases/steps'
 import type { WorkItem } from '@/lib/types'
 import { useAppStore } from '@/store/useAppStore'
+import { planVersions, theProjectPlan, usePlanStore } from '@/store/usePlanStore'
 import { useTcStore } from '@/store/useTcStore'
 import { useUiStore } from '@/store/useUiStore'
 
@@ -29,6 +30,18 @@ export function RunView({ cfg, reqCfg, tree, coverage }: { cfg: TcConfig; reqCfg
   const [runs, setRuns] = useState<Map<number, RunRecord>>(new Map())
   const [currentId, setCurrentId] = useState<number | null>(null)
   const sharedById = useMemo(() => new Map(s.shared.map((w) => [w.id, w])), [s.shared])
+  const org = useAppStore((a) => a.activeOrg)
+  const projectName = useAppStore((a) => a.selectedProject?.name)
+  const planState = usePlanStore(useShallow((p) => ({ plans: p.plans, scopeKey: p.scopeKey, planId: p.planId, runs: p.runs, addedVersions: p.addedVersions })))
+  // The project's test plans, so a release that has one can be run there instead.
+  useEffect(() => {
+    const st = usePlanStore.getState()
+    if (org && projectName && st.scopeKey !== `${org}/${projectName}`) void st.loadPlans({ silent: true })
+  }, [org, projectName])
+  // The plan runs here are copied into; its versions are what the release box suggests.
+  const planFor = planState.scopeKey === `${org}/${projectName}` ? theProjectPlan(planState) : null
+  const releaseOptions = [...new Set([...(planFor && planFor.id === planState.planId ? planVersions(planState) : []), ...s.releases])]
+  const openPlan = (id: number) => { void usePlanStore.getState().openPlan(id); useUiStore.getState().setView('plans') }
 
   // Every test case, in SDV order.
   const all = useMemo(() => [...s.tests].sort((a, b) => sdvOf(cfg, a).localeCompare(sdvOf(cfg, b), undefined, { numeric: true })), [s.tests, cfg])
@@ -57,7 +70,7 @@ export function RunView({ cfg, reqCfg, tree, coverage }: { cfg: TcConfig; reqCfg
       <div className="req-bar">
         <label className="faint tc-run-label">Release</label>
         <input className="input" style={{ width: 200 }} list="tc-releases" value={release} placeholder="e.g. v2.1.0 RC1" onChange={(e) => setRelease(e.target.value)} />
-        <datalist id="tc-releases">{s.releases.map((r) => <option key={r} value={r} />)}</datalist>
+        <datalist id="tc-releases">{releaseOptions.map((r) => <option key={r} value={r} />)}</datalist>
         <select className="input" style={{ width: 240 }} value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
           <option value="all">All test cases</option>
           <option value="notrun">Not run in this release</option>
@@ -68,6 +81,13 @@ export function RunView({ cfg, reqCfg, tree, coverage }: { cfg: TcConfig; reqCfg
         <span className="grow" />
         {release.trim() && <span className="faint">{done} of {queue.length} run in {release.trim()}</span>}
       </div>
+      {planFor && (
+        <div className="ts-note">
+          <ClipboardList size={15} />
+          <span className="msg" title="A run here is copied to the plan only when the test case has a single test point in it.">Runs here are also saved to <b>{planFor.name}</b>{release.trim() ? <> as version <b>{release.trim()}</b></> : null}. To record each configuration (macOS, Windows…) separately, run in Test Plans.</span>
+          <button type="button" className="btn sm primary" onClick={() => openPlan(planFor.id)}>Open in Test Plans</button>
+        </div>
+      )}
       <div className="tc-split">
         <aside className="tc-tree tc-run-queue">
           {queue.length === 0 && <div className="faint tc-run-empty">Nothing to run in this view.</div>}
@@ -95,8 +115,10 @@ export function RunView({ cfg, reqCfg, tree, coverage }: { cfg: TcConfig; reqCfg
   )
 }
 
-function RunCase({ cfg, reqCfg, tree, test, release, last, shared, onRecorded, onNext }: {
+/** One test case in the runner. With a test point, the result is recorded on that point in its plan. */
+export function RunCase({ cfg, reqCfg, tree, test, release, last, shared, point, onRecorded, onNext }: {
   cfg: TcConfig; reqCfg: ReqConfig; tree: ReqTree; test: WorkItem; release: string; last?: RunRecord; shared: Map<number, WorkItem>
+  point?: { planId: number; pointId: number; configurationName?: string }
   onRecorded: (r: RunRecord) => void; onNext: () => void
 }) {
   const s = useTcStore(useShallow((st) => ({ createBug: st.createBug, recordRun: st.recordRun })))
@@ -130,10 +152,10 @@ function RunCase({ cfg, reqCfg, tree, test, release, last, shared, onRecorded, o
         outcome, release, date: today(), by: me?.userName ?? 'Unknown',
         criteria, steps: stepOut.map((o, i) => ({ index: i + 1, outcome: o })).filter((x) => x.outcome), note,
       }
-      const res = await s.recordRun(test.id, r, files)
+      const res = await s.recordRun(test.id, r, files, point)
       const saved: RunRecord = { ...r, images: files.map((f) => ({ url: '', caption: f.name })) }
       onRecorded(saved)
-      toast({ kind: 'success', title: outcome === 'pass' ? 'Passed' : 'Failed', detail: res.note ?? (res.mirrored ? 'Also saved to Test Plans.' : undefined) })
+      toast({ kind: 'success', title: outcome === 'pass' ? 'Passed' : 'Failed', detail: res.note ?? (res.mirrored ? (point ? 'Saved to the test point and the test case.' : 'Also saved to Test Plans.') : undefined) })
       if (outcome === 'fail') setFailed(saved)
       else onNext()
     } catch (e) {
@@ -159,7 +181,7 @@ function RunCase({ cfg, reqCfg, tree, test, release, last, shared, onRecorded, o
 
   return (
     <div className="tc-ed tc-run" onPaste={(e: ClipboardEvent) => { const f = imageFiles(e.clipboardData); if (f.length) { e.preventDefault(); addFiles(f) } }}>
-      <div className="tc-ed-top"><span className="tc-sdv tc-sdv-ro">{sdvOf(cfg, test)}</span><strong className="tc-title">{String(test.fields['System.Title'] ?? '')}</strong></div>
+      <div className="tc-ed-top"><span className="tc-sdv tc-sdv-ro">{sdvOf(cfg, test)}</span><strong className="tc-title">{String(test.fields['System.Title'] ?? '')}</strong>{point?.configurationName && <span className="tp-config">{point.configurationName}</span>}</div>
       {last && <div className="faint tc-run-last">Last run in {release}: <b className={last.outcome}>{last.outcome === 'pass' ? 'Passed' : 'Failed'}</b> on {last.date} by {last.by}</div>}
 
       {linked.length > 0 && reqCfg.acceptanceField && (

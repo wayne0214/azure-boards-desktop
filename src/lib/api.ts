@@ -19,6 +19,7 @@ import type {
 } from './types'
 import type { BranchWorkItem, PrDetail, PullRequest, Repo, Thread } from './pr/types'
 import type { Booking, NewBooking, Room } from './rooms/types'
+import type { Markable, NewPlanInput, RunInput, TpConfiguration, TpPlan, TpPoint, TpResult, TpRun, TpSuite } from './testplans/types'
 import { useUiStore } from '@/store/useUiStore'
 
 export interface Api {
@@ -48,8 +49,28 @@ export interface Api {
   removeLink(org: string, project: string, id: number, targetId: number, rel: string): Promise<WorkItem>
   /** Field-change history of a work item, raw from Azure DevOps. */
   getUpdates(org: string, project: string, id: number): Promise<unknown[]>
-  /** Copy a recorded test run to Azure Test Plans; resolves with why not when the user has no access. */
-  tpMirrorResult(org: string, project: string, input: { release: string; testCaseId: number; outcome: 'Passed' | 'Failed'; comment: string; attachments: { name: string; dataBase64: string }[] }): Promise<{ mirrored: boolean; reason?: string }>
+  /** Copy a run from Run mode to the release's existing plan; `mirrored` is false with no reason when there is no such plan. */
+  tpMirrorResult(org: string, project: string, input: { planId?: number; release: string; testCaseId: number; outcome: 'Passed' | 'Failed'; comment: string; attachments: { name: string; dataBase64: string }[] }): Promise<{ mirrored: boolean; reason?: string }>
+  // ----- Test Plans -----
+  tpPlans(org: string, project: string, activeOnly?: boolean): Promise<TpPlan[]>
+  /** Needs Basic + Test Plans access. */
+  tpCreatePlan(org: string, project: string, input: NewPlanInput): Promise<TpPlan & { warning?: string }>
+  tpSuites(org: string, project: string, planId: number): Promise<TpSuite[]>
+  /** A static suite; with `requirementId` one that follows the requirement's Tested By links; with `tag` one holding every test case with that tag. */
+  tpCreateSuite(org: string, project: string, planId: number, input: { parentId: number; name: string; requirementId?: number; tag?: string }): Promise<TpSuite>
+  /** Close (Inactive) or reopen (Active) a plan; nothing in it is removed. */
+  tpSetPlanState(org: string, project: string, planId: number, state: 'Active' | 'Inactive'): Promise<TpPlan>
+  /** With configurations, one point per configuration instead of the suite's defaults. */
+  tpAddCases(org: string, project: string, planId: number, suiteId: number, ids: number[], configurationIds?: number[]): Promise<void>
+  tpRemoveCases(org: string, project: string, planId: number, suiteId: number, ids: number[]): Promise<void>
+  tpConfigurations(org: string, project: string): Promise<TpConfiguration[]>
+  tpPoints(org: string, project: string, planId: number, suiteId: number): Promise<TpPoint[]>
+  tpUpdatePoints(org: string, project: string, planId: number, suiteId: number, updates: { id: number; outcome?: Markable; testerId?: string }[]): Promise<TpPoint[]>
+  /** One test run over the points with a result each; aborted on Azure DevOps' side if it cannot be finished. */
+  tpPublishRun(org: string, project: string, input: RunInput): Promise<{ runId: number; published: number }>
+  /** The plan's test runs, newest first; each run's build number is the version it tested. */
+  tpRuns(org: string, project: string, planId: number): Promise<TpRun[]>
+  tpRunResults(org: string, project: string, runIds: number[]): Promise<TpResult[]>
   /** A project's work item types with their states (no field definitions). */
   workItemTypes(org: string, project: string): Promise<WorkItemType[]>
   searchWorkItems(org: string, project: string | null, text: string): Promise<WorkItem[]>
@@ -134,6 +155,9 @@ export interface Api {
   pickFolder(): Promise<string | null>
 
   pickCsvFile(): Promise<string | null>
+  /** Ask for a file to open; the path may then be read with readTextFile. */
+  pickOpenFile(filter: { name: string; extensions: string[] }): Promise<string | null>
+  readTextFile(path: string): Promise<string>
   pickSavePath(defaultName: string, filter?: { name: string; extensions: string[] }): Promise<string | null>
   openUrl(url: string): Promise<void>
   onMenu(handler: (id: string) => void): () => void
@@ -167,7 +191,7 @@ export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in
 let impl: Api | null = null
 
 // Calls that change something in Azure DevOps; while one is out, the app shows it is working.
-const MUTATING = /^(add|remove|create|update|set|delete|import|upload|tpMirror|roomsBook|roomsCancel|pr(CreateThread|Reply|UpdateThread|UpdateComment|DeleteComment|Vote|AddReviewer|RemoveReviewer|Update|Create|LinkWorkItem|StartBranch)$)/
+const MUTATING = /^(add|remove|create|update|set|delete|import|upload|tpMirror|tp(CreatePlan|CreateSuite|AddCases|RemoveCases|UpdatePoints|PublishRun|SetPlanState)$|roomsBook|roomsCancel|pr(CreateThread|Reply|UpdateThread|UpdateComment|DeleteComment|Vote|AddReviewer|RemoveReviewer|Update|Create|LinkWorkItem|StartBranch)$)/
 
 const tracked = (inner: Api): Api =>
   new Proxy(inner, {

@@ -1,17 +1,19 @@
-//! Mirrors a recorded test run to Azure Test Plans, for users whose access level includes it.
-//! The run is always recorded on the test case first; anything refused here is only reported.
+//! Copies a run recorded in Test Cases' Run mode to the project's test plan in Azure Test Plans, tagged with the
+//! version, when the test case has a single point in it. The run is always recorded on the test case first.
 
 use crate::ado::client::{enc, AdoClient};
-use crate::error::{AppError, AppResult};
+use crate::ado::plans::{publish_run, PointResult, RunFile, RunInput};
+use crate::error::AppResult;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-
-/// Most plans read while looking for the release plan.
-const PLAN_CAP: usize = 5000;
+use serde_json::Value;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MirrorInput {
+    /// The project's test plan, chosen by the app; none means there is nowhere to copy to.
+    #[serde(default)]
+    pub plan_id: Option<i64>,
+    /// The version tested; it becomes the run's build number.
     pub release: String,
     pub test_case_id: i64,
     /// "Passed" or "Failed".
@@ -44,98 +46,87 @@ pub fn is_access_refusal(status: u16, body: &str) -> bool {
     b.contains("tf400813") || b.contains("not authorized") || (b.contains("license") && b.contains("test plans")) || b.contains("access level")
 }
 
-/// The plan named "Release {release}" and its root suite.
-pub fn plan_for(plans: &Value, release: &str) -> Option<(i64, i64)> {
-    let name = format!("Release {release}");
-    plans.get("value")?.as_array()?.iter().find(|p| p.get("name").and_then(|n| n.as_str()) == Some(name.as_str())).and_then(|p| {
-        Some((p.get("id")?.as_i64()?, p.get("rootSuite")?.get("id")?.as_i64()?))
-    })
+
+
+/// What became of a run copied to Test Plans.
+enum Mirrored {
+    Yes,
+    /// No plan for the release: nothing to copy to, and nothing worth reporting.
+    NoPlan,
+    /// The plan exists but the run could not go to one clear point.
+    Skipped(String),
 }
 
-fn first_id(v: &Value) -> Option<i64> {
-    v.get("value")?.as_array()?.first()?.get("id")?.as_i64()
-}
-
-/// Every test plan in the project, following the continuation token, as `{ "value": [...] }`.
-async fn all_plans(client: &AdoClient, p: &str) -> AppResult<Value> {
-    let base = format!("/{p}/_apis/testplan/plans");
-    let mut plans: Vec<Value> = Vec::new();
-    let mut token: Option<String> = None;
-    loop {
-        let path = match &token {
-            Some(t) => format!("{base}?continuationToken={}", enc(t)),
-            None => base.clone(),
-        };
-        let (page, next): (Value, Option<String>) = client.get_page(&client.url(&path)).await?;
-        plans.extend(page.get("value").and_then(|v| v.as_array()).cloned().unwrap_or_default());
-        match next {
-            Some(n) if plans.len() < PLAN_CAP && token.as_deref() != Some(n.as_str()) => token = Some(n),
-            _ => return Ok(json!({ "value": plans })),
+/// The one point a run can go to, or why there is none: Run mode does not know the configuration.
+pub fn choose_point(points: &[(i64, String)]) -> Result<i64, String> {
+    match points {
+        [] => Err("This test case is not in the project's test plan.".to_string()),
+        [(id, _)] => Ok(*id),
+        many => {
+            let mut names: Vec<&str> = many.iter().map(|(_, c)| c.as_str()).filter(|c| !c.is_empty()).collect();
+            names.sort_unstable();
+            names.dedup();
+            Err(format!("It has {} test points in the plan{}; run it in Test Plans to choose one.", many.len(), if names.is_empty() { String::new() } else { format!(" ({})", names.join(", ")) }))
         }
     }
 }
 
-async fn mirror(client: &AdoClient, project: &str, input: &MirrorInput) -> AppResult<()> {
+/// The test case's points in one plan, as (point id, configuration name).
+async fn points_in_plan(client: &AdoClient, p: &str, plan: i64, test_case_id: i64) -> AppResult<Vec<(i64, String)>> {
+    let suites: Value = client.get(&client.url(&format!("/_apis/testplan/suites?testCaseId={test_case_id}"))).await?;
+    let in_plan: Vec<i64> = suites
+        .get("value")
+        .and_then(|v| v.as_array())
+        .map(|list| list.iter().filter(|s| s.get("plan").and_then(|x| x.get("id")).and_then(|x| x.as_i64()) == Some(plan)).filter_map(|s| s.get("id")?.as_i64()).collect())
+        .unwrap_or_default();
+    let mut out = Vec::new();
+    for suite in in_plan {
+        let points: Value = client.get(&client.url(&format!("/{p}/_apis/testplan/Plans/{plan}/Suites/{suite}/TestPoint?testCaseId={test_case_id}"))).await?;
+        for pt in points.get("value").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
+            if let Some(id) = pt.get("id").and_then(|x| x.as_i64()) {
+                let cfg = pt.get("configuration").and_then(|c| c.get("name")).and_then(|n| n.as_str()).unwrap_or("").to_string();
+                out.push((id, cfg));
+            }
+        }
+    }
+    Ok(out)
+}
+
+async fn mirror(client: &AdoClient, project: &str, input: &MirrorInput) -> AppResult<Mirrored> {
     let p = enc(project);
-    let plans = all_plans(client, &p).await?;
-    let (plan, suite) = match plan_for(&plans, &input.release) {
-        Some(x) => x,
-        None => {
-            let created: Value = client
-                .post_json(&client.url(&format!("/{p}/_apis/testplan/plans")), &json!({ "name": format!("Release {}", input.release), "areaPath": project, "iteration": project }))
-                .await?;
-            let id = created.get("id").and_then(|x| x.as_i64()).ok_or_else(|| AppError::internal("Test Plans did not return the new plan's id."))?;
-            let root = created
-                .get("rootSuite")
-                .and_then(|r| r.get("id"))
-                .and_then(|x| x.as_i64())
-                .ok_or_else(|| AppError::internal("Test Plans did not return the new plan's root suite."))?;
-            (id, root)
-        }
+    // Plans are made on purpose in Test Plans, with their suites and configurations; Run mode only adds to one.
+    let Some(plan) = input.plan_id else { return Ok(Mirrored::NoPlan) };
+    let point = match choose_point(&points_in_plan(client, &p, plan, input.test_case_id).await?) {
+        Ok(id) => id,
+        Err(why) => return Ok(Mirrored::Skipped(why)),
     };
-    let add = client
-        .post_json::<Value>(&client.url(&format!("/{p}/_apis/testplan/Plans/{plan}/Suites/{suite}/TestCase")), &json!([{ "workItem": { "id": input.test_case_id } }]))
-        .await;
-    // Adding a test case that is already in the suite is fine.
-    if let Err(e) = add {
-        if !e.message.to_lowercase().contains("already") {
-            return Err(e);
-        }
-    }
-    let points: Value = client.get(&client.url(&format!("/{p}/_apis/testplan/Plans/{plan}/Suites/{suite}/TestPoint?testCaseId={}", input.test_case_id))).await?;
-    let point = first_id(&points).ok_or_else(|| AppError::internal("Test Plans has no test point for this test case."))?;
-    let run: Value = client
-        .post_json(&client.url(&format!("/{p}/_apis/test/runs")), &json!({ "name": format!("SDV run {}", input.release), "plan": { "id": plan.to_string() }, "pointIds": [point], "automated": false }))
-        .await?;
-    let run_id = run.get("id").and_then(|x| x.as_i64()).ok_or_else(|| AppError::internal("Test Plans did not return the new run's id."))?;
-    if let Err(e) = record_run(client, &p, run_id, input).await {
-        // Leave no half-finished run behind; the original failure is what the caller sees.
-        let _: AppResult<Value> = client.patch_json(&client.url(&format!("/{p}/_apis/test/runs/{run_id}")), &json!({ "state": "Aborted" })).await;
-        return Err(e);
-    }
-    Ok(())
-}
-
-/// Sets the outcome, attaches the files and completes a freshly created run.
-async fn record_run(client: &AdoClient, p: &str, run_id: i64, input: &MirrorInput) -> AppResult<()> {
-    let results: Value = client.get(&client.url(&format!("/{p}/_apis/test/Runs/{run_id}/results"))).await?;
-    let result_id = first_id(&results).ok_or_else(|| AppError::internal("Test Plans created no result for the run."))?;
-    let _: Value = client
-        .patch_json(&client.url(&format!("/{p}/_apis/test/Runs/{run_id}/results")), &json!([{ "id": result_id, "outcome": input.outcome, "state": "Completed", "comment": input.comment }]))
-        .await?;
-    for f in &input.attachments {
-        let _: Value = client
-            .post_json(&client.url(&format!("/{p}/_apis/test/Runs/{run_id}/Results/{result_id}/attachments")), &json!({ "stream": f.data_base64, "fileName": f.name, "attachmentType": "GeneralAttachment" }))
-            .await?;
-    }
-    let _: Value = client.patch_json(&client.url(&format!("/{p}/_apis/test/runs/{run_id}")), &json!({ "state": "Completed" })).await?;
-    Ok(())
+    let run = RunInput {
+        plan_id: plan,
+        name: format!("SDV run {}", input.release),
+        automated: false,
+        build_number: Some(input.release.clone()),
+        results: vec![PointResult {
+            point_id: point,
+            outcome: input.outcome.clone(),
+            comment: Some(input.comment.clone()),
+            error_message: None,
+            stack_trace: None,
+            duration_ms: None,
+            automated_test_name: None,
+            automated_test_storage: None,
+            attachments: input.attachments.iter().map(|f| RunFile { name: f.name.clone(), data_base64: f.data_base64.clone() }).collect(),
+        }],
+    };
+    publish_run(client, project, &run).await?;
+    Ok(Mirrored::Yes)
 }
 
 /// Mirror one run. Never an error to the caller: a refusal or failure comes back as a reason.
 pub async fn mirror_result(client: &AdoClient, project: &str, input: &MirrorInput) -> MirrorResult {
     match mirror(client, project, input).await {
-        Ok(()) => MirrorResult { mirrored: true, reason: None },
+        Ok(Mirrored::Yes) => MirrorResult { mirrored: true, reason: None },
+        Ok(Mirrored::NoPlan) => MirrorResult { mirrored: false, reason: None },
+        Ok(Mirrored::Skipped(why)) => MirrorResult { mirrored: false, reason: Some(why) },
         Err(e) if is_access_refusal(e.status.unwrap_or(0), &e.message) => MirrorResult { mirrored: false, reason: Some("No Test Plans access".into()) },
         Err(e) => MirrorResult { mirrored: false, reason: Some(e.message) },
     }
@@ -144,7 +135,6 @@ pub async fn mirror_result(client: &AdoClient, project: &str, input: &MirrorInpu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn refusals_are_recognised() {
@@ -157,9 +147,11 @@ mod tests {
     }
 
     #[test]
-    fn finds_the_release_plan_by_name() {
-        let plans = json!({ "value": [{ "id": 3, "name": "Release v2.0", "rootSuite": { "id": 30 } }, { "id": 7, "name": "Release v2.1.0 RC1", "rootSuite": { "id": 70 } }] });
-        assert_eq!(plan_for(&plans, "v2.1.0 RC1"), Some((7, 70)));
-        assert_eq!(plan_for(&plans, "v9"), None);
+    fn a_run_goes_only_to_a_single_point() {
+        assert_eq!(choose_point(&[(5, "macOS".into())]), Ok(5));
+        assert_eq!(choose_point(&[]).unwrap_err(), "This test case is not in the project's test plan.");
+        let many = choose_point(&[(5, "macOS".into()), (6, "Windows 11".into()), (7, "macOS".into())]).unwrap_err();
+        assert_eq!(many, "It has 3 test points in the plan (Windows 11, macOS); run it in Test Plans to choose one.");
     }
+
 }
