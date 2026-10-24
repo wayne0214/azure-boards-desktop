@@ -205,7 +205,7 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
   const acceptance = acceptanceDef && (
     <>
       <div className="section-h">{acceptanceDef.name}{acceptanceDef.alwaysRequired && <span className="req" title="Required">*</span>}</div>
-      <RichText project={project} html={f[ACCEPTANCE_CRITERIA] as string | undefined} placeholder={acceptanceDef.helpText || 'What does done look like?'} onSave={(html) => void updateFields(item.id, { [ACCEPTANCE_CRITERIA]: html || null })} />
+      <RichText project={project} html={f[ACCEPTANCE_CRITERIA] as string | undefined} placeholder={acceptanceDef.helpText || `Add ${acceptanceDef.name.toLowerCase()}…`} onSave={(html) => void updateFields(item.id, { [ACCEPTANCE_CRITERIA]: html || null })} />
     </>
   )
 
