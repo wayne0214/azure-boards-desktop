@@ -369,6 +369,9 @@ kbd {
 }
 .segmented button:hover { color: var(--text); }
 .segmented button.on { background: var(--bg-panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+/* The dark panel colour is no lighter than the track, so the chosen segment needs its own lift. */
+:root[data-theme="dark"] .segmented { background: rgba(0, 0, 0, 0.28); }
+:root[data-theme="dark"] .segmented button.on { background: #4a4a51; color: #ffffff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
 
 /* ---------- Dropdown / popover ---------- */
 .popover {
@@ -1918,3 +1921,7 @@ input.input.tp-version-input { width: 140px; height: 30px; font-size: var(--fs-s
 .ov-step.error .ov-step-detail, .ov-step.failed .ov-step-detail { color: var(--danger); }
 .ov-steps-foot { display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-size: var(--fs-xs); flex-wrap: wrap; }
 .ov-repo-head .grow, .ov-steps-foot .grow { flex: 1; }
+
+/* Test Cases / Test Plans switch beside the Testing crumb */
+.toolbar-switch { flex: 0 0 auto; margin-left: 12px; }
+.toolbar-switch button { white-space: nowrap; }

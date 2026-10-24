@@ -69,6 +69,9 @@ const write = (key: string, value: unknown) => {
 
 let toastSeq = 1
 
+/** Test Cases or Test Plans, whichever was open last: the sidebar's Testing item goes back to it. */
+export const lastTestingView = (): 'tests' | 'plans' => read<'tests' | 'plans'>('ui.testing', 'tests')
+
 export const useUiStore = create<UiState>((set, get) => ({
   view: read<View>('ui.view', 'board'),
   sidebarOpen: read('ui.sidebar', true),
@@ -87,6 +90,7 @@ export const useUiStore = create<UiState>((set, get) => ({
 
   setView: (view) => {
     write('ui.view', view)
+    if (view === 'tests' || view === 'plans') write('ui.testing', view)
     // Moving to another section closes the details panel; it reopens when an item is picked there.
     set((s) => ({ view, inspectorOpen: view === s.view ? s.inspectorOpen : false }))
   },

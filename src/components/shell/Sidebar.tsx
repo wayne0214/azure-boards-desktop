@@ -1,4 +1,4 @@
-import { ChevronDown, Download, ClipboardList, Clock3, Columns3, DoorOpen, FileInput, FlaskConical, GitPullRequest, FolderKanban, ListTree, Tag, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
+import { ChevronDown, Download, Clock3, Columns3, DoorOpen, FileInput, FlaskConical, GitPullRequest, FolderKanban, ListTree, Tag, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { pendingImports, useImportStore } from '@/components/imports/useImportStore'
@@ -7,7 +7,7 @@ import { installUpdate, useUpdateStore } from '@/lib/updater'
 import { useAppStore } from '@/store/useAppStore'
 import { attentionCount, useMyWorkStore } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
-import { useUiStore } from '@/store/useUiStore'
+import { lastTestingView, useUiStore } from '@/store/useUiStore'
 import type { Project } from '@/lib/types'
 
 export function Sidebar() {
@@ -68,8 +68,7 @@ export function Sidebar() {
     const url = activeOrg ? `https://dev.azure.com/${encodeURIComponent(activeOrg)}/${encodeURIComponent(p.name)}` : null
     void api().showContextMenu([
       { label: 'Requirements', action: () => openProject(p, 'reqs') },
-      { label: 'Test Cases', action: () => openProject(p, 'tests') },
-      { label: 'Test Plans', action: () => openProject(p, 'plans') },
+      { label: 'Testing', action: () => openProject(p, lastTestingView()) },
       { label: 'Open Board', action: () => openProject(p, 'board') },
       { label: 'Team', action: () => openProject(p, 'team') },
       { label: 'Open List', action: () => openProject(p, 'list') },
@@ -115,13 +114,9 @@ export function Sidebar() {
               <span className="ico"><ListTree size={14} /></span>
               <span className="label">Requirements</span>
             </button>
-            <button type="button" className={`nav-item ${view === 'tests' ? 'active' : ''}`} onClick={() => openProject(p, 'tests')}>
+            <button type="button" className={`nav-item ${view === 'tests' || view === 'plans' ? 'active' : ''}`} onClick={() => openProject(p, view === 'tests' || view === 'plans' ? view : lastTestingView())}>
               <span className="ico"><FlaskConical size={14} /></span>
-              <span className="label">Test Cases</span>
-            </button>
-            <button type="button" className={`nav-item ${view === 'plans' ? 'active' : ''}`} onClick={() => openProject(p, 'plans')}>
-              <span className="ico"><ClipboardList size={14} /></span>
-              <span className="label">Test Plans</span>
+              <span className="label">Testing</span>
             </button>
             <button type="button" className={`nav-item ${onBoard ? 'active' : ''}`} onClick={() => openProject(p, view === 'list' ? 'list' : 'board')}>
               <span className="ico"><Columns3 size={14} /></span>
