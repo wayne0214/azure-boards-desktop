@@ -118,7 +118,8 @@ export function Toolbar() {
   const isReqs = view === 'reqs' || view === 'tests' || view === 'plans'
   const isTests = view === 'tests'
   const isPlans = view === 'plans'
-  const section = isPlans ? 'Test Plans' : isTests ? 'Test Cases' : 'Requirements'
+  const isTesting = isTests || isPlans
+  const section = isTesting ? 'Testing' : 'Requirements'
   const isTeam = view === 'team'
   const refreshing = isMine ? mineLoading : boardRefreshing
 
@@ -142,8 +143,15 @@ export function Toolbar() {
         </div>
       ) : isReqs ? (
         <div className="crumbs no-drag">
-          <span className="crumb">{isPlans ? <ClipboardList size={16} /> : isTests ? <FlaskConical size={16} /> : <ListTree size={16} />}<span className="txt">{project ? `${project.name}` : section}</span></span>
-          {project && <><span className="crumb-sep">/</span><span className="crumb sub"><span className="txt">{section}</span></span></>}
+          <span className="crumb">{isTesting ? <FlaskConical size={16} /> : <ListTree size={16} />}<span className="txt">{project ? `${project.name}` : section}</span></span>
+          {project && !isTesting && <><span className="crumb-sep">/</span><span className="crumb sub"><span className="txt">{section}</span></span></>}
+          {isTesting && (
+            // Test Cases and Test Plans are one sidebar item; this switches between them.
+            <div className="segmented toolbar-switch">
+              <button type="button" className={isTests ? 'on' : ''} onClick={() => setView('tests')}><FlaskConical size={14} /> Test Cases</button>
+              <button type="button" className={isPlans ? 'on' : ''} onClick={() => setView('plans')}><ClipboardList size={14} /> Test Plans</button>
+            </div>
+          )}
         </div>
       ) : isRooms ? (
         <div className="crumbs no-drag">

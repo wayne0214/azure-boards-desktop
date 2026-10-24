@@ -1893,3 +1893,7 @@ input.input.tp-version-input { width: 140px; height: 30px; font-size: var(--fs-s
 .mini-booking { display: flex; align-items: flex-start; gap: 8px; margin: 8px 12px 0; padding: 8px; border-radius: 8px; background: var(--accent-soft); }
 .mini-booking svg { margin-top: 2px; color: var(--accent); flex-shrink: 0; }
 .mini-drop { display: flex; align-items: center; gap: 6px; margin: 10px 12px 0; padding: 8px; border: 1px dashed var(--border-strong); border-radius: 8px; font-size: 12px; }
+
+/* Test Cases / Test Plans switch beside the Testing crumb */
+.toolbar-switch { flex: 0 0 auto; margin-left: 12px; }
+.toolbar-switch button { white-space: nowrap; }
