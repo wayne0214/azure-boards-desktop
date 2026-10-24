@@ -2,7 +2,7 @@ import DOMPurify from 'dompurify'
 import { ArrowLeft, ChevronDown, ExternalLink, GitBranch, Link2, Plus, RefreshCw, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
-import { ACCEPTANCE_CRITERIA, REPRO_STEPS, acceptanceField, customFieldsFor, fieldKind, isIdLike, symptomField, usesReproSteps } from '@/lib/customFields'
+import { ACCEPTANCE_CRITERIA, REPRO_STEPS, acceptanceField, customFieldsFor, descriptionField, fieldKind, isIdLike, symptomField, usesReproSteps } from '@/lib/customFields'
 import { hydrateImages } from '@/lib/attachments'
 import { htmlToText, identityKey, itemUrl, longDate, relativeTime, typeColor } from '@/lib/format'
 import type { Comment, WorkItem, WorkItemType } from '@/lib/types'
@@ -125,6 +125,9 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
   const acceptanceDef = acceptanceField(wit) ?? (ACCEPTANCE_CRITERIA in f ? { referenceName: ACCEPTANCE_CRITERIA, name: 'Acceptance Criteria' } : undefined)
   const customDefs = allCustomDefs.filter((d) => fieldKind(ctx, d) !== 'html')
   const htmlDefs = allCustomDefs.filter((d) => fieldKind(ctx, d) === 'html')
+  // Acceptance Criteria follows the type's main text (e.g. Software Requirement Specification), not the other rich fields.
+  const mainDef = descriptionField(ctx, wit)
+  const acceptanceAfter = acceptanceDef && mainDef && htmlDefs.some((d) => d.referenceName === mainDef.referenceName) ? mainDef.referenceName : null
   const who = f['System.AssignedTo'] as { displayName?: string; uniqueName?: string; id?: string } | undefined
   const createdBy = f['System.CreatedBy'] as { displayName?: string; uniqueName?: string } | undefined
   const [menu, setMenu] = useState<null | 'who' | 'state' | 'iter' | 'pri'>(null)
@@ -199,6 +202,12 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
   const remainingField = 'Microsoft.VSTS.Scheduling.RemainingWork'
   const parentId = parentIdOf(item)
   const stateColorHex = `#${(wit?.states.find((s) => s.name === f['System.State'])?.color ?? '888').replace('#', '')}`
+  const acceptance = acceptanceDef && (
+    <>
+      <div className="section-h">{acceptanceDef.name}{acceptanceDef.alwaysRequired && <span className="req" title="Required">*</span>}</div>
+      <RichText project={project} html={f[ACCEPTANCE_CRITERIA] as string | undefined} placeholder={acceptanceDef.helpText || 'What does done look like?'} onSave={(html) => void updateFields(item.id, { [ACCEPTANCE_CRITERIA]: html || null })} />
+    </>
+  )
 
   return (
     <aside className={className} style={{ ...widthStyle, ['--type-color' as string]: typeColor(projectTypes, type) }}>
@@ -320,6 +329,7 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
           <div key={d.referenceName}>
             <div className="section-h">{d.name}{d.alwaysRequired && <span className="req" title="Required">*</span>}</div>
             <RichText project={project} html={f[d.referenceName] as string | undefined} placeholder={d.helpText || `Add ${d.name.toLowerCase()}…`} onSave={(html) => void updateFields(item.id, { [d.referenceName]: html || null })} />
+            {d.referenceName === acceptanceAfter && acceptance}
           </div>
         ))}
 
@@ -335,12 +345,7 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
             <RichText project={project} html={f[symptomDef.referenceName] as string | undefined} placeholder="What does the user see? (paste screenshots here)" onSave={(html) => void updateFields(item.id, { [symptomDef.referenceName]: html || null })} />
           </>
         )}
-        {acceptanceDef && (
-          <>
-            <div className="section-h">{acceptanceDef.name}{acceptanceDef.alwaysRequired && <span className="req" title="Required">*</span>}</div>
-            <RichText project={project} html={f[ACCEPTANCE_CRITERIA] as string | undefined} placeholder={acceptanceDef.helpText || 'What does done look like?'} onSave={(html) => void updateFields(item.id, { [ACCEPTANCE_CRITERIA]: html || null })} />
-          </>
-        )}
+        {!acceptanceAfter && acceptance}
 
         <div className="section-h">
           <span>Child items{children && children.length ? ` · ${children.length}` : ''}</span>

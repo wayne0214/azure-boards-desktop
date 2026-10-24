@@ -62,7 +62,7 @@ const types: WorkItemType[] = [
     ],
   },
   {
-    name: 'User Story', referenceName: 'Microsoft.VSTS.WorkItemTypes.UserStory', color: '0098C7', fieldDefs: [idField('Custom.SRSID', 'SRS ID'), { referenceName: 'Custom.SRSSpec', name: 'Software Requirement Specification' }, { referenceName: 'Microsoft.VSTS.Common.AcceptanceCriteria', name: 'Acceptance Criteria' }, riskField, methodField],
+    name: 'User Story', referenceName: 'Microsoft.VSTS.WorkItemTypes.UserStory', color: '0098C7', fieldDefs: [idField('Custom.SRSID', 'SRS ID'), { referenceName: 'Custom.SRSSpec', name: 'Software Requirement Specification' }, { referenceName: 'Custom.Rationale', name: 'Rationale' }, { referenceName: 'Microsoft.VSTS.Common.AcceptanceCriteria', name: 'Acceptance Criteria' }, riskField, methodField],
     states: [
       { name: 'New', color: 'b2b2b2', category: 'Proposed' },
       { name: 'Active', color: '007acc', category: 'InProgress' },
@@ -390,7 +390,7 @@ export const mockApi: Api = {
       workItemTypes: structuredClone(types),
       members: structuredClone(people),
       tags: ['android', 'capture', 'clinical', 'dashboard', 'ios', 'reliability', 'upload', 'ux'],
-      fieldTypes: { 'Custom.UNID': 'string', 'Custom.DIID': 'string', 'Custom.SRSID': 'string', 'Custom.RiskLevel': 'string', 'Custom.SRSSpec': 'html', 'Custom.VerificationMethod': 'string', 'Custom.SDVID': 'string', 'Custom.LastOutcome': 'string', 'Custom.LastTestedRelease': 'string' },
+      fieldTypes: { 'Custom.UNID': 'string', 'Custom.DIID': 'string', 'Custom.SRSID': 'string', 'Custom.RiskLevel': 'string', 'Custom.SRSSpec': 'html', 'Custom.Rationale': 'html', 'Custom.VerificationMethod': 'string', 'Custom.SDVID': 'string', 'Custom.LastOutcome': 'string', 'Custom.LastTestedRelease': 'string' },
     }
   },
   queryBoardItems: async (_o, q) => {
