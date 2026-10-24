@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronDown, ClipboardList, Clock3, DoorOpen, FlaskConical, ListTree, Users, GitPullRequest, Columns3, ExternalLink, Filter, LayoutList, PanelLeft, PanelRight, Plus, RefreshCw, Search, User, X } from 'lucide-react'
+import { CalendarDays, ChevronDown, ClipboardList, Clock3, DoorOpen, FlaskConical, ListTree, Users, GitPullRequest, Columns3, ExternalLink, Filter, LayoutList, PanelLeft, PanelRight, Plus, RefreshCw, Search, User, X, FileInput } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { boardUrl } from '@/lib/format'
@@ -111,7 +111,9 @@ export function Toolbar() {
   const isMine = view === 'mine'
   const isTimesheet = view === 'timesheet'
   const isPrs = view === 'prs'
-  const isRooms = view === 'rooms'
+  // Imports has no board controls, like Meeting Rooms.
+  const isRooms = view === 'rooms' || view === 'imports'
+  const isImports = view === 'imports'
   // Test Cases and Test Plans sit beside Requirements and share its toolbar.
   const isReqs = view === 'reqs' || view === 'tests' || view === 'plans'
   const isTests = view === 'tests'
@@ -145,7 +147,7 @@ export function Toolbar() {
         </div>
       ) : isRooms ? (
         <div className="crumbs no-drag">
-          <span className="crumb"><DoorOpen size={16} /><span className="txt">Meeting Rooms</span></span>
+          <span className="crumb">{isImports ? <FileInput size={16} /> : <DoorOpen size={16} />}<span className="txt">{isImports ? 'Imports' : 'Meeting Rooms'}</span></span>
         </div>
       ) : isPrs ? (
         <div className="crumbs no-drag">

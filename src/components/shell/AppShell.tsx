@@ -13,6 +13,7 @@ import { ListView } from '../list/ListView'
 import { MyWorkView } from '../mine/MyWorkView'
 import { TimesheetView } from '../timesheet/TimesheetView'
 import { MeetingRoomView } from '../rooms/MeetingRoomView'
+import { ImportsView } from '../imports/ImportsView'
 import { RequirementsView } from '../requirements/RequirementsView'
 import { TestCasesView } from '../testcases/TestCasesView'
 import { PlansView } from '../plans/PlansView'
@@ -39,7 +40,7 @@ import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { refreshCurrentView, refreshInBackground, refreshOnFocus } from '@/lib/refresh'
 import { usePrStore } from '@/store/usePrStore'
 
-const VIEW_NAMES: Record<View, string> = { board: 'The board', list: 'The list', mine: 'My Work', timesheet: 'Timesheet', prs: 'Pull Requests', rooms: 'Meeting Rooms', reqs: 'Requirements', tests: 'Test Cases', plans: 'Test Plans', team: 'Team' }
+const VIEW_NAMES: Record<View, string> = { board: 'The board', list: 'The list', mine: 'My Work', timesheet: 'Timesheet', prs: 'Pull Requests', rooms: 'Meeting Rooms', reqs: 'Requirements', tests: 'Test Cases', plans: 'Test Plans', team: 'Team', imports: 'Imports' }
 
 export function AppShell() {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen)
@@ -201,10 +202,10 @@ export function AppShell() {
         <div className="main-body">
           <div className="content" onClick={onBlankClick}>
             <ErrorBoundary key={view} where={VIEW_NAMES[view]} inline>
-            {view === 'team' ? <TeamView /> : view === 'reqs' ? <RequirementsView /> : view === 'tests' ? <TestCasesView /> : view === 'plans' ? <PlansView /> : view === 'rooms' ? <MeetingRoomView /> : view === 'prs' ? <PrView /> : view === 'timesheet' ? <TimesheetView /> : view === 'mine' ? <MyWorkView /> : view === 'list' ? <ListView /> : <BoardView />}
+            {view === 'imports' ? <ImportsView /> : view === 'team' ? <TeamView /> : view === 'reqs' ? <RequirementsView /> : view === 'tests' ? <TestCasesView /> : view === 'plans' ? <PlansView /> : view === 'rooms' ? <MeetingRoomView /> : view === 'prs' ? <PrView /> : view === 'timesheet' ? <TimesheetView /> : view === 'mine' ? <MyWorkView /> : view === 'list' ? <ListView /> : <BoardView />}
             </ErrorBoundary>
           </div>
-          {inspectorOpen && view !== 'timesheet' && view !== 'rooms' && <Inspector floating={view !== 'board'} />}
+          {inspectorOpen && view !== 'timesheet' && view !== 'rooms' && view !== 'imports' && <Inspector floating={view !== 'board'} />}
         </div>
       </div>
       <StatusBar />

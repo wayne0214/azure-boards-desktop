@@ -17,7 +17,7 @@ pub fn list() -> Vec<Value> {
         json!({
             "name": "import_srs_from_markdown",
             "title": "Import SRS from a markdown file",
-            "description": "Create missing requirements, fill empty fields (e.g. acceptance criteria) and skip ones already in Boards, after you approve a plan.",
+            "description": "Stage the file's requirements for review in Boards → Imports: new ones, empty fields to fill (e.g. acceptance criteria), conflicts, and optionally ones no longer in the file.",
             "arguments": [
                 { "name": "file", "description": "Path to the markdown file", "required": true },
                 { "name": "type", "description": "Work item type for the rows; default Requirement", "required": false },
@@ -44,8 +44,8 @@ pub fn get(name: &str, args: &Value) -> Result<Value, String> {
                 "Check my code against the requirements (SRS) in Azure DevOps Boards, and tell me what changed there.\n\n\
                  {scope}\n\n\
                  Steps:\n\
-                 1. Find the requirements in scope with the boards tools (get_context, find_work_items, get_work_item). For each, note its key (e.g. SRS ID), \
-                 specification text and acceptance criteria.\n\
+                 1. Find the requirements in scope with the boards tools (get_context, find_work_items; export_work_items for the full text of many at once, \
+                 get_work_item for one). For each, note its key (e.g. SRS ID), specification text and acceptance criteria.\n\
                  2. For each requirement call get_item_changes with since = {since} and note any change to its text, acceptance criteria or state.\n\
                  3. Find the code for each requirement in this repository: search for its key (e.g. SRS-182) and work item ID (e.g. AB#3734, #3734) in code, \
                  tests and comments, in commit messages (git log --grep) and branch names; then follow the code that implements the behaviour.\n\
@@ -63,10 +63,11 @@ pub fn get(name: &str, args: &Value) -> Result<Value, String> {
                  1. Read {file}. For each requirement work out: its key (e.g. SRS-182), title, type (default {ty}), parent key if given (e.g. DI-12), \
                  and its fields: the specification text, the (user) acceptance criteria, and any other field the file has. Keep the wording, lists and line breaks as written.\n\
                  2. If a heading or column does not obviously match a Boards field, call list_work_item_types and match by field name. Ask me if one still does not match.\n\
-                 3. Call plan_work_item_sync with the items (at most 300 per call). Do not set overwrite unless I asked to replace text already in Boards.\n\
-                 4. Show me the plan as a table: row, key, title, action (create / update / skip / error), the fields that will be filled, \
-                 and every conflict with both versions side by side. Give the count of each action.\n\
-                 5. Stop and wait for my go-ahead. Only then call apply_work_item_sync with the planId, and report the result per row with a link to each work item."
+                 3. Ask me whether {file} is the complete list for these types. Only if I say yes, set removeMissing: true, so items only in Boards are offered for removal.\n\
+                 4. Call stage_import with the items (at most 300 per call) and source \"{file}\". Do not set overwrite: I choose per conflict in Boards.\n\
+                 5. If rows have errors, fix what you can and stage again. Then give me the counts (new, changed, conflicts, only in Boards, errors) \
+                 and tell me to review and apply it in Boards → Imports. Nothing is written until I do.\n\
+                 6. When I say I am done, call get_import_result and summarise what was applied, what failed and why."
             )
         }
         other => return Err(format!("Unknown prompt: {other}")),
@@ -83,7 +84,7 @@ mod tests {
     fn prompts_fill_in_their_arguments() {
         let p = get("import_srs_from_markdown", &json!({ "file": "docs/srs.md" })).unwrap();
         let text = p["messages"][0]["content"]["text"].as_str().unwrap();
-        assert!(text.contains("docs/srs.md") && text.contains("plan_work_item_sync"));
+        assert!(text.contains("docs/srs.md") && text.contains("stage_import"));
         assert!(get("import_srs_from_markdown", &json!({})).is_err());
         let r = get("review_code_against_srs", &json!({ "scope": "SRS-182" })).unwrap();
         assert!(r["messages"][0]["content"]["text"].as_str().unwrap().contains("Scope: SRS-182."));
