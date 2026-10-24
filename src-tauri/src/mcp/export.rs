@@ -3,6 +3,7 @@
 //! tool's output limit, continued with `offset`.
 
 use super::fields::{self, TypeInfo};
+use super::steps::{self, STEPS_FIELD, TESTS_REL};
 use super::tools::{field, item_url, plain, query, str_arg, str_list, Found};
 use crate::ado::client::AdoClient;
 use crate::error::{AppError, AppResult};
@@ -42,6 +43,13 @@ fn is_bookkeeping(reference: &str) -> bool {
         || matches!(reference, "Microsoft.VSTS.Common.StackRank" | "Microsoft.VSTS.Common.BacklogPriority")
 }
 
+fn field_text(reference: &str, v: &Value) -> String {
+    if reference == STEPS_FIELD {
+        return steps::to_text(&steps::parse(v.as_str().unwrap_or("")));
+    }
+    text_of(v)
+}
+
 fn text_of(v: &Value) -> String {
     match plain(v) {
         Value::String(s) => s.trim().to_string(),
@@ -68,7 +76,18 @@ pub struct Row {
     pub fields: Vec<(String, String)>,
 }
 
-fn row(org: &str, item: &Value, t: Option<&TypeInfo>, key: Option<(String, String)>, wanted: &[String]) -> Row {
+/// IDs of the requirements an item tests (Tested By links).
+fn tested(item: &Value) -> Vec<i64> {
+    item.get("relations")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|r| r.get("rel").and_then(Value::as_str) == Some(TESTS_REL))
+        .filter_map(|r| r.get("url").and_then(Value::as_str).and_then(|u| u.rsplit('/').next()).and_then(|x| x.parse().ok()))
+        .collect()
+}
+
+fn row(org: &str, item: &Value, t: Option<&TypeInfo>, key: Option<(String, String)>, wanted: &[String], tests: Option<String>) -> Row {
     let s = |name: &str| field(item, name).map(text_of).unwrap_or_default();
     let name = |reference: &str| t.map(|t| fields::display_name(t, reference)).unwrap_or_else(|| reference.to_string());
     let key_field = key.as_ref().map(|k| k.0.clone());
@@ -79,17 +98,24 @@ fn row(org: &str, item: &Value, t: Option<&TypeInfo>, key: Option<(String, Strin
             if is_bookkeeping(reference) || Some(reference) == key_field.as_ref() {
                 continue;
             }
-            let text = text_of(v);
+            let text = field_text(reference, v);
             if !text.is_empty() {
                 out.push((name(reference), text));
             }
+        }
+        if let Some(t) = tests {
+            out.push(("Tests".into(), t));
         }
         // Description first, then the others by name; short values before long ones.
         out.sort_by(|a, b| (b.0 == "Description").cmp(&(a.0 == "Description")).then(is_long(&a.1).cmp(&is_long(&b.1))).then(a.0.cmp(&b.0)));
     } else {
         for w in wanted {
             let reference = t.and_then(|t| fields::resolve_field(t, w)).unwrap_or_else(|| w.clone());
-            let text = all.get(&reference).map(text_of).unwrap_or_default();
+            if reference.eq_ignore_ascii_case("tests") {
+                out.push(("Tests".into(), tests.clone().unwrap_or_default()));
+                continue;
+            }
+            let text = all.get(&reference).map(|v| field_text(&reference, v)).unwrap_or_default();
             out.push((name(&reference), text));
         }
     }
@@ -182,7 +208,7 @@ fn as_json(row: &Row, depth: usize) -> Value {
 async fn full_items(client: &AdoClient, ids: &[i64]) -> AppResult<Vec<Value>> {
     let mut out = Vec::with_capacity(ids.len());
     for chunk in ids.chunks(200) {
-        let res: Value = client.post_json(&client.url("/_apis/wit/workitemsbatch"), &json!({ "ids": chunk, "errorPolicy": "Omit" })).await?;
+        let res: Value = client.post_json(&client.url("/_apis/wit/workitemsbatch"), &json!({ "ids": chunk, "$expand": "Relations", "errorPolicy": "Omit" })).await?;
         out.extend(res.get("value").and_then(Value::as_array).cloned().unwrap_or_default().into_iter().filter(|v| !v.is_null()));
     }
     let pos: HashMap<i64, usize> = ids.iter().enumerate().map(|(i, id)| (*id, i)).collect();
@@ -236,6 +262,20 @@ pub async fn export(org: &str, client: &AdoClient, state: &AppState, ctx: &Value
         let ids: Vec<i64> = chunk.iter().map(|(id, _)| *id).collect();
         let items = full_items(client, &ids).await?;
         let by_id: HashMap<i64, &Value> = items.iter().filter_map(|it| it.get("id").and_then(Value::as_i64).map(|id| (id, it))).collect();
+        // Requirements these items test, named by key.
+        let targets: Vec<i64> = items.iter().flat_map(tested).collect::<HashSet<_>>().into_iter().collect();
+        let mut label: HashMap<i64, String> = HashMap::new();
+        if !targets.is_empty() {
+            let mut want = found.key_fields.clone();
+            want.push("System.WorkItemType".into());
+            for part in targets.chunks(200) {
+                let res: Value = client.post_json(&client.url("/_apis/wit/workitemsbatch"), &json!({ "ids": part, "fields": want, "errorPolicy": "Omit" })).await?;
+                for t in res.get("value").and_then(Value::as_array).into_iter().flatten() {
+                    let id = t.get("id").and_then(Value::as_i64).unwrap_or(0);
+                    label.insert(id, found.key_of(t).map(|k| format!("{} (#{id})", k.1)).unwrap_or_else(|| format!("#{id}")));
+                }
+            }
+        }
         for (id, depth) in chunk {
             let Some(it) = by_id.get(id) else {
                 omitted += 1;
@@ -247,7 +287,9 @@ pub async fn export(org: &str, client: &AdoClient, state: &AppState, ctx: &Value
                 continue;
             }
             let t = field(it, "System.WorkItemType").and_then(Value::as_str).and_then(|n| found.ptypes.iter().find(|p| p.name == n));
-            let r = row(org, it, t, found.key_of(it), &wanted);
+            let tests = tested(it);
+            let tests = (!tests.is_empty()).then(|| tests.iter().map(|id| label.get(id).cloned().unwrap_or_else(|| format!("#{id}"))).collect::<Vec<_>>().join(", "));
+            let r = row(org, it, t, found.key_of(it), &wanted, tests);
             let j = as_json(&r, *depth);
             let piece = if markdown_out { markdown(&r, *depth) } else { j.to_string() };
             if used > 0 && used + piece.len() > PAGE_CHARS {

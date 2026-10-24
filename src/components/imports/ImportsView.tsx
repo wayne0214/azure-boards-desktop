@@ -305,7 +305,7 @@ function RowCard({ row, org, project, picked, pickable, parentMissing, parentLab
   const cat = CATEGORY[row.category]
   const changes = row.changes.filter((c) => c.kind !== 'same')
   const conflicts = row.changes.filter((c) => c.kind === 'conflict')
-  const undecided = conflicts.filter((c) => !takeFile.includes(c.field)).length
+  const undecided = conflicts.filter((c) => !c.locked && !takeFile.includes(c.field)).length
   const what = row.category === 'error' ? null
     : row.category === 'conflict' ? `${conflicts.length} conflict${conflicts.length > 1 ? 's' : ''}${changes.length > conflicts.length ? `, ${changes.length - conflicts.length} to fill` : ''}`
     : row.category === 'new' ? `${changes.length} field${changes.length === 1 ? '' : 's'}`
@@ -346,14 +346,15 @@ function RowCard({ row, org, project, picked, pickable, parentMissing, parentLab
 }
 
 function FieldDiff({ change, isNew, removal, useFile, onChoose }: { change: FieldChange; isNew: boolean; removal: boolean; useFile: boolean; onChoose: (file: boolean) => void }) {
-  const label = change.kind === 'fill' ? 'Empty in Boards' : change.kind === 'conflict' ? 'Different in Boards' : null
+  const label = change.kind === 'fill' ? 'Empty in Boards' : change.kind === 'conflict' ? 'Different in Boards' : change.kind === 'add' ? 'Adds links' : null
   return (
     <div className={`imp-field ${change.kind}`}>
       <div className="imp-field-h">
         <span className="imp-field-name">{change.name}</span>
         {label && <span className={`pr-chip ${change.kind === 'conflict' ? 'warn' : ''}`}>{label}</span>}
         <span className="grow" />
-        {change.kind === 'conflict' && (
+        {change.kind === 'conflict' && change.locked && <span className="faint imp-hint">{change.locked}</span>}
+        {change.kind === 'conflict' && !change.locked && (
           <div className="segmented small">
             <button type="button" className={!useFile ? 'on' : ''} onClick={() => onChoose(false)}>Keep Boards</button>
             <button type="button" className={useFile ? 'on' : ''} onClick={() => onChoose(true)}>Use file</button>

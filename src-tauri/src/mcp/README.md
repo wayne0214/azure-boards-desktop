@@ -30,6 +30,20 @@ Prompts (Claude Code shows them as `/mcp__boards__<name>`):
 
 - `review_code_against_srs`: compare this repository's code with the SRS in scope, and list recent Boards changes.
 - `import_srs_from_markdown`: read a markdown file and stage it for review in Boards → Imports.
+- `import_test_cases_from_markdown`: the same for test cases, with their steps and the requirements they test.
+
+### Test cases
+
+Steps live in `Microsoft.VSTS.TCM.Steps` as XML (`steps.rs`, the same format as the app's step grid).
+The tools read them as numbered text ("1. Open the report / Expected: …") and take them as
+`steps: [{ "action", "expected" }]` or numbered lines. `tests: ["SRS-0012"]` links a test case to the
+requirements it tests (Tested By); links are only ever added.
+
+- Export shows each test case's steps and a "Tests" line naming its requirements.
+- Import compares steps as a whole list: empty in Boards → filled; different → a conflict to decide in the review.
+  A test case that uses shared steps keeps its steps (a new list would drop the reference); change those in Boards.
+- `create_work_item` / `update_work_item` take `steps` and `tests` too. `steps` replaces the whole list, so the AI
+  reads the current steps first and sends them back with the change.
 
 ### Export
 
@@ -111,6 +125,8 @@ Use the `boards` MCP tools. Requirements have an SRS ID (e.g. SRS-0005); find th
 - "Import SRS from <file>.md": read the file and call stage_import with source "<file>.md"; set
   removeMissing only if I say the file is complete. Then tell me to review it in Boards → Imports,
   and afterwards report get_import_result.
+- "Import test cases from <file>.md": the same with type "Test Case", each item's `steps`
+  ([{ action, expected }]) and `tests` (the SRS keys it covers).
 ```
 
 ## Remove it

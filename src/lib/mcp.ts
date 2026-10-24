@@ -91,7 +91,8 @@ export interface ImportInfo {
   finished: number | null
 }
 
-export type ChangeKind = 'set' | 'fill' | 'conflict' | 'same'
+/** `add`: links added beside the ones already there (Tested By). */
+export type ChangeKind = 'set' | 'fill' | 'conflict' | 'same' | 'add'
 
 export interface FieldChange {
   /** Reference name, or "System.Parent". */
@@ -102,6 +103,8 @@ export interface FieldChange {
   after: string
   /** Written as planned (conflicts only when the file's side was picked). */
   write: boolean
+  /** Why the file's side cannot be used (e.g. shared steps). */
+  locked?: string
 }
 
 export type RowCategory = 'new' | 'changed' | 'conflict' | 'same' | 'missing' | 'error'

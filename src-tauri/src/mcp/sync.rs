@@ -8,6 +8,7 @@
 //! before and after, and the user picks rows and conflict fields in the app.
 
 use super::fields::{self, TypeInfo};
+use super::steps::{self, STEPS_FIELD, TESTS_REL};
 use super::tools::{html_to_text, text_to_html};
 use crate::ado::api::{self, FieldMap};
 use crate::ado::client::AdoClient;
@@ -65,6 +66,12 @@ pub struct RowIn {
     pub parent_key: Option<String>,
     #[serde(default)]
     pub parent_id: Option<i64>,
+    /// Test case steps: `[{ "action", "expected" }]` or numbered lines.
+    #[serde(default)]
+    pub steps: Option<Value>,
+    /// Requirements a test case tests (Tested By links), by key ("SRS-0012") or ID ("#3741").
+    #[serde(default)]
+    pub tests: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -104,6 +111,10 @@ struct RowPlan {
     changes: Vec<Value>,
     /// Posted on the item after the change (removals say why).
     comment: Option<String>,
+    /// Requirements to link as tested by this item: wanted while planning, then only those not linked yet.
+    links: Vec<i64>,
+    /// Display labels for link targets ("SRS-0012 #3741").
+    link_labels: HashMap<i64, String>,
 }
 
 // ----- comparing values -----
@@ -166,16 +177,66 @@ fn short(s: &str) -> String {
     if t.len() < s.len() { format!("{t}…") } else { t }
 }
 
-fn key_norm(s: &str) -> String {
+pub(super) fn key_norm(s: &str) -> String {
     s.trim().to_lowercase()
 }
 
-/// The value Azure DevOps should store: HTML for rich-text fields, the value as given otherwise.
+/// The value Azure DevOps should store: steps as their XML, HTML for rich-text fields, the value as given otherwise.
 fn write_value(field_types: &FieldMap, reference: &str, v: &Value) -> Value {
+    if reference == STEPS_FIELD {
+        return json!(steps::to_xml(&steps::from_input(v).unwrap_or_default()));
+    }
     match (field_types.get(reference).map(String::as_str), v) {
         (Some("html"), Value::String(s)) => json!(text_to_html(s)),
         _ => v.clone(),
     }
+}
+
+/// A value as the review shows it; steps as numbered text.
+fn shown_field(reference: &str, v: &Value) -> String {
+    if reference == STEPS_FIELD {
+        return steps::to_text(&steps::from_input(v).unwrap_or_default());
+    }
+    shown(v)
+}
+
+/// Compares Boards' value with the file's: kind, text before and after, and why it cannot be written (if so).
+fn compare_field(reference: &str, have: Option<&Value>, v: &Value) -> (Cmp, String, String, Option<String>) {
+    if reference == STEPS_FIELD {
+        let theirs = have.and_then(Value::as_str).map(steps::parse).unwrap_or_default();
+        let mine = steps::from_input(v).unwrap_or_default();
+        let (before, after) = (steps::to_text(&theirs), steps::to_text(&mine));
+        let cmp = if mine.is_empty() || steps::same(&theirs, &mine) { Cmp::Same } else if theirs.is_empty() { Cmp::Fill } else { Cmp::Conflict };
+        // Writing a new list would drop the reference to shared steps.
+        let locked = (cmp == Cmp::Conflict && steps::has_shared(&theirs)).then(|| "Uses shared steps, so its steps are kept; change them in Boards.".to_string());
+        return (cmp, before, after, locked);
+    }
+    (compare(have, v), have.map(shown).unwrap_or_default(), shown(v), None)
+}
+
+/// A link target written as "#3741" or "3741".
+pub(super) fn id_ref(s: &str) -> Option<i64> {
+    s.trim().trim_start_matches('#').parse().ok()
+}
+
+/// Requirements' links from tests: work item ID → IDs it is linked to as tested by.
+async fn tested_by(client: &AdoClient, ids: &[i64]) -> AppResult<HashMap<i64, Vec<i64>>> {
+    let mut out = HashMap::new();
+    for chunk in ids.chunks(200) {
+        let res: Value = client.post_json(&client.url("/_apis/wit/workitemsbatch"), &json!({ "ids": chunk, "$expand": "Relations", "errorPolicy": "Omit" })).await?;
+        for it in res.get("value").and_then(Value::as_array).into_iter().flatten() {
+            let targets: Vec<i64> = it
+                .get("relations")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|r| r.get("rel").and_then(Value::as_str) == Some(TESTS_REL))
+                .filter_map(|r| r.get("url").and_then(Value::as_str).and_then(|u| u.rsplit('/').next()).and_then(|x| x.parse().ok()))
+                .collect();
+            out.insert(item_id(it), targets);
+        }
+    }
+    Ok(out)
 }
 
 // ----- looking things up -----
@@ -236,7 +297,7 @@ async fn by_field(
 }
 
 /// Parents by key across every ID field in the project: key (lowercased) → work item IDs.
-async fn parents_by_key(client: &AdoClient, field_types: &FieldMap, project: &str, key_fields: &[String], keys: &[String]) -> AppResult<HashMap<String, Vec<i64>>> {
+pub(super) async fn parents_by_key(client: &AdoClient, field_types: &FieldMap, project: &str, key_fields: &[String], keys: &[String]) -> AppResult<HashMap<String, Vec<i64>>> {
     let mut out: HashMap<String, Vec<i64>> = HashMap::new();
     if key_fields.is_empty() || keys.is_empty() {
         return Ok(out);
@@ -311,6 +372,10 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
         }
         for (name, v) in &row.fields {
             match fields::resolve_field(t, name) {
+                Some(r) if r == STEPS_FIELD && !incoming.iter().any(|(x, _)| *x == r) => match steps::from_input(v) {
+                    Ok(list) => incoming.push((r, steps::to_value(&list))),
+                    Err(e) => error = Some(e),
+                },
                 Some(r) if !incoming.iter().any(|(x, _)| *x == r) => incoming.push((r, v.clone())),
                 Some(_) => {}
                 None => {
@@ -318,6 +383,16 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
                     let hint = if near.is_empty() { "Check list_work_item_types.".to_string() } else { format!("Did you mean: {}? Ask the user if unsure.", near.join(", ")) };
                     error = Some(format!("\"{}\" has no field \"{name}\". {hint}", t.name));
                 }
+            }
+        }
+        if let Some(sv) = &row.steps {
+            match (fields::resolve_field(t, STEPS_FIELD), steps::from_input(sv)) {
+                (Some(r), Ok(list)) => {
+                    incoming.retain(|(x, _)| *x != r);
+                    incoming.push((r, steps::to_value(&list)));
+                }
+                (None, _) => error = Some(format!("\"{}\" has no Steps field; steps belong to test cases.", t.name)),
+                (_, Err(e)) => error = Some(e),
             }
         }
         if row.key.is_some() && key_field.is_none() {
@@ -364,12 +439,14 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
     // Parents named by key: existing ones, or rows of this plan.
     let parent_keys: Vec<String> = req.items.iter().filter_map(|r| r.parent_key.clone()).filter(|k| !k.trim().is_empty()).collect();
     let parents = parents_by_key(client, field_types, &project, &fields::all_key_fields(&types), &parent_keys).await?;
+    let test_keys: Vec<String> = req.items.iter().flat_map(|r| r.tests.iter()).filter(|k| id_ref(k).is_none() && !k.trim().is_empty()).cloned().collect();
+    let test_targets = parents_by_key(client, field_types, &project, &fields::all_key_fields(&types), &test_keys).await?;
 
     let mut rows: Vec<RowPlan> = Vec::new();
     for (i, (row, p)) in req.items.iter().zip(&prepared).enumerate() {
         let type_name = p.t.map(|t| t.name.clone()).unwrap_or_default();
         let row_key = format!("r{i}");
-        let mut plan = RowPlan { row_key: row_key.clone(), type_name: type_name.clone(), action: Action::Skip, work_item_id: None, set: Map::new(), parent: Parent::None, set_parent: false, view: Value::Null, rev: None, changes: Vec::new(), comment: None };
+        let mut plan = RowPlan { row_key: row_key.clone(), type_name: type_name.clone(), action: Action::Skip, work_item_id: None, set: Map::new(), parent: Parent::None, set_parent: false, view: Value::Null, rev: None, changes: Vec::new(), comment: None, links: Vec::new(), link_labels: HashMap::new() };
         let take_file = |field: &str| req.overwrite || req.take_file.get(&row_key).is_some_and(|f| f.iter().any(|x| x == field));
         let label = json!({ "row": i + 1, "key": row.key, "title": row.title, "type": type_name });
         let fail = |mut plan: RowPlan, msg: String| {
@@ -407,6 +484,35 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
         if found.len() > 1 {
             let ids: Vec<i64> = found.iter().map(item_id).collect();
             rows.push(fail(plan, format!("Matches several work items: {ids:?}. Give a key, or fix the duplicates in Boards.")));
+            continue;
+        }
+
+        // Requirements it tests.
+        let mut link_error = None;
+        for k in row.tests.iter().filter(|k| !k.trim().is_empty()) {
+            let target = match id_ref(k) {
+                Some(id) => Some((id, format!("#{id}"))),
+                None => match test_targets.get(&key_norm(k)).map(Vec::as_slice) {
+                    Some([id]) => Some((*id, format!("{} #{id}", k.trim()))),
+                    Some(ids) if ids.len() > 1 => {
+                        link_error = Some(format!("\"{}\" matches several work items: {ids:?}.", k.trim()));
+                        None
+                    }
+                    _ => {
+                        link_error = Some(format!("No work item has the key \"{}\" to link as tested.", k.trim()));
+                        None
+                    }
+                },
+            };
+            if let Some((id, label)) = target {
+                if !plan.links.contains(&id) {
+                    plan.links.push(id);
+                    plan.link_labels.insert(id, label);
+                }
+            }
+        }
+        if let Some(e) = link_error {
+            rows.push(fail(plan, e));
             continue;
         }
 
@@ -452,12 +558,16 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
             for (r, v) in &p.incoming {
                 let have = ex_fields.and_then(|f| f.get(r));
                 let name = fields::display_name(t, r);
-                let cmp = compare(have, v);
-                let before = have.map(shown).unwrap_or_default();
+                let (cmp, before, after, locked) = compare_field(r, have, v);
                 let kind = match cmp { Cmp::Same => "same", Cmp::Fill => "fill", Cmp::Conflict => "conflict" };
-                let write = cmp == Cmp::Fill || (cmp == Cmp::Conflict && take_file(r));
-                plan.changes.push(change(r, &name, kind, before, shown(v), write));
+                let write = locked.is_none() && (cmp == Cmp::Fill || (cmp == Cmp::Conflict && take_file(r)));
+                let mut c = change(r, &name, kind, before.clone(), after.clone(), write);
+                if let (Some(o), Some(why)) = (c.as_object_mut(), &locked) {
+                    o.insert("locked".into(), json!(why));
+                }
+                plan.changes.push(c);
                 match cmp {
+                    Cmp::Conflict if locked.is_some() => conflicts.push(json!({ "field": name, "inBoards": short(&before), "inFile": short(&after), "note": locked })),
                     Cmp::Same => same.push(json!(name)),
                     Cmp::Fill => {
                         plan.set.insert(r.clone(), write_value(field_types, r, v));
@@ -467,11 +577,7 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
                         plan.set.insert(r.clone(), write_value(field_types, r, v));
                         set_view.insert(name, json!("overwrite"));
                     }
-                    Cmp::Conflict => conflicts.push(json!({
-                        "field": name,
-                        "inBoards": short(&have.map(normalize).unwrap_or_default()),
-                        "inFile": short(&normalize(v)),
-                    })),
+                    Cmp::Conflict => conflicts.push(json!({ "field": name, "inBoards": short(&before), "inFile": short(&after) })),
                 }
             }
             let have_parent = ex_fields.and_then(|f| f.get("System.Parent")).and_then(Value::as_i64);
@@ -515,7 +621,7 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
             }
             for (r, v) in &p.incoming {
                 plan.set.insert(r.clone(), write_value(field_types, r, v));
-                plan.changes.push(change(r, &fields::display_name(t, r), "set", String::new(), shown(v), true));
+                plan.changes.push(change(r, &fields::display_name(t, r), "set", String::new(), shown_field(r, v), true));
             }
             if wanted_parent != Parent::None {
                 let text = match &parent_view { Value::Number(n) => format!("#{n}"), Value::String(s) => s.clone(), _ => String::new() };
@@ -532,6 +638,30 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
         }
         rows.push(plan);
     }
+    // Links to requirements: only the ones not there yet are added; existing links are never removed.
+    let linked_ids: Vec<i64> = rows.iter().filter(|r| !r.links.is_empty() && !matches!(r.action, Action::Error(_))).filter_map(|r| r.work_item_id).collect();
+    let linked = if linked_ids.is_empty() { HashMap::new() } else { tested_by(client, &linked_ids).await? };
+    for r in rows.iter_mut().filter(|r| !r.links.is_empty() && !matches!(r.action, Action::Error(_))) {
+        let have: Vec<i64> = r.work_item_id.and_then(|id| linked.get(&id).cloned()).unwrap_or_default();
+        let missing: Vec<i64> = r.links.iter().copied().filter(|id| !have.contains(id)).collect();
+        let labels = |ids: &[i64]| ids.iter().map(|id| r.link_labels.get(id).cloned().unwrap_or_else(|| format!("#{id}"))).collect::<Vec<_>>().join(", ");
+        let before = labels(&have);
+        let after = labels(&[have.clone(), missing.clone()].concat());
+        let added = labels(&missing);
+        let kind = if missing.is_empty() { "same" } else if r.action == Action::Create { "set" } else { "add" };
+        r.changes.push(change("Tests", "Tests", kind, before, after, !missing.is_empty()));
+        if !missing.is_empty() && r.action != Action::Create {
+            if r.action == Action::Skip {
+                r.action = Action::Update;
+                r.view["action"] = json!("update");
+            }
+            if let Some(o) = r.view.get_mut("set").and_then(Value::as_object_mut) {
+                o.insert("Tests".into(), json!(format!("link {added}")));
+            }
+        }
+        r.links = missing;
+    }
+
     // A row with an error may stand for an item in Boards that it failed to match; that item must not look removed.
     let errors = rows.iter().filter(|r| matches!(r.action, Action::Error(_))).count();
     let removals_held = (req.remove_missing && errors > 0).then(|| format!("Items only in Boards are not listed while {errors} row(s) have errors: fix them and stage again."));
@@ -584,6 +714,8 @@ async fn missing(client: &AdoClient, project: &str, types: &[TypeInfo], in_file:
                 rev: it.get("rev").and_then(Value::as_i64),
                 changes,
                 comment: Some(format!("Not in {}, so a Boards import marked it as removed.", source.unwrap_or("the imported file"))),
+                links: Vec::new(),
+                link_labels: HashMap::new(),
             });
         }
     }
@@ -821,6 +953,22 @@ async fn execute(client: &AdoClient, planned: &Planned, pick: &(dyn Fn(&RowPlan)
                 r
             }
         };
+        // Then the requirements it tests.
+        let outcome = match (outcome, row.links.is_empty()) {
+            (Ok(Some(id)), false) if matches!(row.action, Action::Create | Action::Update) => {
+                let mut failed = Vec::new();
+                for t in &row.links {
+                    if let Err(e) = api::add_link(client, &planned.project, id, *t, TESTS_REL).await {
+                        failed.push(format!("#{t}: {}", e.message));
+                    }
+                }
+                if row.action == Action::Create {
+                    created.insert(i, id);
+                }
+                if failed.is_empty() { Ok(Some(id)) } else { Err(AppError::validation(format!("Saved as #{id}, but linking failed for {}", failed.join("; ")))) }
+            }
+            (o, _) => o,
+        };
         match outcome {
             Ok(id) => {
                 if let Some(id) = id {
@@ -880,7 +1028,7 @@ mod tests {
     fn row(action: Action, id: Option<i64>, rev: Option<i64>, kinds: &[&str]) -> RowPlan {
         RowPlan {
             row_key: "r0".into(), type_name: "Requirement".into(), action, work_item_id: id, set: Map::new(), parent: Parent::None,
-            set_parent: false, view: json!({}), rev, changes: kinds.iter().map(|k| json!({ "kind": k })).collect(), comment: None,
+            set_parent: false, view: json!({}), rev, changes: kinds.iter().map(|k| json!({ "kind": k })).collect(), comment: None, links: Vec::new(), link_labels: HashMap::new(),
         }
     }
 
@@ -918,5 +1066,29 @@ mod tests {
         // Stored with the import and read back.
         let back: SyncRequest = serde_json::from_value(serde_json::to_value(&r).unwrap()).unwrap();
         assert!(back.remove_missing);
+    }
+
+    #[test]
+    fn steps_compare_as_lists_and_keep_shared_steps() {
+        let xml = steps::to_xml(&[steps::Step::Step { action: "Open".into(), expected: "Opens".into() }]);
+        let have = json!(xml);
+        let same = compare_field(STEPS_FIELD, Some(&have), &json!([{ "action": "Open", "expected": "Opens" }]));
+        assert_eq!(same.0, Cmp::Same);
+        let fill = compare_field(STEPS_FIELD, None, &json!("1. Open => Opens"));
+        assert_eq!((fill.0, fill.2.as_str()), (Cmp::Fill, "1. Open\n   Expected: Opens"));
+        let differs = compare_field(STEPS_FIELD, Some(&have), &json!([{ "action": "Open the app", "expected": "Opens" }]));
+        assert_eq!(differs.0, Cmp::Conflict);
+        assert!(differs.3.is_none());
+        let shared = json!(r#"<steps id="0" last="2"><compref id="2" ref="9" /></steps>"#);
+        assert!(compare_field(STEPS_FIELD, Some(&shared), &json!("1. Open")).3.is_some());
+        assert!(write_value(&FieldMap::new(), STEPS_FIELD, &json!([{ "action": "Open", "expected": "" }])).as_str().unwrap().starts_with("<steps "));
+    }
+
+    #[test]
+    fn test_cases_parse_steps_and_tests() {
+        let r: SyncRequest = serde_json::from_value(json!({ "type": "Test Case", "items": [{ "title": "Export PDF", "steps": [{ "action": "Open", "expected": "Opens" }], "tests": ["SRS-0012", "#3741"] }] })).unwrap();
+        assert_eq!(r.items[0].tests, vec!["SRS-0012", "#3741"]);
+        assert_eq!(id_ref("#3741"), Some(3741));
+        assert_eq!(id_ref("SRS-0012"), None);
     }
 }

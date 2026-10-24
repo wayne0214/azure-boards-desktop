@@ -44,6 +44,19 @@ const ROWS: ReviewRow[] = [
     error: '"Requirement" has no field "User Acceptance Criteria". Did you mean: Acceptance Criteria?', note: null, changes: [],
   },
   {
+    rowKey: 'r6', fp: '3812:3', category: 'changed', type: 'Test Case', key: 'TC-031', title: 'Export a report to PDF', workItemId: 3812, matchedBy: 'key', parent: null, parentRow: null, error: null, note: null,
+    changes: [
+      { field: 'Microsoft.VSTS.TCM.Steps', name: 'Steps', kind: 'fill', before: '', after: '1. Open a completed scan\n2. Choose Export → PDF\n   Expected: A PDF with the report and images is saved', write: true },
+      { field: 'Tests', name: 'Tests', kind: 'add', before: 'SRS-0012', after: 'SRS-0012, SRS-0040', write: true },
+    ],
+  },
+  {
+    rowKey: 'r7', fp: '3815:9', category: 'conflict', type: 'Test Case', key: 'TC-032', title: 'Sign in with a company account', workItemId: 3815, matchedBy: 'key', parent: null, parentRow: null, error: null, note: null,
+    changes: [
+      { field: 'Microsoft.VSTS.TCM.Steps', name: 'Steps', kind: 'conflict', before: '1. (shared steps #812)\n2. Check the home page shows the user name', after: '1. Choose Sign in with Microsoft\n   Expected: Signed in without a password', write: false, locked: 'Uses shared steps, so its steps are kept; change them in Boards.' },
+    ],
+  },
+  {
     rowKey: 'w3690', fp: 'rm:3690:6', category: 'missing', type: 'Requirement', key: 'SRS-0002', title: 'Print report on hospital printer', workItemId: 3690, matchedBy: null, parent: null, parentRow: null, error: null, note: null,
     changes: [
       { field: 'System.State', name: 'State', kind: 'set', before: 'Active', after: 'Removed', write: true },
@@ -52,10 +65,10 @@ const ROWS: ReviewRow[] = [
   },
 ]
 
-const summary = { create: 2, update: 2, skip: 1, remove: 1, error: 1, rowsWithConflicts: 1 }
+const summary = { create: 2, update: 4, skip: 1, remove: 1, error: 1, rowsWithConflicts: 2 }
 
 let imports: ImportInfo[] = [
-  { id: 'import-demo', org: 'demo-org', project: 'Contoso Mobile', source: 'docs/SRS.md', created: Date.now() - 4 * 60_000, status: 'pending', summary, rows: 6, removeMissing: true, result: null, finished: null },
+  { id: 'import-demo', org: 'demo-org', project: 'Contoso Mobile', source: 'docs/SRS.md', created: Date.now() - 4 * 60_000, status: 'pending', summary, rows: 8, removeMissing: true, result: null, finished: null },
 ]
 
 const later = <T,>(v: T) => new Promise<T>((resolve) => setTimeout(() => resolve(v), 250))

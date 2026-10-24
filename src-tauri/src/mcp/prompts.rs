@@ -23,6 +23,14 @@ pub fn list() -> Vec<Value> {
                 { "name": "type", "description": "Work item type for the rows; default Requirement", "required": false },
             ],
         }),
+        json!({
+            "name": "import_test_cases_from_markdown",
+            "title": "Import test cases from a markdown file",
+            "description": "Stage the file's test cases (steps and the requirements they test) for review in Boards → Imports.",
+            "arguments": [
+                { "name": "file", "description": "Path to the markdown file", "required": true },
+            ],
+        }),
     ]
 }
 
@@ -70,6 +78,21 @@ pub fn get(name: &str, args: &Value) -> Result<Value, String> {
                  6. When I say I am done, call get_import_result and summarise what was applied, what failed and why."
             )
         }
+        "import_test_cases_from_markdown" => {
+            let file = arg(args, "file").ok_or("Give the markdown file's path.")?;
+            format!(
+                "Bring the test cases in {file} into Azure DevOps Boards.\n\n\
+                 1. Read {file}. For each test case work out: its title, its key if it has one (e.g. TC-031), the requirements it tests \
+                 (keys like SRS-0012 or IDs like #3741), and its steps in order, each an action and an expected result. Keep the wording as written; \
+                 a step without an expected result has an empty one. Other fields (priority, preconditions, ...) go in `fields` by name.\n\
+                 2. If a column or heading does not obviously match a Boards field, call list_work_item_types for \"Test Case\" and match by name. Ask me if one still does not match.\n\
+                 3. Ask me whether {file} is the complete list of test cases. Only if I say yes, set removeMissing: true.\n\
+                 4. Call stage_import with type \"Test Case\", source \"{file}\", and per item `title`, `key`, `steps` ([{{ action, expected }}]) and `tests` (the requirement keys).\n\
+                 5. If rows have errors (often a requirement key that is not in Boards), tell me which and stage again once fixed. Then give me the counts \
+                 and tell me to review and apply it in Boards → Imports. Nothing is written until I do.\n\
+                 6. When I say I am done, call get_import_result and summarise what was applied, what failed and why."
+            )
+        }
         other => return Err(format!("Unknown prompt: {other}")),
     };
     let description = list().into_iter().find(|p| p["name"] == name).and_then(|p| p.get("description").cloned()).unwrap_or(Value::Null);
@@ -89,6 +112,8 @@ mod tests {
         let r = get("review_code_against_srs", &json!({ "scope": "SRS-182" })).unwrap();
         assert!(r["messages"][0]["content"]["text"].as_str().unwrap().contains("Scope: SRS-182."));
         assert!(get("nope", &json!({})).is_err());
-        assert_eq!(list().len(), 2);
+        let t = get("import_test_cases_from_markdown", &json!({ "file": "qa/testcase.md" })).unwrap();
+        assert!(t["messages"][0]["content"]["text"].as_str().unwrap().contains("type \"Test Case\""));
+        assert_eq!(list().len(), 3);
     }
 }
