@@ -935,7 +935,8 @@ select.input {
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   padding: 72px 56px;
-  display: flex; flex-direction: column; justify-content: center;
+  display: flex; flex-direction: column; justify-content: safe center;
+  overflow-y: auto;
 }
 .connect .right { padding: 72px 56px; display: flex; flex-direction: column; justify-content: center; max-width: 560px; }
 .connect h1 { font-size: var(--fs-2xl); font-weight: 700; letter-spacing: -0.01em; margin-bottom: 10px; }
@@ -947,6 +948,13 @@ select.input {
 .token-scopes { list-style: none; padding: 0; margin: 6px 0 2px; display: flex; flex-direction: column; gap: 4px; }
 .token-scopes code { white-space: nowrap; }
 .token-scopes .faint { font-size: var(--fs-xs); }
+.token-access { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 4px; }
+.token-access-group { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-panel); }
+.token-access-head { display: flex; align-items: center; gap: 8px; }
+.token-access-detail { font-size: var(--fs-xs); line-height: 1.4; margin-top: 2px; }
+.token-access .token-scopes { margin-top: 6px; flex-direction: row; flex-wrap: wrap; gap: 4px 6px; }
+.token-tag { margin-left: auto; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); }
+.token-tag.required { color: var(--accent); }
 .token-help { margin: 0 0 14px; font-size: var(--fs-sm); color: var(--text-2); }
 .token-help summary { cursor: pointer; color: var(--accent); }
 .token-help ol { padding-left: 1.3em; margin: 10px 0 0; line-height: 1.6; }
