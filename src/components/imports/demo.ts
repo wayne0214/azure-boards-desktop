@@ -9,7 +9,7 @@ const ROWS: ReviewRow[] = [
       { field: 'Custom.SRSID', name: 'SRS ID', kind: 'set', before: '', after: 'SRS-0040', write: true },
       { field: 'Custom.SoftwareRequirementSpecification', name: 'Software Requirement Specification', kind: 'set', before: '', after: 'The system shall export the scan report, including the Cobb angle measurements and images, as a PDF file.', write: true },
       { field: 'Microsoft.VSTS.Common.AcceptanceCriteria', name: 'Acceptance Criteria', kind: 'set', before: '', after: 'Given a completed scan\nWhen the clinician selects Export → PDF\nThen a PDF with the report and images is saved\nAnd the file name contains the patient ID and scan date', write: true },
-      { field: 'System.Parent', name: 'Parent', kind: 'set', before: '', after: '#3700', write: true },
+      { field: 'System.Parent', name: 'Parent', kind: 'set', before: '', after: 'Feature #3700: DI-12 Export and share reports', write: true },
     ],
   },
   {
@@ -18,7 +18,7 @@ const ROWS: ReviewRow[] = [
       { field: 'System.Title', name: 'Title', kind: 'set', before: '', after: 'Audit log for report exports', write: true },
       { field: 'Custom.SRSID', name: 'SRS ID', kind: 'set', before: '', after: 'SRS-0041', write: true },
       { field: 'Microsoft.VSTS.Common.AcceptanceCriteria', name: 'Acceptance Criteria', kind: 'set', before: '', after: 'Every export records the user, time and file name in the audit log.', write: true },
-      { field: 'System.Parent', name: 'Parent', kind: 'set', before: '', after: 'row 1', write: true },
+      { field: 'System.Parent', name: 'Parent', kind: 'set', before: '', after: 'New Requirement: SRS-0040 Export scan report as PDF', write: true },
     ],
   },
   {

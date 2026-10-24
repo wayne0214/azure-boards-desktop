@@ -300,6 +300,53 @@ async fn by_field(
 }
 
 /// Parents by key across every ID field in the project: key (lowercased) → work item IDs.
+/// A parent as the review shows it: "Feature #3700: DI-12 Export reports", or "New Feature: …" for one this import creates.
+fn describe(type_name: &str, id: Option<i64>, key: Option<&str>, title: &str) -> String {
+    let what = match id {
+        Some(id) => format!("{type_name} #{id}"),
+        None => format!("New {type_name}"),
+    };
+    let name = [key.unwrap_or(""), title].iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" ");
+    if name.is_empty() { what } else { format!("{what}: {name}") }
+}
+
+/// "row 2" (a parent this import creates) named after that row.
+fn row_label(req: &SyncRequest, default_type: &str, text: &str) -> Option<String> {
+    let i = text.strip_prefix("row ")?.parse::<usize>().ok()?.checked_sub(1)?;
+    let row = req.items.get(i)?;
+    Some(describe(row.type_name.as_deref().unwrap_or(default_type), None, row.key.as_deref(), row.title.as_deref().unwrap_or("")))
+}
+
+/// Parent changes are planned as "#3700" or "row 2"; the review names them in full.
+async fn label_parents(client: &AdoClient, key_fields: &[String], req: &SyncRequest, default_type: &str, rows: &mut [RowPlan]) -> AppResult<()> {
+    let is_parent = |c: &Value| c["field"] == "System.Parent";
+    let ids: HashSet<i64> = rows
+        .iter()
+        .flat_map(|r| r.changes.iter().filter(|c| is_parent(c)))
+        .flat_map(|c| [&c["before"], &c["after"]])
+        .filter_map(|v| v.as_str()?.strip_prefix('#')?.parse().ok())
+        .collect();
+    let mut fetch: Vec<String> = vec!["System.Title".into(), "System.WorkItemType".into()];
+    fetch.extend(key_fields.iter().cloned());
+    let found = items(client, &ids.into_iter().collect::<Vec<_>>(), &fetch).await?;
+    let labels: HashMap<String, String> = found
+        .iter()
+        .map(|it| {
+            let key = key_fields.iter().map(|f| field_str(it, f)).find(|k| !k.is_empty());
+            (format!("#{}", item_id(it)), describe(&field_str(it, "System.WorkItemType"), Some(item_id(it)), key.as_deref(), &field_str(it, "System.Title")))
+        })
+        .collect();
+    for c in rows.iter_mut().flat_map(|r| r.changes.iter_mut()).filter(|c| is_parent(c)) {
+        for side in ["before", "after"] {
+            let label = c[side].as_str().and_then(|t| labels.get(t).cloned().or_else(|| row_label(req, default_type, t)));
+            if let Some(label) = label {
+                c[side] = json!(label);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// The ID field the request names for a type: from `keyFields`, else `keyField` for the default type.
 fn named_key_field<'a>(req: &'a SyncRequest, default_type: &str, type_name: &str) -> Option<&'a str> {
     req.key_fields
@@ -661,6 +708,7 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
         }
         rows.push(plan);
     }
+    label_parents(client, &key_fields, req, &default_type, &mut rows).await?;
     // Links to requirements: only the ones not there yet are added; existing links are never removed.
     let linked_ids: Vec<i64> = rows.iter().filter(|r| !r.links.is_empty() && !matches!(r.action, Action::Error(_))).filter_map(|r| r.work_item_id).collect();
     let linked = if linked_ids.is_empty() { HashMap::new() } else { tested_by(client, &linked_ids).await? };
@@ -1016,6 +1064,20 @@ async fn execute(client: &AdoClient, planned: &Planned, pick: &(dyn Fn(&RowPlan)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parents_are_named_in_full() {
+        assert_eq!(describe("Feature", Some(3700), Some("DI-12"), "Export reports"), "Feature #3700: DI-12 Export reports");
+        assert_eq!(describe("Epic", Some(3600), None, ""), "Epic #3600");
+        let req: SyncRequest = serde_json::from_value(json!({ "items": [
+            { "key": "UN-3", "title": "Clinicians share reports", "type": "Epic" },
+            { "title": "Export reports", "type": "Feature", "parentKey": "UN-3" },
+        ] }))
+        .unwrap();
+        assert_eq!(row_label(&req, "Requirement", "row 1").as_deref(), Some("New Epic: UN-3 Clinicians share reports"));
+        assert_eq!(row_label(&req, "Requirement", "row 3"), None);
+        assert_eq!(row_label(&req, "Requirement", "#3700"), None);
+    }
 
     #[test]
     fn key_fields_are_named_per_type() {
