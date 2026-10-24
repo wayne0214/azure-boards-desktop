@@ -15,6 +15,24 @@ permissions:
   contents: read
 
 jobs:
+  # Git Flow: only release/* and hotfix/* merge into master; everything else goes to develop (docs/RELEASING.md).
+  branch-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the pull request's target
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          if [ "$BASE" != master ]; then
+            echo "Into ${BASE:-a push}: allowed."
+            exit 0
+          fi
+          case "$HEAD" in
+            release/*|hotfix/*) echo "$HEAD into master: allowed." ;;
+            *) echo "::error::Only release/* and hotfix/* branches merge into master. Open this pull request against develop instead (docs/RELEASING.md)."; exit 1 ;;
+          esac
+
   frontend:
     runs-on: ubuntu-latest
     steps:
