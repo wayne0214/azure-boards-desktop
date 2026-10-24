@@ -1,4 +1,4 @@
-import { ChevronDown, CircleArrowUp, ClipboardList, Clock3, Columns3, DoorOpen, FileInput, FlaskConical, GitPullRequest, FolderKanban, ListTree, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
+import { ChevronDown, Download, ClipboardList, Clock3, Columns3, DoorOpen, FileInput, FlaskConical, GitPullRequest, FolderKanban, ListTree, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { pendingImports, useImportStore } from '@/components/imports/useImportStore'
@@ -233,7 +233,7 @@ export function Sidebar() {
         </button>
         {update && (
           <button type="button" className="icon-btn update-btn" onClick={() => void installUpdate(update)} title={`Boards ${update.version} is available. Update and restart`}>
-            <CircleArrowUp size={16} />
+            <Download size={16} />
           </button>
         )}
         <button type="button" className="icon-btn" onClick={() => openSheet('settings')} title="Settings">
