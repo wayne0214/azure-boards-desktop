@@ -114,6 +114,7 @@ git push -u origin release/1.1.0      # CI: v1.1.0-rc.0
 ```
 
 1. Push stabilisation fixes straight to the release branch. Each push makes the next `rc`.
+   Before the release PR, add the release's notes to the top of `RELEASE_NOTES` in `src/lib/releaseNotes.ts`. Each user sees them once in What's New, the first time the updated app starts.
 2. Run `git-tools pr --base master --release-pr`.
 3. Open the PR `release/1.1.0` → `master` titled exactly `Release 1.1.0`, and squash-merge it. Keep the source branch for now.
 4. CI commits the version `1.1.0` and pushes the tag `v1.1.0`.

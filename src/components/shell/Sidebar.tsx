@@ -1,6 +1,7 @@
-import { ChevronDown, CircleArrowUp, ClipboardList, Clock3, Columns3, DoorOpen, FlaskConical, GitPullRequest, FolderKanban, ListTree, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { ChevronDown, Download, ClipboardList, Clock3, Columns3, DoorOpen, FileInput, FlaskConical, GitPullRequest, FolderKanban, ListTree, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
+import { pendingImports, useImportStore } from '@/components/imports/useImportStore'
 import { api } from '@/lib/api'
 import { installUpdate, useUpdateStore } from '@/lib/updater'
 import { useAppStore } from '@/store/useAppStore'
@@ -28,6 +29,9 @@ export function Sidebar() {
   const openSheet = useUiStore((s) => s.openSheet)
   const toast = useUiStore((s) => s.toast)
   const myCount = useMyWorkStore((s) => attentionCount(s.items, s.types, s.seenAt))
+  const imports = useImportStore((s) => s.list)
+  const importCount = pendingImports(imports)
+  useEffect(() => { void useImportStore.getState().load() }, [])
   const prCount = usePrStore((s) => s.counts.review)
   const prError = usePrStore((s) => s.countsError)
   const prScope = usePrStore((s) => s.scope)
@@ -167,6 +171,13 @@ export function Sidebar() {
             <span className="ico"><DoorOpen size={16} /></span>
             <span className="label">Meeting Rooms</span>
           </button>
+          {(imports.length > 0 || view === 'imports') && (
+            <button type="button" className={`nav-item ${view === 'imports' ? 'active' : ''}`} onClick={() => setView('imports')}>
+              <span className="ico"><FileInput size={16} /></span>
+              <span className="label">Imports</span>
+              {importCount > 0 && <span className="count attn" title="Staged by an AI tool, waiting for your review">{importCount}</span>}
+            </button>
+          )}
         </div>
 
         <div className="nav-group">
@@ -222,7 +233,7 @@ export function Sidebar() {
         </button>
         {update && (
           <button type="button" className="icon-btn update-btn" onClick={() => void installUpdate(update)} title={`Boards ${update.version} is available. Update and restart`}>
-            <CircleArrowUp size={16} />
+            <Download size={16} />
           </button>
         )}
         <button type="button" className="icon-btn" onClick={() => openSheet('settings')} title="Settings">

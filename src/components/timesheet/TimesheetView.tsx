@@ -1,4 +1,4 @@
-import { CalendarClock, ChevronLeft, ChevronRight, Copy, ExternalLink, LogIn, Plus, RefreshCw, Send, Trash2 } from 'lucide-react'
+import { CalendarClock, ChevronLeft, ChevronRight, Copy, Eraser, ExternalLink, LogIn, Plus, RefreshCw, Send, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Dropdown } from '@/components/ui/Dropdown'
@@ -28,7 +28,7 @@ function fmtDay(iso: string) {
 
 /** Weekly timesheet: fill the grid, press one button, done. */
 export function TimesheetView() {
-  const s = useTimesheetStore(useShallow((st) => ({ addRow: st.addRow, baseUrl: st.baseUrl, connect: st.connect, copyLastWeek: st.copyLastWeek, fillWeekdays: st.fillWeekdays, finishLogin: st.finishLogin, loadWeek: st.loadWeek, log: st.log, message: st.message, openWindow: st.openWindow, phase: st.phase, progress: st.progress, projects: st.projects, reloadWindow: st.reloadWindow, removeRow: st.removeRow, rows: st.rows, save: st.save, saveAndSubmit: st.saveAndSubmit, setHours: st.setHours, setNote: st.setNote, shiftWeek: st.shiftWeek, weekStart: st.weekStart })))
+  const s = useTimesheetStore(useShallow((st) => ({ addRow: st.addRow, baseUrl: st.baseUrl, connect: st.connect, copyLastWeek: st.copyLastWeek, fillWeekdays: st.fillWeekdays, finishLogin: st.finishLogin, loadWeek: st.loadWeek, log: st.log, message: st.message, openWindow: st.openWindow, phase: st.phase, progress: st.progress, projects: st.projects, reloadWindow: st.reloadWindow, removeRow: st.removeRow, resetSession: st.resetSession, rows: st.rows, save: st.save, saveAndSubmit: st.saveAndSubmit, setHours: st.setHours, setNote: st.setNote, shiftWeek: st.shiftWeek, weekStart: st.weekStart })))
   const [addOpen, setAddOpen] = useState(false)
   const addBtn = useRef<HTMLButtonElement>(null)
   const openSheet = useUiStore((st) => st.openSheet)
@@ -56,6 +56,10 @@ export function TimesheetView() {
   const isCurrent = s.weekStart === sundayOf(new Date())
   const dirtyCount = s.rows.filter((r) => r.dirty && r.hours.some((h) => h > 0)).length
   const busy = s.phase === 'working' || s.phase === 'connecting'
+  const resetSession = async () => {
+    const ok = await confirmAsync('This signs you out of the timesheet and clears its cookies and cached site data. Hours you have not saved yet stay in the app.\n\nUse it when the timesheet window stays blank or sign-in keeps failing.', { title: 'Clear timesheet cookies?', okLabel: 'Clear and sign in again', danger: true })
+    if (ok) await s.resetSession()
+  }
   const weekHint = totals.week ? hint(totals.week, EXPECTED_WEEK) : { cls: '', title: '' }
 
   return (
@@ -74,6 +78,7 @@ export function TimesheetView() {
         <StatusPill />
         <button type="button" className="icon-btn" title="Reload from the timesheet site" onClick={() => void s.loadWeek()} disabled={busy}><RefreshCw size={16} className={busy ? 'spin' : ''} /></button>
         <button type="button" className="icon-btn" title="Show the timesheet window" onClick={() => void s.openWindow()}><ExternalLink size={16} /></button>
+        <button type="button" className="icon-btn" title="Clear timesheet cookies and sign in again (fixes a blank window)" onClick={() => void resetSession()} disabled={s.phase === 'working' || !s.baseUrl}><Eraser size={16} /></button>
       </div>
 
       {s.phase === 'login' && (
@@ -81,6 +86,7 @@ export function TimesheetView() {
           <LogIn size={16} />
           <span className="msg">{s.message ?? 'Sign in in the timesheet window.'} The app continues by itself once you are in.</span>
           <button type="button" className="btn sm" onClick={() => void s.openWindow()}>Show window</button>
+          <button type="button" className="btn sm" onClick={() => void resetSession()}>Clear cookies</button>
         </div>
       )}
       {s.phase === 'error' && (
@@ -90,9 +96,10 @@ export function TimesheetView() {
             <>
               <button type="button" className="btn sm primary" onClick={() => void s.connect()}>Try again</button>
               <button type="button" className="btn sm" onClick={() => void s.reloadWindow()}>Show & reload window</button>
+              <button type="button" className="btn sm" onClick={() => void resetSession()}>Clear cookies & sign in again</button>
             </>
           ) : (
-            <button type="button" className="btn sm primary" onClick={() => openSheet('settings')}>Open Settings</button>
+            <button type="button" className="btn sm primary" onClick={() => openSheet('settings', { tab: 'timesheet' })}>Open Settings</button>
           )}
         </div>
       )}

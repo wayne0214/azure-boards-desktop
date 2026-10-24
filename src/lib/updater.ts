@@ -1,11 +1,16 @@
 import { isTauri } from './api'
 import { create } from 'zustand'
 import { useUiStore } from '@/store/useUiStore'
+import { RELEASE_NOTES } from './releaseNotes'
 
-type Update = import('@tauri-apps/plugin-updater').Update
+/** What the sidebar offers: the updater's `Update`, or the demo's stand-in. */
+type Update = Pick<import('@tauri-apps/plugin-updater').Update, 'version' | 'body' | 'downloadAndInstall'>
+
+/** The web demo always offers the newest release, so the update button and What's New can be tried there. */
+const demoUpdate: Update | null = isTauri || !RELEASE_NOTES[0] ? null : { version: RELEASE_NOTES[0].version, body: undefined, downloadAndInstall: async () => {} }
 
 /** The release found by the last check, so the sidebar can offer it after its toast is gone. */
-export const useUpdateStore = create<{ available: Update | null }>(() => ({ available: null }))
+export const useUpdateStore = create<{ available: Update | null }>(() => ({ available: demoUpdate }))
 
 const EVERY = 6 * 60 * 60 * 1000
 let checking = false
@@ -56,6 +61,12 @@ export async function installUpdate(update: Update) {
   if (installing) return
   installing = true
   const ui = useUiStore.getState()
+  if (!isTauri) {
+    // Demo: what the desktop app shows once it has restarted on the new version.
+    ui.openSheet('whats-new', { version: update.version })
+    installing = false
+    return
+  }
   ui.toast({ kind: 'info', title: `Downloading Boards ${update.version}…` })
   try {
     await update.downloadAndInstall()

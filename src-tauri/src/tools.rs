@@ -166,6 +166,11 @@ fn pump(mut from: impl Read, stream: &'static str, emit: &(impl Fn(ToolLine) + S
     all
 }
 
+/// A program on the login PATH, and that PATH, for other features that run local CLIs (the MCP setup).
+pub fn find_program(name: &str) -> Option<(PathBuf, &'static OsString)> {
+    resolve(name, search_path()).ok().map(|p| (p, search_path()))
+}
+
 /// Look up the login PATH now, so the first tool run does not wait for the login shell.
 pub fn warm_up() {
     let _ = search_path();

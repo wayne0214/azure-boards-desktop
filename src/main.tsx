@@ -5,6 +5,7 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { api, loadApi } from './lib/api'
 import { isMac } from './lib/format'
 import { useUiStore } from './store/useUiStore'
+import { startMcpBridge } from './lib/mcp'
 import './styles/app.css'
 
 if (isMac) document.documentElement.classList.add('is-mac')
@@ -46,12 +47,15 @@ document.addEventListener('drop', (e) => e.preventDefault())
 
 const root = ReactDOM.createRoot(document.getElementById('root')!)
 loadApi().then(
-  () => root.render(
+  () => {
+    startMcpBridge()
+    root.render(
     <React.StrictMode>
       <ErrorBoundary>
         <App />
       </ErrorBoundary>
     </React.StrictMode>,
-  ),
+    )
+  },
   (e) => root.render(<div className="empty-state" style={{ height: '100%' }}><h3>Boards could not start</h3><p className="faint">{String((e as Error)?.message ?? e)}</p><button type="button" className="btn" onClick={() => window.location.reload()}>Try again</button></div>),
 )
