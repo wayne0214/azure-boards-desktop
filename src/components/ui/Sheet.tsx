@@ -7,7 +7,7 @@ interface Props {
   onClose: () => void
   children: ReactNode
   footer?: ReactNode
-  size?: 'narrow' | 'default' | 'wide'
+  size?: 'narrow' | 'default' | 'wide' | 'settings'
   headerExtra?: ReactNode
 }
 

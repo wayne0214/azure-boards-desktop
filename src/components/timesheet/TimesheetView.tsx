@@ -99,7 +99,7 @@ export function TimesheetView() {
               <button type="button" className="btn sm" onClick={() => void resetSession()}>Clear cookies & sign in again</button>
             </>
           ) : (
-            <button type="button" className="btn sm primary" onClick={() => openSheet('settings')}>Open Settings</button>
+            <button type="button" className="btn sm primary" onClick={() => openSheet('settings', { tab: 'timesheet' })}>Open Settings</button>
           )}
         </div>
       )}
