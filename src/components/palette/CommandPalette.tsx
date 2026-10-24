@@ -1,4 +1,4 @@
-import { ArrowRight, Download, FolderKanban, GitBranch, Hash, Inbox, Plus, Search, Settings, Upload } from 'lucide-react'
+import { ArrowRight, Download, FolderKanban, GitBranch, Hash, Inbox, Minimize2, Plus, Search, Settings, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import type { WorkItem } from '@/lib/types'
@@ -51,6 +51,7 @@ export function CommandPalette({ onCommand }: { onCommand: (id: string) => void 
       { id: 'new-item', label: 'New work item', group: 'Commands', icon: <Plus size={16} />, run: () => onCommand('new-item') },
       ...(selectedId !== null ? [{ id: 'start-work', label: `Start work on #${selectedId}`, group: 'Commands', icon: <GitBranch size={16} />, run: () => onCommand('start-work') }] : []),
       { id: 'view-mine', label: 'My Work', group: 'Commands', icon: <Inbox size={16} />, run: () => setView('mine') },
+      { id: 'toggle-mini', label: 'Mini mode', group: 'Commands', icon: <Minimize2 size={16} />, run: () => onCommand('toggle-mini') },
       { id: 'import', label: 'Import from CSV', group: 'Commands', icon: <Upload size={16} />, run: () => onCommand('import') },
       { id: 'export', label: 'Export view as CSV', group: 'Commands', icon: <Upload size={16} />, run: () => onCommand('export') },
       { id: 'settings', label: 'Settings', group: 'Commands', icon: <Settings size={16} />, run: () => onCommand('settings') },
