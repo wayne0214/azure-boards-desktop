@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 
 export type View = 'board' | 'list' | 'mine' | 'timesheet' | 'prs' | 'rooms' | 'reqs' | 'tests' | 'plans' | 'team' | 'imports'
-export type SheetKind = 'new-item' | 'import' | 'settings' | 'shortcuts' | 'connect' | 'new-pr' | 'complete-pr' | 'start-work' | null
+export type SheetKind = 'new-item' | 'import' | 'settings' | 'shortcuts' | 'connect' | 'new-pr' | 'complete-pr' | 'start-work' | 'whats-new' | null
 export type Theme = 'system' | 'light' | 'dark'
 
 export interface Toast {

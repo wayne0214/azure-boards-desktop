@@ -1101,6 +1101,13 @@ button.dev-row:hover:not(:disabled) { background: var(--bg-hover); }
   .set-row { flex-wrap: wrap; }
 }
 
+/* ---------- What's New ---------- */
+.wn-list { list-style: none; margin: 4px 0 8px; padding: 0; display: grid; gap: 14px; }
+.wn-list li { padding-left: 12px; border-left: 2px solid var(--border); }
+.wn-title { font-weight: 600; margin-bottom: 3px; }
+.wn-detail { color: var(--text-2); line-height: 1.5; }
+.wn-more { margin: 4px 0 0; padding-left: 18px; color: var(--text-2); line-height: 1.5; display: grid; gap: 4px; }
+
 /* ---------- Imports (staged by AI tools) ---------- */
 .imp .imp-list-head { flex-direction: row; align-items: center; justify-content: space-between; }
 .imp-list-title { font-weight: 600; font-size: var(--fs-md); padding: 4px 6px; }

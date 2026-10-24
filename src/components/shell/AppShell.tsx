@@ -31,6 +31,7 @@ import { ImportSheet } from '../sheets/ImportSheet'
 import { NewItemSheet } from '../sheets/NewItemSheet'
 import { SettingsSheet } from '../sheets/SettingsSheet'
 import { ShortcutsSheet } from '../sheets/ShortcutsSheet'
+import { WhatsNewSheet } from '../sheets/WhatsNewSheet'
 import { exportCsv } from '../list/exportCsv'
 import { Sidebar } from './Sidebar'
 import { StatusBar } from './StatusBar'
@@ -87,6 +88,7 @@ export function AppShell() {
       case 'help-pat': void api().openUrl('https://learn.microsoft.com/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate'); break
       case 'help-shortcuts': ui.openSheet('shortcuts'); break
       case 'check-updates': void checkForUpdates(true); break
+      case 'whats-new': ui.openSheet('whats-new'); break
     }
   }, [])
 
@@ -217,6 +219,7 @@ export function AppShell() {
       {sheet === 'new-pr' && <NewPrSheet />}
       {sheet === 'complete-pr' && <CompletePrSheet />}
       {sheet === 'start-work' && <StartWorkSheet />}
+      {sheet === 'whats-new' && <WhatsNewSheet />}
       <GitToolsPanel />
       {paletteOpen && <CommandPalette onCommand={runCommand} />}
       {dropHint && <div className="drop-hint"><div><ImagePlus size={28} /><b>Drop to report a bug</b><span>The image goes into a new Bug's Symptom.</span></div></div>}
