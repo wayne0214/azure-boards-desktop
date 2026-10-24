@@ -11,6 +11,7 @@ pub struct TypeInfo {
     pub name: String,
     /// Field definitions from Azure DevOps: referenceName, name, allowedValues, alwaysRequired.
     pub defs: Vec<Value>,
+    pub states: Vec<String>,
 }
 
 pub async fn project_types(client: &AdoClient, project: &str) -> AppResult<Vec<TypeInfo>> {
@@ -21,6 +22,7 @@ pub async fn project_types(client: &AdoClient, project: &str) -> AppResult<Vec<T
         .map(|t| TypeInfo {
             name: t.get("name").and_then(Value::as_str).unwrap_or("").to_string(),
             defs: t.get("fieldDefs").and_then(Value::as_array).cloned().unwrap_or_default(),
+            states: t.get("states").and_then(Value::as_array).map(|s| s.iter().filter_map(|x| x.get("name").and_then(Value::as_str).map(str::to_string)).collect()).unwrap_or_default(),
         })
         .collect())
 }
@@ -136,6 +138,7 @@ mod tests {
                 json!({ "referenceName": "Custom.CodeNo", "name": "Code No", "allowedValues": ["A"] }),
                 json!({ "referenceName": "Microsoft.VSTS.Common.AcceptanceCriteria", "name": "Acceptance Criteria" }),
             ],
+            states: vec!["Active".into(), "Removed".into()],
         }
     }
 

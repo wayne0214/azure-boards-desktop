@@ -8,9 +8,12 @@
 //! behind a bearer token stored in `mcp.json` in the app's config folder. Off until the user turns it on.
 
 mod clients;
+mod export;
 mod fields;
+pub mod imports;
 mod prompts;
 mod protocol;
+mod steps;
 mod sync;
 mod tools;
 
@@ -128,6 +131,7 @@ fn new_token() -> String {
 
 /// Called once from the app's setup: loads the config and starts the server if it is turned on.
 pub fn init(app: &AppHandle) {
+    imports::recover(app);
     let cfg = load_config(app);
     if let Ok(mut c) = CONFIG.lock() {
         *c = Some(cfg.clone());

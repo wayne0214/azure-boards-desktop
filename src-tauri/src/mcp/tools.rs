@@ -1,6 +1,7 @@
 //! The tools the MCP server offers, on top of the app's own Azure DevOps client and signed-in account.
 
-use super::{context, fields, sync, McpConfig};
+use super::steps::{self, STEPS_FIELD, TESTS_REL};
+use super::{context, export, fields, imports, sync, McpConfig};
 use crate::ado::{api, wiql};
 use crate::ado::client::AdoClient;
 use crate::error::AppError;
@@ -38,24 +39,22 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
             "assignedToMe": { "type": "boolean" },
             "limit": { "type": "integer", "description": "Default 100, at most 500" },
         }), &[], true),
+        tool("export_work_items", "Many work items with their full text in one call, e.g. the whole SRS: every filled-in field (or just `fields`), children right after their parent. Markdown by default, ready to save as a file. Long exports come in pages: when `nextOffset` is set, call again with that `offset`. Use this rather than get_work_item for more than a few items.", export::definition_props(&id), &[], true),
         tool("get_item_changes", "What changed on a work item, field by field with old and new values, newest last. Use `since` to see only recent updates.", json!({
             "id": id,
             "since": { "type": "string", "description": "YYYY-MM-DD; omit for the whole history" },
         }), &["id"], true),
-        tool("plan_work_item_sync", "Dry run for bringing many work items into Boards (e.g. SRS from a markdown file). Matches each item by its key (the type's ID field, e.g. SRS ID), then exact title, and returns a plan per row: create, update (fill fields that are empty in Boards), skip (already the same) or error, plus conflicts where Boards already has different text. Writes nothing.", json!({
-            "project": { "type": "string", "description": "Project name; omit for the current project" },
-            "type": { "type": "string", "description": "Type for items that do not name one; default Requirement" },
-            "keyField": { "type": "string", "description": "ID field to match on, if not detected (e.g. \"SRS ID\")" },
-            "overwrite": { "type": "boolean", "description": "Replace different text instead of reporting a conflict. Only when the user asked for it." },
-            "items": { "type": "array", "items": { "type": "object", "properties": {
-                "key": { "type": "string", "description": "The item's ID-field value, e.g. SRS-182" },
-                "title": { "type": "string" },
-                "type": { "type": "string" },
-                "fields": { "type": "object", "description": "Field display name or reference name → value, e.g. {\"Acceptance Criteria\": \"...\", \"Software Requirement Specification\": \"...\"}" },
-                "parentKey": { "type": "string", "description": "Parent's ID-field value, e.g. DI-12 (may be an earlier item in this list)" },
-                "parentId": { "type": "integer" },
-            } } },
-        }), &["items"], true),
+        tool("stage_import", "Bring many work items into Boards (e.g. SRS or test cases from a markdown file) for the user to review in the Boards app. Plans it like plan_work_item_sync (match by key, then exact title; create, fill empty fields, conflicts where Boards has different text) and stages the plan; nothing is written. Then tell the user to review and apply it in Boards → Imports, and use get_import_result to see what they applied. Preferred over plan/apply for more than a few items. Staging the same `source` again replaces the earlier pending import.", {
+            let mut p = sync_props();
+            if let Some(o) = p.as_object_mut() {
+                o.remove("overwrite");
+            }
+            p
+        }, &["items"], true),
+        tool("get_import_result", "Whether the user applied a staged import, and what happened to each row.", json!({
+            "importId": { "type": "string", "description": "From stage_import; omit for the newest" },
+        }), &[], true),
+        tool("plan_work_item_sync", "Dry run for bringing a few work items into Boards, approved in this chat. For many items use stage_import instead, so the user reviews them in Boards. Matches each item by its key (the type's ID field, e.g. SRS ID), then exact title, and returns a plan per row: create, update (fill fields that are empty in Boards), skip (already the same) or error, plus conflicts where Boards already has different text. Writes nothing.", sync_props(), &["items"], true),
     ];
     if !read_only {
         tools.extend([
@@ -67,14 +66,18 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
                 "assignedTo": { "type": "string", "description": "Email or display name; \"me\" for the user" },
                 "project": { "type": "string", "description": "Project name; omit for the current project" },
                 "fields": { "type": "object", "description": "Any other fields by reference name" },
+                "steps": steps_schema(),
+                "tests": tests_schema(),
             }), &["type", "title"], false),
-            tool("update_work_item", "Change fields of a work item: title, state, assignee, description or any field by reference name.", json!({
+            tool("update_work_item", "Change fields of a work item: title, state, assignee, description or any field by reference name. For a test case, `steps` replaces the whole list: read the current steps with get_work_item first and send them all back with your change.", json!({
                 "id": id,
                 "title": { "type": "string" },
                 "state": { "type": "string", "description": "e.g. Active, Resolved, Closed (see list_work_item_types)" },
                 "assignedTo": { "type": "string", "description": "Email or display name; \"me\" for the user, \"\" to unassign" },
                 "description": { "type": "string", "description": "Plain text or HTML" },
                 "fields": { "type": "object", "description": "Other fields by reference name; null clears one" },
+                "steps": steps_schema(),
+                "tests": tests_schema(),
             }), &["id"], false),
             tool("add_comment", "Add a discussion comment to a work item. Plain text; line breaks are kept.", json!({ "id": id, "text": { "type": "string" } }), &["id", "text"], false),
             tool("apply_work_item_sync", "Carry out a plan from plan_work_item_sync, exactly as shown. Call only after the user has seen the plan and agreed. If Boards changed meanwhile, nothing is written and a new plan is returned.", json!({
@@ -83,6 +86,43 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
         ]);
     }
     tools
+}
+
+fn steps_schema() -> Value {
+    json!({
+        "description": "Test case steps, in order: [{ \"action\": \"Open the report\", \"expected\": \"It shows two pages\" }] (or numbered lines, \"action => expected\")",
+        "anyOf": [
+            { "type": "array", "items": { "type": "object", "properties": { "action": { "type": "string" }, "expected": { "type": "string" } } } },
+            { "type": "string" },
+        ],
+    })
+}
+
+fn tests_schema() -> Value {
+    json!({ "type": "array", "items": { "type": "string" }, "description": "For a test case: the requirements it tests, by key (\"SRS-0012\") or ID (\"#3741\"); linked as Tested By. Existing links are kept." })
+}
+
+/// Input of plan_work_item_sync and stage_import.
+fn sync_props() -> Value {
+    json!({
+        "project": { "type": "string", "description": "Project name; omit for the current project" },
+        "type": { "type": "string", "description": "Type for items that do not name one; default Requirement. \"Test Case\" for test cases (give `steps` and `tests`)." },
+        "keyField": { "type": "string", "description": "ID field to match on, if not detected (e.g. \"SRS ID\")" },
+        "keyFields": { "type": "object", "description": "ID field per type, when not detected: type name → field name, e.g. {\"Epic\": \"User Need ID\", \"Feature\": \"Design Input ID\"}" },
+        "overwrite": { "type": "boolean", "description": "Replace different text instead of reporting a conflict. Only when the user asked for it." },
+        "source": { "type": "string", "description": "Where the items come from, e.g. \"docs/SRS.md\"; shown to the user" },
+        "removeMissing": { "type": "boolean", "description": "The file is the complete list for its types: offer items of those types that are only in Boards for removal (set to Removed and tagged, never deleted). Only when the user says the file is complete." },
+        "items": { "type": "array", "items": { "type": "object", "properties": {
+            "key": { "type": "string", "description": "The item's ID-field value, e.g. SRS-182" },
+            "title": { "type": "string" },
+            "type": { "type": "string" },
+            "fields": { "type": "object", "description": "Field display name or reference name → value, e.g. {\"Acceptance Criteria\": \"...\", \"Software Requirement Specification\": \"...\"}" },
+            "parentKey": { "type": "string", "description": "Parent's ID-field value, e.g. DI-12 (may be an earlier item in this list)" },
+            "parentId": { "type": "integer" },
+            "steps": steps_schema(),
+            "tests": tests_schema(),
+        } } },
+    })
 }
 
 fn tool(name: &str, description: &str, props: Value, required: &[&str], read_only: bool) -> Value {
@@ -154,6 +194,8 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
             Ok(json!({ "project": project, "types": types.iter().filter(|t| !t.get("isDisabled").and_then(Value::as_bool).unwrap_or(false)).map(|t| json!({
                 "name": t.get("name"),
                 "states": t.get("states").and_then(Value::as_array).map(|s| s.iter().filter_map(|x| x.get("name").cloned()).collect::<Vec<_>>()),
+                // The field keys like SRS-182 are matched on, when one is detected; otherwise pass `keyFields` to stage_import.
+                "keyField": t.get("fieldDefs").and_then(Value::as_array).and_then(|f| f.iter().find(|d| fields::id_like(d))).and_then(|d| d.get("referenceName")),
                 "fields": t.get("fieldDefs").and_then(Value::as_array).map(|f| f.iter().map(|d| json!({
                     "referenceName": d.get("referenceName"),
                     "name": d.get("name"),
@@ -169,15 +211,32 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
             let title = str_arg(args, "title").filter(|t| !t.trim().is_empty()).ok_or_else(|| AppError::validation("A title is required."))?;
             fields.insert("System.Title".into(), json!(title.trim()));
             set_common(app, &org, args, &mut fields)?;
+            if let Some(sv) = args.get("steps") {
+                fields.insert(STEPS_FIELD.into(), json!(steps::to_xml(&steps::from_input(sv).map_err(AppError::validation)?)));
+            }
             let parent = args.get("parentId").and_then(Value::as_i64);
+            let targets = test_targets(&client, &state, &project, args).await?;
             let item = api::create_work_item(&client, &project, &work_item_type, &fields, parent).await?;
+            let id = item.get("id").and_then(Value::as_i64).unwrap_or(0);
+            for t in targets {
+                api::add_link(&client, &project, id, t, TESTS_REL).await?;
+            }
             changed(app, &item);
-            Ok(detail(&org, &item))
+            Ok(detail(&org, &fetch(&client, id).await?))
         }
         "update_work_item" => {
             let id = int(args, "id")?;
-            let project = project_of(&fetch(&client, id).await?);
+            let current = fetch(&client, id).await?;
+            let project = project_of(&current);
             let mut fields = extra_fields(args)?;
+            if let Some(sv) = args.get("steps") {
+                let have = field(&current, STEPS_FIELD).and_then(Value::as_str).map(steps::parse).unwrap_or_default();
+                if steps::has_shared(&have) {
+                    return Err(AppError::validation("This test case uses shared steps; writing a new list would drop them. Change its steps in Boards."));
+                }
+                fields.insert(STEPS_FIELD.into(), json!(steps::to_xml(&steps::from_input(sv).map_err(AppError::validation)?)));
+            }
+            let targets = test_targets(&client, &state, &project, args).await?;
             if let Some(t) = str_arg(args, "title").filter(|t| !t.trim().is_empty()) {
                 fields.insert("System.Title".into(), json!(t.trim()));
             }
@@ -185,10 +244,16 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
                 fields.insert("System.State".into(), json!(s));
             }
             set_common(app, &org, args, &mut fields)?;
-            if fields.is_empty() {
-                return Err(AppError::validation("Nothing to update: give a title, state, assignedTo, description or fields."));
+            if fields.is_empty() && targets.is_empty() {
+                return Err(AppError::validation("Nothing to update: give a title, state, assignedTo, description, steps, tests or fields."));
             }
-            let item = api::update_work_item(&client, &project, id, None, &fields).await?;
+            if !fields.is_empty() {
+                api::update_work_item(&client, &project, id, None, &fields).await?;
+            }
+            for t in targets {
+                api::add_link(&client, &project, id, t, TESTS_REL).await?;
+            }
+            let item = fetch(&client, id).await?;
             changed(app, &item);
             Ok(detail(&org, &item))
         }
@@ -201,6 +266,7 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
             Ok(json!({ "id": comment.get("id"), "workItemId": id, "url": item_url(&org, &item) }))
         }
         "find_work_items" => find(&client, &state, &ctx, args).await,
+        "export_work_items" => export::export(&org, &client, &state, &ctx, args).await,
         "get_item_changes" => {
             let id = int(args, "id")?;
             let project = project_of(&fetch(&client, id).await?);
@@ -212,6 +278,25 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
             let field_types = state.fields(&client).await?;
             sync::plan(&client, &field_types, args, current_project(&ctx)).await
         }
+        "stage_import" => {
+            let mut req: sync::SyncRequest = serde_json::from_value(args.clone()).map_err(|e| AppError::validation(format!("Bad input: {e}")))?;
+            // The user picks each conflict's side in the review.
+            req.overwrite = false;
+            let field_types = state.fields(&client).await?;
+            let review = sync::review(&client, &field_types, &req, current_project(&ctx)).await?;
+            let project = review["project"].as_str().unwrap_or("").to_string();
+            let errors: Vec<Value> = review["rows"].as_array().into_iter().flatten().filter(|r| r["category"] == "error").map(|r| json!({ "key": r["key"], "title": r["title"], "error": r["error"] })).collect();
+            let staged = imports::stage(app, &org, &project, req, current_project(&ctx), review["summary"].clone())?;
+            Ok(json!({
+                "importId": staged.id,
+                "project": project,
+                "summary": review["summary"],
+                "errors": errors,
+                "removalsHeld": review["removalsHeld"],
+                "next": "Nothing is written yet. Tell the user it is ready to review in Boards → Imports (rows with errors cannot be applied; fix them and stage again if needed). Afterwards, get_import_result shows what they applied.",
+            }))
+        }
+        "get_import_result" => imports::result(app, str_arg(args, "importId").as_deref()),
         "apply_work_item_sync" => {
             let plan_id = str_arg(args, "planId").ok_or_else(|| AppError::validation("Give the planId from plan_work_item_sync."))?;
             let field_types = state.fields(&client).await?;
@@ -231,11 +316,36 @@ fn date(s: &str) -> Result<String, AppError> {
     if ok { Ok(s.to_string()) } else { Err(AppError::validation(format!("\"{s}\" is not a date like 2026-10-01."))) }
 }
 
-fn str_list(args: &Value, key: &str) -> Vec<String> {
+pub(super) fn str_list(args: &Value, key: &str) -> Vec<String> {
     args.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).filter(|s| !s.trim().is_empty()).collect()).unwrap_or_default()
 }
 
-async fn find(client: &AdoClient, state: &AppState, ctx: &Value, args: &Value) -> Result<Value, AppError> {
+/// Work items matching `find_work_items` filters, for listing or exporting.
+pub(super) struct Found {
+    pub project: String,
+    pub ids: Vec<i64>,
+    pub limit: u32,
+    pub ptypes: Vec<fields::TypeInfo>,
+    pub key_fields: Vec<String>,
+    pub available: api::FieldMap,
+    /// The exact key asked for, lowercased: a word search also finds longer values.
+    pub wanted_key: Option<String>,
+}
+
+impl Found {
+    pub fn keeps(&self, it: &Value) -> bool {
+        self.wanted_key.as_ref().map_or(true, |w| self.key_fields.iter().any(|f| field(it, f).and_then(Value::as_str).is_some_and(|v| html_to_text(v).trim().to_lowercase() == *w)))
+    }
+
+    /// The item's key and the field it is in; keys stored as rich text ("<div>SRS-0005 </div>") as text.
+    pub fn key_of(&self, it: &Value) -> Option<(String, String)> {
+        let own = field(it, "System.WorkItemType").and_then(Value::as_str).and_then(|t| self.ptypes.iter().find(|p| p.name == t)).and_then(fields::key_field);
+        own.iter().chain(self.key_fields.iter()).find_map(|f| field(it, f).and_then(Value::as_str).map(|v| html_to_text(v).trim().to_string()).filter(|v| !v.is_empty()).map(|v| (f.clone(), v)))
+    }
+}
+
+/// `order` is a WIQL ORDER BY list; `limits` the default and largest `limit`.
+pub(super) async fn query(client: &AdoClient, state: &AppState, ctx: &Value, args: &Value, order: &str, limits: (u64, u64)) -> Result<Found, AppError> {
     let project = str_arg(args, "project").or_else(|| current_project(ctx)).ok_or_else(no_project)?;
     let text = str_arg(args, "text").filter(|t| !t.trim().is_empty());
     let key = str_arg(args, "key").filter(|t| !t.trim().is_empty());
@@ -278,24 +388,24 @@ async fn find(client: &AdoClient, state: &AppState, ctx: &Value, args: &Value) -
         let one = [k.trim().to_string()];
         clauses.push(format!("({})", key_fields.iter().map(|f| fields::any_of(&available, f, &one)).collect::<Vec<_>>().join(" OR ")));
     }
-    let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(100).clamp(1, 500) as u32;
-    let query = format!("SELECT [System.Id] FROM WorkItems WHERE {} ORDER BY [System.ChangedDate] DESC", clauses.join(" AND "));
+    let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(limits.0).clamp(1, limits.1) as u32;
+    let query = format!("SELECT [System.Id] FROM WorkItems WHERE {} ORDER BY {order}", clauses.join(" AND "));
     let ids = api::run_wiql(client, "", &query, limit).await?;
-    let mut extra = key_fields.clone();
+    let wanted_key = key.as_deref().map(|k| k.trim().to_lowercase());
+    Ok(Found { project, ids, limit, ptypes, key_fields, available, wanted_key })
+}
+
+async fn find(client: &AdoClient, state: &AppState, ctx: &Value, args: &Value) -> Result<Value, AppError> {
+    let found = query(client, state, ctx, args, "[System.ChangedDate] DESC", (100, 500)).await?;
+    let mut extra = found.key_fields.clone();
     extra.push("System.ChangedDate".into());
-    let items = api::get_items_batch(client, "", &ids, &api::select_fields(&available, &extra)).await?;
-    // Keys stored as rich text come back as "<div>SRS-0005 </div>": compare and show them as text.
-    let key_of = |it: &Value| -> Option<(String, String)> {
-        let own = field(it, "System.WorkItemType").and_then(Value::as_str).and_then(|t| ptypes.iter().find(|p| p.name == t)).and_then(fields::key_field);
-        own.iter().chain(key_fields.iter()).find_map(|f| field(it, f).and_then(Value::as_str).map(|v| html_to_text(v).trim().to_string()).filter(|v| !v.is_empty()).map(|v| (f.clone(), v)))
-    };
-    let wanted = key.as_deref().map(|k| k.trim().to_lowercase());
+    let items = api::get_items_batch(client, "", &found.ids, &api::select_fields(&found.available, &extra)).await?;
     let rows: Vec<Value> = items
         .iter()
-        .filter(|it| wanted.as_ref().map_or(true, |w| key_fields.iter().any(|f| field(it, f).and_then(Value::as_str).is_some_and(|v| html_to_text(v).trim().to_lowercase() == *w))))
+        .filter(|it| found.keeps(it))
         .map(|it| {
             let mut s = summary(it);
-            let key = key_of(it);
+            let key = found.key_of(it);
             if let Some(o) = s.as_object_mut() {
                 o.insert("key".into(), json!(key.as_ref().map(|k| &k.1)));
                 o.insert("keyField".into(), json!(key.as_ref().map(|k| &k.0)));
@@ -304,7 +414,7 @@ async fn find(client: &AdoClient, state: &AppState, ctx: &Value, args: &Value) -
             s
         })
         .collect();
-    Ok(json!({ "project": project, "count": rows.len(), "truncated": rows.len() as u32 >= limit, "items": rows }))
+    Ok(json!({ "project": found.project, "count": rows.len(), "truncated": found.ids.len() as u32 >= found.limit, "items": rows }))
 }
 
 /// Bookkeeping fields every update touches; they say nothing about the change itself.
@@ -349,7 +459,7 @@ pub fn changes(updates: &[Value], since: Option<&str>) -> Vec<Value> {
 
 // ----- arguments -----
 
-fn str_arg(args: &Value, key: &str) -> Option<String> {
+pub(super) fn str_arg(args: &Value, key: &str) -> Option<String> {
     args.get(key).and_then(Value::as_str).map(str::to_string)
 }
 
@@ -406,6 +516,32 @@ fn no_project() -> AppError {
     AppError::validation("No project is open in Boards; pass `project`.")
 }
 
+/// The work items named in `tests` (keys or IDs); an unknown or ambiguous key is an error, before anything is written.
+async fn test_targets(client: &AdoClient, state: &AppState, project: &str, args: &Value) -> Result<Vec<i64>, AppError> {
+    let wanted = str_list(args, "tests");
+    if wanted.is_empty() {
+        return Ok(Vec::new());
+    }
+    let keys: Vec<String> = wanted.iter().filter(|k| sync::id_ref(k).is_none()).cloned().collect();
+    let found = if keys.is_empty() {
+        Default::default()
+    } else {
+        let types = fields::project_types(client, project).await?;
+        sync::parents_by_key(client, &state.fields(client).await?, project, &fields::all_key_fields(&types), &keys).await?
+    };
+    wanted
+        .iter()
+        .map(|k| match sync::id_ref(k) {
+            Some(id) => Ok(id),
+            None => match found.get(&sync::key_norm(k)).map(Vec::as_slice) {
+                Some([id]) => Ok(*id),
+                Some(ids) if ids.len() > 1 => Err(AppError::validation(format!("\"{k}\" matches several work items: {ids:?}; use the ID."))),
+                _ => Err(AppError::validation(format!("No work item has the key \"{k}\"."))),
+            },
+        })
+        .collect()
+}
+
 /// Tell the app window an item changed so an open board or details panel shows it.
 fn changed(app: &AppHandle, item: &Value) {
     let _ = app.emit_to("main", "mcp-changed", json!({ "id": item.get("id") }));
@@ -418,7 +554,7 @@ async fn fetch(client: &AdoClient, id: i64) -> Result<Value, AppError> {
     client.get(&client.url(&format!("/_apis/wit/workitems/{id}?$expand=relations"))).await
 }
 
-fn field<'a>(item: &'a Value, name: &str) -> Option<&'a Value> {
+pub(super) fn field<'a>(item: &'a Value, name: &str) -> Option<&'a Value> {
     item.get("fields").and_then(|f| f.get(name))
 }
 
@@ -426,7 +562,7 @@ fn project_of(item: &Value) -> String {
     field(item, "System.TeamProject").and_then(Value::as_str).unwrap_or("").to_string()
 }
 
-fn item_url(org: &str, item: &Value) -> String {
+pub(super) fn item_url(org: &str, item: &Value) -> String {
     format!(
         "https://dev.azure.com/{}/{}/_workitems/edit/{}",
         urlencoding::encode(org),
@@ -436,7 +572,7 @@ fn item_url(org: &str, item: &Value) -> String {
 }
 
 /// Identities as their display name; everything else as is.
-fn plain(v: &Value) -> Value {
+pub(super) fn plain(v: &Value) -> Value {
     match v {
         Value::Object(o) if o.contains_key("displayName") => {
             let name = o.get("displayName").and_then(Value::as_str).unwrap_or("");
@@ -477,7 +613,8 @@ pub fn detail(org: &str, item: &Value) -> Value {
             if NOISE.contains(&k.as_str()) || k.starts_with("WEF_") || v.is_null() {
                 continue;
             }
-            fields.insert(k.clone(), plain(v));
+            let value = if k == STEPS_FIELD { json!(steps::to_text(&steps::parse(v.as_str().unwrap_or("")))) } else { plain(v) };
+            fields.insert(k.clone(), value);
         }
     }
     let mut parent = Value::Null;

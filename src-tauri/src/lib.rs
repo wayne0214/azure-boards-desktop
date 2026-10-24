@@ -153,6 +153,10 @@ pub fn run() {
             mcp::mcp_remove_client,
             mcp::mcp_quick_setup,
             mcp::mcp_set_context,
+            mcp::imports::mcp_imports,
+            mcp::imports::mcp_import_review,
+            mcp::imports::mcp_import_apply,
+            mcp::imports::mcp_import_discard,
         ])
         .run(tauri::generate_context!())
         .expect("error while running application");

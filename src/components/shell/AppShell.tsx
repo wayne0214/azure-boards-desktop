@@ -13,6 +13,7 @@ import { ListView } from '../list/ListView'
 import { MyWorkView } from '../mine/MyWorkView'
 import { TimesheetView } from '../timesheet/TimesheetView'
 import { MeetingRoomView } from '../rooms/MeetingRoomView'
+import { ImportsView } from '../imports/ImportsView'
 import { RequirementsView } from '../requirements/RequirementsView'
 import { TestCasesView } from '../testcases/TestCasesView'
 import { PlansView } from '../plans/PlansView'
@@ -30,6 +31,7 @@ import { ImportSheet } from '../sheets/ImportSheet'
 import { NewItemSheet } from '../sheets/NewItemSheet'
 import { SettingsSheet } from '../sheets/SettingsSheet'
 import { ShortcutsSheet } from '../sheets/ShortcutsSheet'
+import { WhatsNewSheet } from '../sheets/WhatsNewSheet'
 import { exportCsv } from '../list/exportCsv'
 import { Sidebar } from './Sidebar'
 import { StatusBar } from './StatusBar'
@@ -39,7 +41,7 @@ import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { refreshCurrentView, refreshInBackground, refreshOnFocus } from '@/lib/refresh'
 import { usePrStore } from '@/store/usePrStore'
 
-const VIEW_NAMES: Record<View, string> = { board: 'The board', list: 'The list', mine: 'My Work', timesheet: 'Timesheet', prs: 'Pull Requests', rooms: 'Meeting Rooms', reqs: 'Requirements', tests: 'Test Cases', plans: 'Test Plans', team: 'Team' }
+const VIEW_NAMES: Record<View, string> = { board: 'The board', list: 'The list', mine: 'My Work', timesheet: 'Timesheet', prs: 'Pull Requests', rooms: 'Meeting Rooms', reqs: 'Requirements', tests: 'Test Cases', plans: 'Test Plans', team: 'Team', imports: 'Imports' }
 
 export function AppShell() {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen)
@@ -86,6 +88,7 @@ export function AppShell() {
       case 'help-pat': void api().openUrl('https://learn.microsoft.com/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate'); break
       case 'help-shortcuts': ui.openSheet('shortcuts'); break
       case 'check-updates': void checkForUpdates(true); break
+      case 'whats-new': ui.openSheet('whats-new'); break
     }
   }, [])
 
@@ -201,10 +204,10 @@ export function AppShell() {
         <div className="main-body">
           <div className="content" onClick={onBlankClick}>
             <ErrorBoundary key={view} where={VIEW_NAMES[view]} inline>
-            {view === 'team' ? <TeamView /> : view === 'reqs' ? <RequirementsView /> : view === 'tests' ? <TestCasesView /> : view === 'plans' ? <PlansView /> : view === 'rooms' ? <MeetingRoomView /> : view === 'prs' ? <PrView /> : view === 'timesheet' ? <TimesheetView /> : view === 'mine' ? <MyWorkView /> : view === 'list' ? <ListView /> : <BoardView />}
+            {view === 'imports' ? <ImportsView /> : view === 'team' ? <TeamView /> : view === 'reqs' ? <RequirementsView /> : view === 'tests' ? <TestCasesView /> : view === 'plans' ? <PlansView /> : view === 'rooms' ? <MeetingRoomView /> : view === 'prs' ? <PrView /> : view === 'timesheet' ? <TimesheetView /> : view === 'mine' ? <MyWorkView /> : view === 'list' ? <ListView /> : <BoardView />}
             </ErrorBoundary>
           </div>
-          {inspectorOpen && view !== 'timesheet' && view !== 'rooms' && <Inspector floating={view !== 'board'} />}
+          {inspectorOpen && view !== 'timesheet' && view !== 'rooms' && view !== 'imports' && <Inspector floating={view !== 'board'} />}
         </div>
       </div>
       <StatusBar />
@@ -216,6 +219,7 @@ export function AppShell() {
       {sheet === 'new-pr' && <NewPrSheet />}
       {sheet === 'complete-pr' && <CompletePrSheet />}
       {sheet === 'start-work' && <StartWorkSheet />}
+      {sheet === 'whats-new' && <WhatsNewSheet />}
       <GitToolsPanel />
       {paletteOpen && <CommandPalette onCommand={runCommand} />}
       {dropHint && <div className="drop-hint"><div><ImagePlus size={28} /><b>Drop to report a bug</b><span>The image goes into a new Bug's Symptom.</span></div></div>}

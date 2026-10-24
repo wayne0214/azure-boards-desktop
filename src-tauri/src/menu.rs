@@ -128,6 +128,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let help = SubmenuBuilder::new(app, "Help")
         .item(&MenuItemBuilder::with_id("help-pat", "How to Create a Token").build(app)?)
         .item(&MenuItemBuilder::with_id("help-shortcuts", "Keyboard Shortcuts").accelerator("CmdOrCtrl+/").build(app)?)
+        .item(&MenuItemBuilder::with_id("whats-new", "What's New").build(app)?)
         .build()?;
 
     #[cfg(not(target_os = "macos"))]
