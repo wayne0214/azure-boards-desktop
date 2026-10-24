@@ -24,6 +24,14 @@ pub fn list() -> Vec<Value> {
             ],
         }),
         json!({
+            "name": "import_hierarchy_from_markdown",
+            "title": "Import User Needs, Design Inputs and Requirements from markdown",
+            "description": "Stage a whole trace (User Needs → Design Inputs → Requirements) from one or more markdown files for review in Boards → Imports.",
+            "arguments": [
+                { "name": "file", "description": "Path to the markdown file (or files, comma separated)", "required": true },
+            ],
+        }),
+        json!({
             "name": "import_test_cases_from_markdown",
             "title": "Import test cases from a markdown file",
             "description": "Stage the file's test cases (steps and the requirements they test) for review in Boards → Imports.",
@@ -78,6 +86,26 @@ pub fn get(name: &str, args: &Value) -> Result<Value, String> {
                  6. When I say I am done, call get_import_result and summarise what was applied, what failed and why."
             )
         }
+        "import_hierarchy_from_markdown" => {
+            let file = arg(args, "file").ok_or("Give the markdown file's path.")?;
+            format!(
+                "Bring the User Needs, Design Inputs and Requirements in {file} into Azure DevOps Boards, keeping their hierarchy.\n\n\
+                 1. Call list_work_item_types. User Needs are usually Epics, Design Inputs Features and Requirements Requirements; \
+                 check the types' names and fields, and ask me if the mapping is not clear. Note each type's ID field (`keyField` in the list); \
+                 if a type's keys (e.g. UN-3, DI-12) have no detected ID field, find the field that holds them and pass it in `keyFields`, \
+                 e.g. {{\"Epic\": \"User Need ID\"}}. Ask me if there is none.\n\
+                 2. Read {file}. For each item work out: its type, key, title, parent key (the User Need a Design Input belongs to, \
+                 the Design Input a Requirement belongs to) and its fields, keeping the wording, lists and line breaks as written.\n\
+                 3. Ask me whether {file} is the complete list for all of these types. Only if I say yes, set removeMissing: true; \
+                 if it is complete for some types only, stage those types separately from the others.\n\
+                 4. Call stage_import once with all of them (at most 300 items; split by User Need beyond that), each item with its `type` \
+                 and `parentKey`, parents before their children, and source \"{file}\". A parent may be an item in Boards or one in this same import. \
+                 Do not set overwrite: I choose per conflict in Boards.\n\
+                 5. If rows have errors, tell me which and stage again once fixed. Then give me the counts per type and tell me to review and apply \
+                 it in Boards → Imports; picking a child there picks its new parents too. Nothing is written until I do.\n\
+                 6. When I say I am done, call get_import_result and summarise what was applied, what failed and why."
+            )
+        }
         "import_test_cases_from_markdown" => {
             let file = arg(args, "file").ok_or("Give the markdown file's path.")?;
             format!(
@@ -114,6 +142,9 @@ mod tests {
         assert!(get("nope", &json!({})).is_err());
         let t = get("import_test_cases_from_markdown", &json!({ "file": "qa/testcase.md" })).unwrap();
         assert!(t["messages"][0]["content"]["text"].as_str().unwrap().contains("type \"Test Case\""));
-        assert_eq!(list().len(), 3);
+        let h = get("import_hierarchy_from_markdown", &json!({ "file": "docs/trace.md" })).unwrap();
+        let h = h["messages"][0]["content"]["text"].as_str().unwrap();
+        assert!(h.contains("keyFields") && h.contains("parentKey") && h.contains("docs/trace.md"));
+        assert_eq!(list().len(), 4);
     }
 }

@@ -36,6 +36,9 @@ pub struct SyncRequest {
     /// The ID field to match on for the default type, when it is not detected.
     #[serde(default)]
     pub key_field: Option<String>,
+    /// The ID field per type, when it is not detected: type name → field, e.g. {"Epic": "User Need ID"}.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub key_fields: HashMap<String, String>,
     /// Replace text that differs instead of reporting a conflict.
     #[serde(default)]
     pub overwrite: bool,
@@ -297,6 +300,16 @@ async fn by_field(
 }
 
 /// Parents by key across every ID field in the project: key (lowercased) → work item IDs.
+/// The ID field the request names for a type: from `keyFields`, else `keyField` for the default type.
+fn named_key_field<'a>(req: &'a SyncRequest, default_type: &str, type_name: &str) -> Option<&'a str> {
+    req.key_fields
+        .iter()
+        .find(|(t, _)| t.trim().eq_ignore_ascii_case(type_name))
+        .map(|(_, f)| f.as_str())
+        .or_else(|| req.key_field.as_deref().filter(|_| type_name.eq_ignore_ascii_case(default_type)))
+        .filter(|f| !f.trim().is_empty())
+}
+
 pub(super) async fn parents_by_key(client: &AdoClient, field_types: &FieldMap, project: &str, key_fields: &[String], keys: &[String]) -> AppResult<HashMap<String, Vec<i64>>> {
     let mut out: HashMap<String, Vec<i64>> = HashMap::new();
     if key_fields.is_empty() || keys.is_empty() {
@@ -357,13 +370,15 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
                 continue;
             }
         };
-        let key_field = if t.name.eq_ignore_ascii_case(&default_type) {
-            req.key_field.as_deref().and_then(|k| fields::resolve_field(t, k)).or_else(|| fields::key_field(t))
-        } else {
-            fields::key_field(t)
+        let mut error = None;
+        let key_field = match named_key_field(req, &default_type, &t.name) {
+            Some(name) => fields::resolve_field(t, name).or_else(|| {
+                error = Some(format!("\"{}\" has no field \"{name}\" to match keys on.", t.name));
+                None
+            }),
+            None => fields::key_field(t),
         };
         let mut incoming = Vec::new();
-        let mut error = None;
         if let Some(title) = row.title.as_deref().filter(|s| !s.trim().is_empty()) {
             incoming.push(("System.Title".to_string(), json!(title.trim())));
         }
@@ -396,7 +411,7 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
             }
         }
         if row.key.is_some() && key_field.is_none() {
-            error = error.or(Some(format!("\"{}\" has no ID field to put the key in; pass `keyField`.", t.name)));
+            error = error.or(Some(format!("\"{}\" has no ID field to put the key in; name it in `keyFields`, e.g. {{\"{}\": \"<field>\"}}.", t.name, t.name)));
         }
         prepared.push(Prepared { t: Some(t), key_field, incoming, error });
     }
@@ -436,11 +451,19 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
         }
     }
 
+    // Parents and tested requirements may be any type, so look in every type's ID field.
+    let mut key_fields = fields::all_key_fields(&types);
+    for p in &prepared {
+        if let Some(kf) = p.key_field.as_ref().filter(|kf| !key_fields.contains(kf)) {
+            key_fields.push(kf.clone());
+        }
+    }
+
     // Parents named by key: existing ones, or rows of this plan.
     let parent_keys: Vec<String> = req.items.iter().filter_map(|r| r.parent_key.clone()).filter(|k| !k.trim().is_empty()).collect();
-    let parents = parents_by_key(client, field_types, &project, &fields::all_key_fields(&types), &parent_keys).await?;
+    let parents = parents_by_key(client, field_types, &project, &key_fields, &parent_keys).await?;
     let test_keys: Vec<String> = req.items.iter().flat_map(|r| r.tests.iter()).filter(|k| id_ref(k).is_none() && !k.trim().is_empty()).cloned().collect();
-    let test_targets = parents_by_key(client, field_types, &project, &fields::all_key_fields(&types), &test_keys).await?;
+    let test_targets = parents_by_key(client, field_types, &project, &key_fields, &test_keys).await?;
 
     let mut rows: Vec<RowPlan> = Vec::new();
     for (i, (row, p)) in req.items.iter().zip(&prepared).enumerate() {
@@ -993,6 +1016,21 @@ async fn execute(client: &AdoClient, planned: &Planned, pick: &(dyn Fn(&RowPlan)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn key_fields_are_named_per_type() {
+        let req: SyncRequest = serde_json::from_value(json!({
+            "type": "Requirement", "keyField": "SRS ID",
+            "keyFields": { "epic": "User Need ID", "Feature": " " }, "items": []
+        }))
+        .unwrap();
+        assert_eq!(named_key_field(&req, "Requirement", "Requirement"), Some("SRS ID"));
+        assert_eq!(named_key_field(&req, "Requirement", "Epic"), Some("User Need ID"));
+        // A blank name falls back to the detected field; keyField is only for the default type.
+        assert_eq!(named_key_field(&req, "Requirement", "Feature"), None);
+        assert_eq!(named_key_field(&req, "Requirement", "Test Case"), None);
+        assert!(serde_json::to_value(&req).unwrap()["keyFields"].is_object());
+    }
 
     #[test]
     fn compare_fills_empty_and_flags_differences() {

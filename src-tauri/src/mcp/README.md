@@ -30,6 +30,9 @@ Prompts (Claude Code shows them as `/mcp__boards__<name>`):
 
 - `review_code_against_srs`: compare this repository's code with the SRS in scope, and list recent Boards changes.
 - `import_srs_from_markdown`: read a markdown file and stage it for review in Boards → Imports.
+- `import_hierarchy_from_markdown`: User Needs (Epic), Design Inputs (Feature) and Requirements from one file, staged as one import with their parents.
+  Keys are matched on each type's ID field (`keyField` in `list_work_item_types`); a type whose keys live in a field
+  that is not detected is named in `keyFields`, e.g. `{ "Epic": "User Need ID" }`.
 - `import_test_cases_from_markdown`: the same for test cases, with their steps and the requirements they test.
 
 ### Test cases

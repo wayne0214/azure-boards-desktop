@@ -108,6 +108,7 @@ fn sync_props() -> Value {
         "project": { "type": "string", "description": "Project name; omit for the current project" },
         "type": { "type": "string", "description": "Type for items that do not name one; default Requirement. \"Test Case\" for test cases (give `steps` and `tests`)." },
         "keyField": { "type": "string", "description": "ID field to match on, if not detected (e.g. \"SRS ID\")" },
+        "keyFields": { "type": "object", "description": "ID field per type, when not detected: type name → field name, e.g. {\"Epic\": \"User Need ID\", \"Feature\": \"Design Input ID\"}" },
         "overwrite": { "type": "boolean", "description": "Replace different text instead of reporting a conflict. Only when the user asked for it." },
         "source": { "type": "string", "description": "Where the items come from, e.g. \"docs/SRS.md\"; shown to the user" },
         "removeMissing": { "type": "boolean", "description": "The file is the complete list for its types: offer items of those types that are only in Boards for removal (set to Removed and tagged, never deleted). Only when the user says the file is complete." },
@@ -193,6 +194,8 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
             Ok(json!({ "project": project, "types": types.iter().filter(|t| !t.get("isDisabled").and_then(Value::as_bool).unwrap_or(false)).map(|t| json!({
                 "name": t.get("name"),
                 "states": t.get("states").and_then(Value::as_array).map(|s| s.iter().filter_map(|x| x.get("name").cloned()).collect::<Vec<_>>()),
+                // The field keys like SRS-182 are matched on, when one is detected; otherwise pass `keyFields` to stage_import.
+                "keyField": t.get("fieldDefs").and_then(Value::as_array).and_then(|f| f.iter().find(|d| fields::id_like(d))).and_then(|d| d.get("referenceName")),
                 "fields": t.get("fieldDefs").and_then(Value::as_array).map(|f| f.iter().map(|d| json!({
                     "referenceName": d.get("referenceName"),
                     "name": d.get("name"),
