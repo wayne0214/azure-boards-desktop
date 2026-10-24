@@ -38,6 +38,7 @@ import { StatusBar } from './StatusBar'
 import { Toolbar } from './Toolbar'
 import { confirmAsync } from '@/lib/confirm'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
+import { MiniView } from '../mini/MiniView'
 import { refreshCurrentView, refreshInBackground, refreshOnFocus } from '@/lib/refresh'
 import { usePrStore } from '@/store/usePrStore'
 
@@ -52,6 +53,7 @@ export function AppShell() {
   const density = useUiStore((s) => s.density)
   const pending = useUiStore((s) => s.pending > 0)
   const paletteOpen = useUiStore((s) => s.paletteOpen)
+  const mini = useUiStore((s) => s.mini)
 
   const runCommand = useCallback((id: string) => {
     const ui = useUiStore.getState()
@@ -76,6 +78,7 @@ export function AppShell() {
       case 'view-rooms': ui.setView('rooms'); break
       case 'toggle-sidebar': ui.toggleSidebar(); break
       case 'toggle-inspector': ui.toggleInspector(); break
+      case 'toggle-mini': ui.setMini(!ui.mini); break
       case 'text-bigger': ui.setTextScale(ui.textScale + 0.1); break
       case 'text-smaller': ui.setTextScale(ui.textScale - 0.1); break
       case 'text-reset': ui.setTextScale(1); break
@@ -106,6 +109,7 @@ export function AppShell() {
       if (mod && k === 'f') { e.preventDefault(); runCommand('find'); return }
       if (mod && k === 'i' && !e.shiftKey) { e.preventDefault(); runCommand('toggle-inspector'); return }
       if (mod && e.shiftKey && k === 's') { e.preventDefault(); runCommand('toggle-sidebar'); return }
+      if (mod && e.shiftKey && k === 'd') { e.preventDefault(); runCommand('toggle-mini'); return }
       if (mod && e.shiftKey && k === 'i') { e.preventDefault(); runCommand('import'); return }
       if (mod && e.shiftKey && k === 'e') { e.preventDefault(); runCommand('export'); return }
       if (mod && e.shiftKey && k === 'm') { e.preventDefault(); runCommand('assign-me'); return }
@@ -195,6 +199,17 @@ export function AppShell() {
     if (useUiStore.getState().inspectorOpen) useUiStore.getState().toggleInspector(false)
   }
 
+  const dropOverlay = dropHint && <div className="drop-hint"><div><ImagePlus size={28} /><b>Drop to report a bug</b><span>The image goes into a new Bug's Symptom.</span></div></div>
+
+  if (mini) {
+    return (
+      <div className={`shell-mini ${density}`}>
+        <ErrorBoundary where="Mini mode" inline><MiniView /></ErrorBoundary>
+        {dropOverlay}
+      </div>
+    )
+  }
+
   return (
     <div className={`shell ${sidebarOpen ? '' : 'no-sidebar'} ${density} ${pending ? 'pending' : ''}`}>
       <div className={`busy-bar ${pending ? 'on' : ''}`} role="progressbar" aria-hidden={!pending} aria-label="Sending to Azure DevOps" />
@@ -222,7 +237,7 @@ export function AppShell() {
       {sheet === 'whats-new' && <WhatsNewSheet />}
       <GitToolsPanel />
       {paletteOpen && <CommandPalette onCommand={runCommand} />}
-      {dropHint && <div className="drop-hint"><div><ImagePlus size={28} /><b>Drop to report a bug</b><span>The image goes into a new Bug's Symptom.</span></div></div>}
+      {dropOverlay}
     </div>
   )
 }
