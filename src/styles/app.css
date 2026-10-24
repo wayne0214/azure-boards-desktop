@@ -16,7 +16,8 @@
   --radius-lg: 12px;
 
   --sidebar-w: 256px;
-  --inspector-w: 400px;
+  /* Grows with the window so wide (4K) screens get a usable panel; the user can also drag it. */
+  --inspector-w: clamp(400px, 30vw, 640px);
   --toolbar-h: 52px;
   --titlebar-pad: 0px;
 
@@ -27,6 +28,8 @@
   --bg-hover: rgba(0, 0, 0, 0.045);
   --bg-active: rgba(0, 0, 0, 0.08);
   --bg-input: #ffffff;
+  /* Resting fill of an editable text area, so it reads as a place to type. */
+  --bg-field: #f7f7f9;
   --border: #dcdce0;
   --border-strong: #c5c5cb;
   --text: #1c1c1e;
@@ -58,6 +61,7 @@
   --bg-hover: rgba(255, 255, 255, 0.06);
   --bg-active: rgba(255, 255, 255, 0.1);
   --bg-input: #1c1c1e;
+  --bg-field: #242428;
   --border: #3a3a3f;
   --border-strong: #4a4a50;
   --text: #ebebe8;
@@ -646,6 +650,11 @@ kbd {
   flex-direction: column;
   min-height: 0;
 }
+.inspector:not(.floating) { position: relative; }
+.inspector-resize { position: absolute; top: 0; bottom: 0; left: -3px; width: 7px; cursor: col-resize; z-index: 2; touch-action: none; }
+.inspector-resize::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background-color 0.12s; }
+.inspector-resize:hover::after, .col-resizing .inspector-resize::after { background: var(--accent); }
+body.col-resizing { cursor: col-resize; user-select: none; -webkit-user-select: none; }
 .inspector.floating {
   position: absolute;
   top: 0; right: 0; bottom: 0;
@@ -739,6 +748,18 @@ kbd {
 .rich:hover { border-color: var(--border); }
 .rich:focus { border-color: var(--accent); background: var(--bg-input); box-shadow: 0 0 0 3px var(--accent-ring); }
 .rich:empty::before { content: attr(data-placeholder); color: var(--text-3); }
+/* In the details panel a section is a labelled block: heading with a divider, then a visible box to type in. */
+.inspector-body .section-h { color: var(--text-2); border-top: 1px solid var(--border); padding-top: 14px; margin-top: 20px; }
+.inspector-body .section-h .req { flex: none; display: inline; min-height: 0; color: var(--danger); margin-left: -4px; }
+.inspector .rich:not(.editing) { margin: 0; border-color: var(--border); background: var(--bg-field); transition: border-color 0.12s, background-color 0.12s; }
+.inspector .rich:not(.editing):hover { border-color: var(--border-strong); background: var(--bg-input); }
+.inspector .rich:not(.editing):focus { border-color: var(--accent); background: var(--bg-input); }
+.inspector .rich:not(.editing):empty { border-style: dashed; border-color: var(--border-strong); background: transparent; display: flex; align-items: center; }
+.inspector .rich:not(.editing):empty::before { content: '+  ' attr(data-placeholder); font-style: italic; }
+.inspector .rich:not(.editing):empty:hover { border-color: var(--accent); }
+.inspector .rich:not(.editing):empty:hover::before { color: var(--accent); }
+.inspector .rich:not(.editing):empty:focus::before { content: attr(data-placeholder); }
+.inspector .rich-toolbar { margin: 4px 0 0; }
 .rich p { margin: 0 0 0.5em; }
 .rich ul, .rich ol { margin: 0 0 0.5em; padding-left: 1.4em; }
 .rich img { max-width: 100%; height: auto; border-radius: 4px; }

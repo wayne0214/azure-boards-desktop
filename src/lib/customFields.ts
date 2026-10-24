@@ -79,6 +79,18 @@ export function usesReproSteps(type: WorkItemType | undefined): boolean {
   return type.name === 'Bug' || !!type.fieldDefs?.some((f) => f.referenceName === REPRO_STEPS)
 }
 
+export const ACCEPTANCE_CRITERIA = 'Microsoft.VSTS.Common.AcceptanceCriteria'
+
+/**
+ * The type's Acceptance Criteria field, as the process names it (e.g. "User Acceptance Criteria").
+ * Azure DevOps leaves empty fields out of a work item, so this comes from the type, not the item.
+ */
+export function acceptanceField(type: WorkItemType | undefined): FieldDef | undefined {
+  const own = type?.fieldDefs?.find((f) => f.referenceName === ACCEPTANCE_CRITERIA)
+  if (own) return own
+  return type && ['User Story', 'Product Backlog Item'].includes(type.name) ? { referenceName: ACCEPTANCE_CRITERIA, name: 'Acceptance Criteria' } : undefined
+}
+
 /** The type's "Symptom" field: CMMI's Microsoft.VSTS.CMMI.Symptom or a custom one with that name. */
 export function symptomField(type: WorkItemType | undefined): FieldDef | undefined {
   return type?.fieldDefs?.find((f) => f.referenceName === 'Microsoft.VSTS.CMMI.Symptom' || /^symptoms?$/i.test(f.name.trim()))

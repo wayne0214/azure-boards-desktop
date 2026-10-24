@@ -18,6 +18,8 @@ interface UiState {
   view: View
   sidebarOpen: boolean
   inspectorOpen: boolean
+  /** Width the user dragged the details panel to; null follows the window size. */
+  inspectorWidth: number | null
   textScale: number
   theme: Theme
   sheet: SheetKind
@@ -32,6 +34,7 @@ interface UiState {
   setView(v: View): void
   toggleSidebar(): void
   toggleInspector(open?: boolean): void
+  setInspectorWidth(w: number | null): void
   setTextScale(s: number): void
   setTheme(t: Theme): void
   setDensity(d: 'comfortable' | 'compact'): void
@@ -66,6 +69,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   view: read<View>('ui.view', 'board'),
   sidebarOpen: read('ui.sidebar', true),
   inspectorOpen: false,
+  inspectorWidth: read<number | null>('ui.inspectorWidth', null),
   textScale: read('ui.textScale', 1),
   theme: read<Theme>('ui.theme', 'system'),
   sheet: null,
@@ -87,6 +91,11 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ sidebarOpen: next })
   },
   toggleInspector: (open) => set((s) => ({ inspectorOpen: open ?? !s.inspectorOpen })),
+  setInspectorWidth: (w) => {
+    const width = w === null ? null : Math.round(w)
+    write('ui.inspectorWidth', width)
+    set({ inspectorWidth: width })
+  },
   setTextScale: (textScale) => {
     const clamped = Math.min(1.5, Math.max(0.85, Math.round(textScale * 100) / 100))
     write('ui.textScale', clamped)
