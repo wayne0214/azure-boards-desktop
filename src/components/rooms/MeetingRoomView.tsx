@@ -5,7 +5,7 @@ import { Empty } from '@/components/ui/Empty'
 import { Sheet } from '@/components/ui/Sheet'
 import { confirmAsync } from '@/lib/confirm'
 import type { Booking, Room } from '@/lib/rooms/types'
-import { DAY_END, DAY_START, MINE_DAYS, STEP, hhmm, isoDate, span, useRoomStore } from '@/store/useRoomStore'
+import { DAY_END, DAY_START, MINE_DAYS, STEP, clock, isoDate, span, useRoomStore } from '@/store/useRoomStore'
 import { useUiStore } from '@/store/useUiStore'
 
 const TOTAL = DAY_END - DAY_START
@@ -121,14 +121,14 @@ export function MeetingRoomView() {
             <div className="rooms-field">
               <span className="lbl">From</span>
               <select className="input" value={s.from} onChange={(e) => { const f = Number(e.target.value); s.setRange(f, f + duration) }}>
-                {SLOTS.slice(0, -1).map((m) => <option key={m} value={m}>{hhmm(m)}</option>)}
+                {SLOTS.slice(0, -1).map((m) => <option key={m} value={m}>{clock(m)}</option>)}
               </select>
             </div>
             <ArrowRight size={14} className="faint rooms-arrow" />
             <div className="rooms-field">
               <span className="lbl">To</span>
               <select className="input" value={s.to} onChange={(e) => s.setRange(s.from, Number(e.target.value))}>
-                {SLOTS.filter((m) => m > s.from).map((m) => <option key={m} value={m}>{hhmm(m)}</option>)}
+                {SLOTS.filter((m) => m > s.from).map((m) => <option key={m} value={m}>{clock(m)}</option>)}
               </select>
             </div>
             <div className="segmented rooms-durs">
@@ -153,7 +153,7 @@ export function MeetingRoomView() {
             <div className="ts-body">
               <div className="rooms-summary">
                 <span className={`rooms-count ${freeCount ? 'ok' : 'none'}`}>{freeCount} of {s.rooms.length} free</span>
-                <span className="faint">{hhmm(s.from)} – {hhmm(s.to)} · {durLabel(duration)}</span>
+                <span className="faint">{clock(s.from)} – {clock(s.to)} · {durLabel(duration)}</span>
                 {inPast && <span className="rooms-past">This time has already passed</span>}
                 <span className="grow" />
                 <div className="segmented">
@@ -166,7 +166,7 @@ export function MeetingRoomView() {
                 <div className="rooms-row head">
                   <div className="rooms-name">Room</div>
                   <div className="rooms-track">
-                    {HOURS.filter((m) => m % 120 === 0 && m > DAY_START && m < DAY_END).map((m) => <span key={m} className="rooms-hour" style={{ left: pct(m) }}>{hhmm(m)}</span>)}
+                    {HOURS.filter((m) => m % 120 === 0 && m > DAY_START && m < DAY_END).map((m) => <span key={m} className="rooms-hour" style={{ left: pct(m) }}>{clock(m)}</span>)}
                   </div>
                   <div className="rooms-act" />
                 </div>
@@ -190,12 +190,12 @@ export function MeetingRoomView() {
                               key={b.id}
                               className={`rooms-block ${mine ? 'mine' : ''}`}
                               style={{ left: pct(from), width: `calc(${pct(to)} - ${pct(from)})` }}
-                              title={`${b.all_day ? 'All day' : `${hhmm(from)}–${hhmm(to)}`} · ${b.title}${b.who ? ` · ${b.who}` : ''}${typeLabel(b) ? ` · ${typeLabel(b)}` : ''}`}
+                              title={`${b.all_day ? 'All day' : `${clock(from)}–${clock(to)}`} · ${b.title}${b.who ? ` · ${b.who}` : ''}${typeLabel(b) ? ` · ${typeLabel(b)}` : ''}`}
                               onClick={(e) => e.stopPropagation()}
                             >
                               <span className="t">
                                 <b>{b.who || b.title}</b>
-                                <span>{b.all_day ? 'All day' : `${hhmm(from)}–${hhmm(to)}`}</span>
+                                <span>{b.all_day ? 'All day' : `${clock(from)}–${clock(to)}`}</span>
                               </span>
                               {mine && <button type="button" className="x" title="Cancel my booking" onClick={() => void cancel(b)}><X size={12} /></button>}
                             </div>
@@ -209,7 +209,7 @@ export function MeetingRoomView() {
                             {s.booking === room.id ? <span className="spinner" /> : <DoorOpen size={13} />} Book
                           </button>
                         ) : (
-                          <span className="rooms-busy-note">{freeFrom !== null && freeFrom < DAY_END ? <>Free from<br /><b>{hhmm(freeFrom)}</b></> : 'Taken'}</span>
+                          <span className="rooms-busy-note">{freeFrom !== null && freeFrom < DAY_END ? <>Free from<br /><b>{clock(freeFrom)}</b></> : 'Taken'}</span>
                         )}
                       </div>
                     </div>
@@ -251,7 +251,7 @@ function ConfirmBooking({ room, onClose }: { room: Room; onClose: () => void }) 
       <div className="rooms-confirm">
         <div className="room-card"><DoorOpen size={20} /><RoomName name={room.name} /></div>
         <div className="line"><CalendarDays size={15} /><span>{dayLabel(s.date)}</span></div>
-        <div className="line"><Clock3 size={15} /><span><b>{hhmm(s.from)}</b> to <b>{hhmm(s.to)}</b> <span className="faint">· {durLabel(s.to - s.from)}</span></span></div>
+        <div className="line"><Clock3 size={15} /><span><b>{clock(s.from)}</b> to <b>{clock(s.to)}</b> <span className="faint">· {durLabel(s.to - s.from)}</span></span></div>
         <div className="line"><User size={15} /><span>{who}</span></div>
         <label className="rooms-confirm-field">
           <span>{s.meetingTypeField.name}</span>
@@ -284,7 +284,7 @@ function MyBookings({ onClose }: { onClose: () => void }) {
   const today = isoDate(new Date())
   const tomorrow = isoDate(new Date(Date.now() + 86400000))
   const label = (d: string) => (d === today ? 'Today' : d === tomorrow ? 'Tomorrow' : dayLabel(d))
-  const time = (iso: string) => { const t = new Date(iso); return hhmm(t.getHours() * 60 + t.getMinutes()) }
+  const time = (iso: string) => { const t = new Date(iso); return clock(t.getHours() * 60 + t.getMinutes()) }
   const show = (b: Booking) => {
     const st = new Date(b.start_dt)
     const en = new Date(b.end_dt)

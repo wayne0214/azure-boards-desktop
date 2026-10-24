@@ -892,6 +892,19 @@ button.dev-row:hover:not(:disabled) { background: var(--bg-hover); }
   background: var(--bg-input);
   font-size: var(--fs-md);
 }
+/* Our own chevron: the native one sits against the border and ignores padding. */
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235d5d63' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px;
+}
+:root[data-theme="dark"] select.input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a7a7a2' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
 .textarea { height: auto; min-height: 88px; padding: 8px 10px; resize: vertical; line-height: 1.4; }
 .input:focus, .textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); outline: none; }
 .input.lg { height: 40px; font-size: var(--fs-lg); }
@@ -1374,7 +1387,7 @@ table.diff tr.inline td { padding: 4px 14px 4px 60px; background: var(--bg); bor
 .rooms-field { display: flex; flex-direction: column; gap: 4px; }
 .rooms-field.grow { flex: 1; min-width: 220px; }
 .rooms-field .lbl { font-size: var(--fs-xs); font-weight: 500; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
-.rooms-field select.input { width: 96px; font-variant-numeric: tabular-nums; }
+.rooms-field select.input { width: 112px; font-variant-numeric: tabular-nums; }
 .rooms-arrow { margin-bottom: 9px; }
 .rooms-durs { margin-bottom: 1px; }
 .rooms-summary { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: var(--fs-sm); }
