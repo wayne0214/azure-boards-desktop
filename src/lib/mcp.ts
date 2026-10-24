@@ -9,6 +9,16 @@ import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
 import { useUiStore } from '@/store/useUiStore'
 
+export type SetupState = 'ready' | 'outdated' | 'missing' | 'notInstalled'
+
+export interface McpClient {
+  id: 'claude' | 'codex'
+  name: string
+  state: SetupState
+  /** Why the last setup or removal failed. */
+  detail: string | null
+}
+
 export interface McpStatus {
   enabled: boolean
   readOnly: boolean
@@ -17,11 +27,15 @@ export interface McpStatus {
   running: boolean
   url: string
   error: string | null
+  clients: McpClient[]
 }
 
 export const mcpStatus = () => invoke<McpStatus>('mcp_status')
 export const mcpConfigure = (enabled: boolean, readOnly: boolean, port?: number) => invoke<McpStatus>('mcp_configure', { enabled, readOnly, port })
 export const mcpNewToken = () => invoke<McpStatus>('mcp_new_token')
+export const mcpQuickSetup = () => invoke<McpStatus>('mcp_quick_setup')
+export const mcpSetupClient = (id: McpClient['id']) => invoke<McpStatus>('mcp_setup_client', { id })
+export const mcpRemoveClient = (id: McpClient['id']) => invoke<McpStatus>('mcp_remove_client', { id })
 
 export const claudeCommand = (s: McpStatus) => `claude mcp add --scope user --transport http boards ${s.url} --header "Authorization: Bearer ${s.token}"`
 export const codexConfig = (s: McpStatus) => `[mcp_servers.boards]\nurl = "${s.url}"\nhttp_headers = { Authorization = "Bearer ${s.token}" }`

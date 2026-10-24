@@ -148,6 +148,9 @@ pub fn run() {
             mcp::mcp_status,
             mcp::mcp_configure,
             mcp::mcp_new_token,
+            mcp::mcp_setup_client,
+            mcp::mcp_remove_client,
+            mcp::mcp_quick_setup,
             mcp::mcp_set_context,
         ])
         .run(tauri::generate_context!())

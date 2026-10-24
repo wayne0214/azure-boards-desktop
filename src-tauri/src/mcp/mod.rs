@@ -7,6 +7,7 @@
 //! Transport: MCP "Streamable HTTP" (JSON responses, no streaming) on 127.0.0.1 only,
 //! behind a bearer token stored in `mcp.json` in the app's config folder. Off until the user turns it on.
 
+mod clients;
 mod fields;
 mod prompts;
 mod protocol;
@@ -56,6 +57,8 @@ pub struct McpStatus {
     pub running: bool,
     pub url: String,
     pub error: Option<String>,
+    /// Whether Claude Code and Codex are set up to use this server.
+    pub clients: Vec<clients::ClientStatus>,
 }
 
 struct Running {
@@ -232,26 +235,66 @@ fn serve(app: &AppHandle, port: u16, mut request: tiny_http::Request) {
     }
 }
 
-fn status() -> McpStatus {
+fn url(port: u16) -> String {
+    format!("http://127.0.0.1:{port}/mcp")
+}
+
+fn is_running() -> bool {
+    SERVER.lock().ok().and_then(|s| s.as_ref().map(|r| r.port)).is_some()
+}
+
+/// Server state only; quick, for decisions inside other commands.
+fn status_without_clients() -> McpStatus {
     let config = current_config();
-    let running = SERVER.lock().ok().and_then(|s| s.as_ref().map(|r| r.port)).is_some();
     McpStatus {
-        url: format!("http://127.0.0.1:{}/mcp", config.port),
+        url: url(config.port),
         config,
-        running,
+        running: is_running(),
         error: LAST_ERROR.lock().ok().and_then(|e| e.clone()),
+        clients: Vec::new(),
     }
+}
+
+/// Server state plus each AI tool's setup, with any setup errors attached to their tool.
+fn status_with(errors: &[(String, String)]) -> McpStatus {
+    let mut s = status_without_clients();
+    s.clients = clients::statuses(&s.url, &s.config.token);
+    for c in s.clients.iter_mut() {
+        c.detail = errors.iter().find(|(id, _)| id == c.id).map(|(_, e)| e.clone());
+    }
+    s
+}
+
+fn status() -> McpStatus {
+    status_with(&[])
+}
+
+/// Looking for the CLIs reads the login shell's PATH and the tools' config files: keep it off the UI thread.
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> AppResult<T> + Send + 'static) -> AppResult<T> {
+    tauri::async_runtime::spawn_blocking(work).await.map_err(|e| AppError::internal(e.to_string()))?
+}
+
+fn set_config(app: &AppHandle, cfg: McpConfig) -> AppResult<()> {
+    save_config(app, &cfg)?;
+    if let Ok(mut c) = CONFIG.lock() {
+        *c = Some(cfg);
+    }
+    Ok(())
 }
 
 // ----- commands for the Settings section and the UI bridge -----
 
 #[tauri::command]
-pub fn mcp_status() -> McpStatus {
-    status()
+pub async fn mcp_status() -> AppResult<McpStatus> {
+    blocking(|| Ok(status())).await
 }
 
 #[tauri::command]
-pub fn mcp_configure(app: AppHandle, enabled: bool, read_only: bool, port: Option<u16>) -> AppResult<McpStatus> {
+pub async fn mcp_configure(app: AppHandle, enabled: bool, read_only: bool, port: Option<u16>) -> AppResult<McpStatus> {
+    blocking(move || configure(&app, enabled, read_only, port)).await
+}
+
+fn configure(app: &AppHandle, enabled: bool, read_only: bool, port: Option<u16>) -> AppResult<McpStatus> {
     let mut cfg = current_config();
     let port = port.unwrap_or(cfg.port);
     if port < 1024 {
@@ -261,29 +304,64 @@ pub fn mcp_configure(app: AppHandle, enabled: bool, read_only: bool, port: Optio
     cfg.enabled = enabled;
     cfg.read_only = read_only;
     cfg.port = port;
-    save_config(&app, &cfg)?;
-    if let Ok(mut c) = CONFIG.lock() {
-        *c = Some(cfg);
-    }
+    set_config(app, cfg)?;
     if !enabled {
         stop();
         set_error(None);
-    } else if restart || status().error.is_some() || !status().running {
-        start(&app, port);
+    } else if restart || !is_running() {
+        start(app, port);
     }
     Ok(status())
 }
 
-/// A new token; tools set up with the old one stop working until their command is copied again.
+/// A new token. Tools that were set up are set up again with it, so they keep working.
 #[tauri::command]
-pub fn mcp_new_token(app: AppHandle) -> AppResult<McpStatus> {
-    let mut cfg = current_config();
-    cfg.token = new_token();
-    save_config(&app, &cfg)?;
-    if let Ok(mut c) = CONFIG.lock() {
-        *c = Some(cfg);
-    }
-    Ok(status())
+pub async fn mcp_new_token(app: AppHandle) -> AppResult<McpStatus> {
+    blocking(move || {
+        let before = status();
+        let mut cfg = current_config();
+        cfg.token = new_token();
+        set_config(&app, cfg)?;
+        let redo: Vec<&str> = before.clients.iter().filter(|c| matches!(c.state, clients::SetupState::Ready | clients::SetupState::Outdated)).map(|c| c.id).collect();
+        Ok(setup_clients(&redo))
+    })
+    .await
+}
+
+fn setup_clients(ids: &[&str]) -> McpStatus {
+    let s = status_without_clients();
+    let errors: Vec<(String, String)> = ids
+        .iter()
+        .filter_map(|id| clients::setup(id, &s.url, &s.config.token).err().map(|e| (id.to_string(), e.message)))
+        .collect();
+    status_with(&errors)
+}
+
+/// Set up one AI tool ("claude" or "codex") to use the server.
+#[tauri::command]
+pub async fn mcp_setup_client(id: String) -> AppResult<McpStatus> {
+    blocking(move || Ok(setup_clients(&[id.as_str()]))).await
+}
+
+#[tauri::command]
+pub async fn mcp_remove_client(id: String) -> AppResult<McpStatus> {
+    blocking(move || {
+        let errors: Vec<(String, String)> = clients::remove(&id).err().map(|e| vec![(id.clone(), e.message)]).unwrap_or_default();
+        Ok(status_with(&errors))
+    })
+    .await
+}
+
+/// One click: turn the server on and set up every AI tool found on this computer.
+#[tauri::command]
+pub async fn mcp_quick_setup(app: AppHandle) -> AppResult<McpStatus> {
+    blocking(move || {
+        let read_only = current_config().read_only;
+        let on = configure(&app, true, read_only, None)?;
+        let found: Vec<&str> = on.clients.iter().filter(|c| c.state != clients::SetupState::NotInstalled).map(|c| c.id).collect();
+        Ok(setup_clients(&found))
+    })
+    .await
 }
 
 #[tauri::command]

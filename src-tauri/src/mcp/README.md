@@ -47,7 +47,17 @@ If something changed in between, it writes nothing and returns a new plan. ID fi
 
 ## Connect
 
-Copy the setup from Settings. It looks like this:
+In **Settings → AI tools (MCP)** press **Turn on & set up**. Boards turns the server on and sets up every tool it finds:
+
+- **Claude Code**: runs `claude mcp add --scope user …` (found on the login shell's PATH).
+- **Codex**: writes a `[mcp_servers.boards]` table into `~/.codex/config.toml`, keeping everything else as it is.
+  The file is copied to `config.toml.before-boards` before the first change.
+
+Each tool then shows as set up, not set up, set up with an old token, or not found on this computer, with
+Set up / Update / Remove buttons. **New token** sets up again every tool that was set up, so nothing breaks.
+`cargo test -- --ignored setup_round_trip` runs the real setup and removal in a throwaway home folder.
+
+To set a tool up by hand, the copy buttons give the same setup. It looks like this:
 
 ```bash
 claude mcp add --scope user --transport http boards http://127.0.0.1:47615/mcp --header "Authorization: Bearer <token>"
@@ -81,10 +91,12 @@ Use the `boards` MCP tools. Requirements have an SRS ID (e.g. SRS-0005); find th
 Everything is in these places:
 
 1. Delete this folder, `src-tauri/src/mcp/`.
-2. `src-tauri/src/lib.rs`: remove `mod mcp;`, `mcp::init(app.handle());`, and the four `mcp::mcp_*` commands.
+2. `src-tauri/src/lib.rs`: remove `mod mcp;`, `mcp::init(app.handle());`, and the `mcp::mcp_*` commands.
 3. `src-tauri/Cargo.toml`: remove `tiny_http` and `getrandom` (under the "MCP server" comment).
 4. Delete `src/lib/mcp.ts` and `src/components/sheets/McpSettings.tsx`.
 5. `src/main.tsx`: remove the `startMcpBridge` import and call.
 6. `src/components/sheets/SettingsSheet.tsx`: remove the `McpSettings` import and `<McpSettings />`.
 
-A leftover `mcp.json` in the app config folder is harmless.
+A leftover `mcp.json` in the app config folder is harmless. Press **Remove** for each tool first, or delete
+the `boards` entry with `claude mcp remove --scope user boards` and from `~/.codex/config.toml`.
+`tools::find_program` (used here to find the CLIs) can stay; it is a general helper.
