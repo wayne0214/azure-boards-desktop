@@ -73,11 +73,13 @@ Keep the private key safe. If you lose it, installed copies can no longer update
   - git-tools reads the subject of the merged commit, so the PR title is what drives each bump. GitHub's default `Merge pull request #…` subject would break it.
 - **Rules → Rulesets**, branch ruleset for `master` and `develop`:
   - require a pull request before merging;
-  - require the status checks `frontend`, `rust (macos-latest)` and `rust (windows-latest)`;
+  - require the status checks `branch-policy`, `frontend`, `rust (macos-latest)` and `rust (windows-latest)`. `branch-policy` fails a PR into `master` unless it comes from `release/*` or `hotfix/*`;
   - block force pushes and deletion;
   - add **Deploy keys** to the bypass list, so the bot can push its bump commits.
 - **Rules → Rulesets**, tag ruleset for `v*`: restrict creation, updates and deletion, with **Deploy keys** on the bypass list.
 - Rulesets on a private repo need GitHub Pro or Team. On the free plan, make the repo public or skip the rulesets.
+
+- **General → Default branch**: `develop`, so new pull requests target it unless you choose otherwise.
 
 ## Day to day
 
