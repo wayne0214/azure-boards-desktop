@@ -10,6 +10,33 @@ export interface ReleaseNote {
 /** Shown once in What's New after an update to that version. Newest first; add one per release. */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.3.0',
+    highlights: [
+      {
+        title: 'Mini mode',
+        detail: 'Press Cmd/Ctrl+Shift+D, or choose View → Mini Mode, for a small window that stays on top. It shows reviews waiting on you, your pull requests, what you are working on, mentions and your next room booking. Click anything to go back to the full window at that item.',
+      },
+      {
+        title: 'Paste a screenshot to report a bug',
+        detail: 'Press Cmd/Ctrl+V with an image on the clipboard and a new Bug opens with it in the Symptom, the same as dropping a screenshot on the window. In mini mode the bug form opens over the small window.',
+      },
+      {
+        title: 'Versioning',
+        detail: 'A new Versioning page in each project checks every repository for git-tools version bumps on Azure Pipelines, and walks you through setting up what is missing. It asks before it changes anything.',
+      },
+      {
+        title: 'One Testing item',
+        detail: 'Test Cases and Test Plans share one Testing item in the sidebar, with a switch in the toolbar. Testing opens whichever you used last.',
+      },
+    ],
+    more: [
+      'Meeting Rooms shows times in 12-hour format (9:00am, 1:30pm).',
+      'The sign-in screen lists which token access each feature needs.',
+      'Timesheet: Save & submit now submits the week, and only says so when the rows read back as Submitted.',
+      'Pull request titles no longer squeeze to one letter per line in a narrow pane.',
+    ],
+  },
+  {
     version: '1.2.0',
     highlights: [
       {
