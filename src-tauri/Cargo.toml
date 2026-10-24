@@ -1,6 +1,6 @@
 [package]
 name = "azure-boards-desktop"
-version = "1.1.0"
+version = "1.2.0-rc.1"
 description = "A desktop client for Azure DevOps Boards"
 authors = ["Jia Hao Lai"]
 edition = "2021"
