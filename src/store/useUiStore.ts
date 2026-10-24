@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { setMiniWindow } from '@/lib/miniWindow'
 
-export type View = 'board' | 'list' | 'mine' | 'timesheet' | 'prs' | 'rooms' | 'reqs' | 'tests' | 'plans' | 'team' | 'imports'
+export type View = 'board' | 'list' | 'mine' | 'timesheet' | 'prs' | 'rooms' | 'reqs' | 'tests' | 'plans' | 'team' | 'imports' | 'overview'
 export type SheetKind = 'new-item' | 'import' | 'settings' | 'shortcuts' | 'connect' | 'new-pr' | 'complete-pr' | 'start-work' | 'whats-new' | null
 export type Theme = 'system' | 'light' | 'dark'
 

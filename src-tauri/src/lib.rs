@@ -10,6 +10,7 @@ mod settings;
 mod state;
 mod timesheet;
 mod pr_commands;
+mod versioning_commands;
 mod plan_commands;
 mod rooms;
 mod tools;
@@ -99,6 +100,8 @@ pub fn run() {
             timesheet::timesheet_reload,
             timesheet::timesheet_clear_cookies,
             pr_commands::pr_list_repos,
+            versioning_commands::versioning_facts,
+            versioning_commands::versioning_fix,
             pr_commands::pr_list,
             pr_commands::pr_get,
             pr_commands::pr_detail,

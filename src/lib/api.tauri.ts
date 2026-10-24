@@ -99,6 +99,8 @@ export const tauriApi: Api = {
   importWorkItems: (org, project, rows) => invoke('import_work_items', { org, project, rows }),
 
   prListRepos: (org, project) => invoke('pr_list_repos', { org, project }),
+  versioningFacts: (org, projectId, project, repoId, workflowPath, secureFile) => invoke('versioning_facts', { org, projectId, project, repoId, workflowPath, secureFile }),
+  versioningFix: (org, projectId, project, repoId, fix) => invoke('versioning_fix', { org, projectId, project, repoId, fix }),
   prList: (org, project, status, opts) => invoke('pr_list', { org, project, status, creatorId: opts?.creatorId ?? null, reviewerId: opts?.reviewerId ?? null, repoId: opts?.repoId ?? null, top: opts?.top ?? null }),
   prDetail: (org, projectId, repoId, prId) => invoke('pr_detail', { org, projectId, repoId, prId }),
   prWorkItemIds: (org, repoId, prId) => invoke('pr_work_item_ids', { org, repoId, prId }),
