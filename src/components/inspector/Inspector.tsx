@@ -2,7 +2,7 @@ import DOMPurify from 'dompurify'
 import { ArrowLeft, ChevronDown, ExternalLink, GitBranch, Link2, Plus, RefreshCw, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
-import { REPRO_STEPS, customFieldsFor, fieldKind, isIdLike, symptomField, usesReproSteps } from '@/lib/customFields'
+import { ACCEPTANCE_CRITERIA, REPRO_STEPS, acceptanceField, customFieldsFor, fieldKind, isIdLike, symptomField, usesReproSteps } from '@/lib/customFields'
 import { hydrateImages } from '@/lib/attachments'
 import { htmlToText, identityKey, itemUrl, longDate, relativeTime, typeColor } from '@/lib/format'
 import type { Comment, WorkItem, WorkItemType } from '@/lib/types'
@@ -22,15 +22,65 @@ import { MentionTextarea } from '@/components/ui/MentionTextarea'
 import { toWorkItemMentionHtml } from '@/lib/mentions'
 
 const NO_TYPES: WorkItemType[] = []
+const MIN_W = 320
+
+/** Widest the panel may get: leave the board at least a third of the window. */
+const maxWidth = () => Math.max(MIN_W, Math.round(window.innerWidth * 0.67))
+
+/** Drag the panel's left edge to resize it; double-click goes back to the automatic width. */
+function ResizeHandle() {
+  const setWidth = useUiStore((s) => s.setInspectorWidth)
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const panel = e.currentTarget.parentElement
+    if (!panel) return
+    const handle = e.currentTarget
+    const startX = e.clientX
+    const startW = panel.getBoundingClientRect().width
+    let w = startW
+    handle.setPointerCapture(e.pointerId)
+    document.body.classList.add('col-resizing')
+    const move = (ev: PointerEvent) => {
+      w = Math.min(maxWidth(), Math.max(MIN_W, startW + startX - ev.clientX))
+      panel.style.setProperty('--inspector-w', `${w}px`)
+    }
+    const up = () => {
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', up)
+      handle.removeEventListener('pointercancel', up)
+      document.body.classList.remove('col-resizing')
+      if (w !== startW) setWidth(w)
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', up)
+    handle.addEventListener('pointercancel', up)
+  }
+  return <div className="inspector-resize" role="separator" aria-orientation="vertical" title="Drag to resize · double-click to reset" onPointerDown={onPointerDown} onDoubleClick={() => setWidth(null)} />
+}
+
+/** The panel width the user picked, kept within the current window. */
+function useWidthStyle(): Record<string, string> {
+  const width = useUiStore((s) => s.inspectorWidth)
+  const [, rerender] = useState(0)
+  useEffect(() => {
+    const onResize = () => rerender((n) => n + 1)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return width === null ? {} : { '--inspector-w': `${Math.min(maxWidth(), Math.max(MIN_W, width))}px` }
+}
 
 export function Inspector({ floating }: { floating?: boolean }) {
   const selectedId = useBoardStore((s) => s.selectedId)
   const item = useBoardStore((s) => (s.selectedId !== null ? s.items.find((i) => i.id === s.selectedId) ?? (s.detached?.id === s.selectedId ? s.detached : null) : null))
   const toggleInspector = useUiStore((s) => s.toggleInspector)
   const cls = `inspector ${floating ? 'floating' : ''}`
+  const widthStyle = useWidthStyle()
   if (!item) {
     return (
-      <aside className={cls}>
+      <aside className={cls} style={widthStyle}>
+        <ResizeHandle />
         <div className="inspector-head"><span className="grow">Details</span><button type="button" className="icon-btn sm" onClick={() => toggleInspector(false)}><X size={15} /></button></div>
         <div className="inspector-empty">
           {selectedId ? <span className="spinner" /> : <span>Select an item to see its details.</span>}
@@ -39,10 +89,10 @@ export function Inspector({ floating }: { floating?: boolean }) {
       </aside>
     )
   }
-  return <ItemDetails key={item.id} item={item} className={cls} />
+  return <ItemDetails key={item.id} item={item} className={cls} widthStyle={widthStyle} />
 }
 
-function ItemDetails({ item, className }: { item: WorkItem; className: string }) {
+function ItemDetails({ item, className, widthStyle }: { item: WorkItem; className: string; widthStyle: Record<string, string> }) {
   const org = useAppStore((s) => s.activeOrg) ?? ''
   const project = projectOf(item)
   const ctx = useBoardStore((s) => s.ctx)
@@ -71,6 +121,8 @@ function ItemDetails({ item, className }: { item: WorkItem; className: string })
   const reproType = type === 'Bug' || usesReproSteps(wit)
   // Only a rich-text Symptom gets its own section; a plain one stays with the other fields.
   const symptomDef = ((d) => (d && (d.referenceName.startsWith('Microsoft.') || fieldKind(ctx, d) === 'html') ? d : undefined))(symptomField(wit))
+  // Types not loaded yet (an item from another project) still show the field once it has a value.
+  const acceptanceDef = acceptanceField(wit) ?? (ACCEPTANCE_CRITERIA in f ? { referenceName: ACCEPTANCE_CRITERIA, name: 'Acceptance Criteria' } : undefined)
   const customDefs = allCustomDefs.filter((d) => fieldKind(ctx, d) !== 'html')
   const htmlDefs = allCustomDefs.filter((d) => fieldKind(ctx, d) === 'html')
   const who = f['System.AssignedTo'] as { displayName?: string; uniqueName?: string; id?: string } | undefined
@@ -149,7 +201,8 @@ function ItemDetails({ item, className }: { item: WorkItem; className: string })
   const stateColorHex = `#${(wit?.states.find((s) => s.name === f['System.State'])?.color ?? '888').replace('#', '')}`
 
   return (
-    <aside className={className} style={{ ['--type-color' as string]: typeColor(projectTypes, type) }}>
+    <aside className={className} style={{ ...widthStyle, ['--type-color' as string]: typeColor(projectTypes, type) }}>
+      <ResizeHandle />
       <div className="inspector-head">
         {history.length > 0 && <button type="button" className="icon-btn sm" title="Back" onClick={goBack}><ArrowLeft size={15} /></button>}
         <span className="type-chip"><span className="sw" />{type}</span>
@@ -282,10 +335,10 @@ function ItemDetails({ item, className }: { item: WorkItem; className: string })
             <RichText project={project} html={f[symptomDef.referenceName] as string | undefined} placeholder="What does the user see? (paste screenshots here)" onSave={(html) => void updateFields(item.id, { [symptomDef.referenceName]: html || null })} />
           </>
         )}
-        {(type === 'User Story' || type === 'Product Backlog Item' || 'Microsoft.VSTS.Common.AcceptanceCriteria' in f) && (
+        {acceptanceDef && (
           <>
-            <div className="section-h">Acceptance criteria</div>
-            <RichText project={project} html={f['Microsoft.VSTS.Common.AcceptanceCriteria'] as string | undefined} placeholder="What does done look like?" onSave={(html) => void updateFields(item.id, { 'Microsoft.VSTS.Common.AcceptanceCriteria': html || null })} />
+            <div className="section-h">{acceptanceDef.name}{acceptanceDef.alwaysRequired && <span className="req" title="Required">*</span>}</div>
+            <RichText project={project} html={f[ACCEPTANCE_CRITERIA] as string | undefined} placeholder={acceptanceDef.helpText || 'What does done look like?'} onSave={(html) => void updateFields(item.id, { [ACCEPTANCE_CRITERIA]: html || null })} />
           </>
         )}
 

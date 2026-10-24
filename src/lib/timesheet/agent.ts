@@ -140,6 +140,38 @@ export function opScript(id: string, body: string): string {
 })();`
 }
 
+/**
+ * Wipe what the current page's origin keeps in the browser: storage, caches and service workers.
+ * A stale service worker or cached bundle left over from a site update shows up as a blank page.
+ */
+export const clearSiteStorageBody = `
+  const done = [];
+  try { localStorage.clear(); done.push('local'); } catch (e) {}
+  try { sessionStorage.clear(); done.push('session'); } catch (e) {}
+  try {
+    if (navigator.serviceWorker) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+      done.push('sw:' + regs.length);
+    }
+  } catch (e) {}
+  try {
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      done.push('caches:' + keys.length);
+    }
+  } catch (e) {}
+  try {
+    if (indexedDB.databases) {
+      const dbs = await indexedDB.databases();
+      for (const db of dbs) if (db.name) indexedDB.deleteDatabase(db.name);
+      done.push('idb:' + dbs.length);
+    }
+  } catch (e) {}
+  return { origin: location.origin, done };
+`
+
 /** Where are we: login page, ready page, or still loading? */
 export const probeBody = `
   return { login: __ts.isLogin(), ready: document.readyState === 'complete', hasGrid: !!document.querySelector('[role=grid]'), title: document.title, path: location.pathname, href: location.href, ipc: !!(window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke), rafPatched: !!window.__tsRafPatched };

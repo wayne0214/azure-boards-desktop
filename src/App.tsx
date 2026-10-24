@@ -5,6 +5,7 @@ import { Toasts } from './components/ui/Toasts'
 import { useAppStore } from './store/useAppStore'
 import { useUiStore, type View } from './store/useUiStore'
 import { isTauri } from './lib/api'
+import { whatsNewOnLaunch } from './lib/releaseNotes'
 
 function useTheme() {
   const theme = useUiStore((s) => s.theme)
@@ -42,6 +43,13 @@ export function App() {
       )
     }
   }, [boot])
+
+  // After an update, the new version's notes, once. Read only at start-up, so signing in later shows nothing.
+  useEffect(() => {
+    if (!booted || !isTauri) return
+    const version = whatsNewOnLaunch(useAppStore.getState().settings.accounts.length > 0)
+    if (version) useUiStore.getState().openSheet('whats-new', { version })
+  }, [booted])
 
   if (bootError) {
     return (

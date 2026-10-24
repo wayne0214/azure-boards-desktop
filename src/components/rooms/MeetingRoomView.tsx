@@ -112,7 +112,7 @@ export function MeetingRoomView() {
           This build of the app has no Teamup API key.
         </Empty>
       ) : !s.calendar ? (
-        <Empty icon={<CalendarDays size={28} />} title="No Teamup calendar yet" action={<button type="button" className="btn primary" onClick={() => openSheet('settings')}>Open Settings</button>}>
+        <Empty icon={<CalendarDays size={28} />} title="No Teamup calendar yet" action={<button type="button" className="btn primary" onClick={() => openSheet('settings', { tab: 'rooms' })}>Open Settings</button>}>
           Paste the rooms calendar's Teamup link in Settings.
         </Empty>
       ) : (

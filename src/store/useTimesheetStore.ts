@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { isTauri } from '@/lib/api'
 import { listProjectsBody, readWeekBody, saveRowBody, submitAllBody } from '@/lib/timesheet/agent'
-import { LoginRequired, goto, hide, onSite, pageSettled, peek, reload, runEditOp, runOp, show, signedIn, trace, tryAutoLogin } from '@/lib/timesheet/client'
+import { LoginRequired, clearSession, goto, hide, onSite, pageSettled, peek, reload, runEditOp, runOp, show, signedIn, trace, tryAutoLogin } from '@/lib/timesheet/client'
 import { useUiStore } from './useUiStore'
 
 
@@ -55,6 +55,8 @@ interface TimesheetState {
   connect(): Promise<void>
   openWindow(): Promise<void>
   reloadWindow(): Promise<void>
+  /** Clear the timesheet site's cookies and storage, then connect again (signed out). */
+  resetSession(): Promise<void>
   finishLogin(): Promise<void>
   /** `onPage`: the window already shows this week, so read it without loading the page again. */
   loadWeek(weekStart?: string, opts?: { onPage?: boolean }): Promise<void>
@@ -159,6 +161,20 @@ export const useTimesheetStore = create<TimesheetState>((set, get) => ({
 
   openWindow: async () => { await show() },
   reloadWindow: async () => { await show(); await reload() },
+
+  resetSession: async () => {
+    if (!isTauri || !get().baseUrl) return
+    set({ phase: 'connecting', message: null, progress: null, rows: [] })
+    trace('reset session')
+    try {
+      await clearSession(get().baseUrl)
+    } catch (e) {
+      set({ phase: 'error', message: `Could not clear the timesheet cookies: ${(e as Error).message ?? e}` })
+      return
+    }
+    useUiStore.getState().toast({ kind: 'success', title: 'Timesheet cookies cleared', detail: 'Sign in again in the timesheet window.' })
+    await get().connect()
+  },
 
   finishLogin: async () => {
     // Polled while the user signs in. It must only look at the page, never navigate,
