@@ -1052,6 +1052,11 @@ button.dev-row:hover:not(:disabled) { background: var(--bg-hover); }
 .settings-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .settings-row .lbl { flex: 1; }
 .settings-row .lbl .sub { font-size: var(--fs-xs); color: var(--text-3); margin-top: 2px; }
+.settings-row .mcp-state { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.settings-row .mcp-state.ready { color: var(--success); }
+.settings-row .mcp-state.outdated { color: var(--warn); }
+.settings-row .mcp-err { color: var(--danger); }
+.settings-row .btn .spinner { width: 11px; height: 11px; }
 .account-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 6px; }
 .account-row .nm { flex: 1; min-width: 0; }
 .account-row .nm .sub { font-size: var(--fs-xs); color: var(--text-3); }

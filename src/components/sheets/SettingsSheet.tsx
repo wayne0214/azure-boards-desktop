@@ -12,6 +12,7 @@ import { confirmAsync } from '@/lib/confirm'
 import { useNotifyStore } from '@/store/useNotifyStore'
 import { sendTestNotification } from '@/lib/notify/poller'
 import type { NoteKind } from '@/lib/notify/watch'
+import { McpSettings } from './McpSettings'
 
 const NOTE_KINDS: { kind: NoteKind; label: string }[] = [
   { kind: 'review', label: 'A pull request needs my review' },
@@ -149,6 +150,8 @@ export function SettingsSheet() {
           toast({ kind: 'success', title: 'Folders forgotten' })
         }}>Forget</button>
       </div>
+
+      <McpSettings />
 
       <div className="section-h">Storage</div>
       <div className="settings-row">
