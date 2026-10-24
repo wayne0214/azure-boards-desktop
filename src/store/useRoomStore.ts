@@ -28,6 +28,11 @@ function meetingTypeFrom(defs: unknown): ChoiceField | null {
 const pad = (n: number) => String(n).padStart(2, '0')
 export const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 export const hhmm = (min: number) => `${pad(Math.floor(min / 60))}:${pad(min % 60)}`
+/** A minute of the day as people read it on a clock: 9:00am, 12:30pm. `hhmm` stays 24-hour for the API. */
+export const clock = (min: number) => {
+  const h = Math.floor(min / 60) % 24
+  return `${h % 12 || 12}:${pad(min % 60)}${h < 12 ? 'am' : 'pm'}`
+}
 
 /** A local date and minute as an ISO time with this computer's offset, e.g. 2026-10-21T09:00:00+08:00. */
 function localDateTime(date: string, min: number): string {
@@ -197,7 +202,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       useUiStore.getState().toast({
         kind: 'success',
         title: `${room.name} booked`,
-        detail: `${hhmm(from)}–${hhmm(to)} · ${title}`,
+        detail: `${clock(from)}–${clock(to)} · ${title}`,
         action: { label: 'Undo', onClick: () => void get().cancel(event) },
       })
     } catch (err) {

@@ -1371,7 +1371,7 @@ table.diff tr.inline td { padding: 4px 14px 4px 60px; background: var(--bg); bor
 .rooms-field { display: flex; flex-direction: column; gap: 4px; }
 .rooms-field.grow { flex: 1; min-width: 220px; }
 .rooms-field .lbl { font-size: var(--fs-xs); font-weight: 500; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
-.rooms-field select.input { width: 96px; font-variant-numeric: tabular-nums; }
+.rooms-field select.input { width: 112px; font-variant-numeric: tabular-nums; }
 .rooms-arrow { margin-bottom: 9px; }
 .rooms-durs { margin-bottom: 1px; }
 .rooms-summary { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: var(--fs-sm); }
