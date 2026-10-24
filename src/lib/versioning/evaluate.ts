@@ -29,7 +29,7 @@ export type VersioningFix =
   | { step: 'run'; pipelineId: number; branch: string }
   | { step: 'develop'; from: string }
 
-export type StepState = 'done' | 'todo' | 'waiting' | 'running' | 'failed' | 'manual' | 'warn' | 'error'
+export type StepState = 'done' | 'todo' | 'waiting' | 'running' | 'failed' | 'optional' | 'warn' | 'error'
 
 export interface VersioningStep {
   id: 'files' | 'pipeline' | 'secure-file' | 'authorize' | 'build-service' | 'run' | 'develop' | 'pr-id' | 'policies'
@@ -233,8 +233,8 @@ export function versioningSteps(f: VersioningFacts, repo: RepoRef, project: stri
     steps.push(step)
   }
 
-  // 8. No API for this repository setting.
-  steps.push({ id: 'pr-id', title: 'Pull request ID in commit messages', state: 'manual', detail: 'Turn it off in Project settings → Repositories → this repository → Settings, before completing pull requests.' })
+  // 8. Optional: git-tools strips Azure's "Merged PR <id>:" prefix; turning it off only keeps history tidy. No API for it.
+  steps.push({ id: 'pr-id', title: 'Pull request ID in commit messages (optional)', state: 'optional', detail: 'Versioning works either way: git-tools ignores Azure\'s "Merged PR 42:" prefix. For tidier history, turn it off in Project settings → Repositories → this repository → Settings.' })
 
   // Policies that require pull requests also stop the bot's direct push.
   const guarded = Object.entries(f.policies).filter(([, kinds]) => kinds.length > 0).map(([b]) => b)
@@ -253,7 +253,7 @@ export type Overall = 'ready' | 'partial' | 'none' | 'error'
 
 /** One word for the repository card. */
 export function overall(steps: VersioningStep[]): Overall {
-  const core = steps.filter((s) => s.state !== 'manual' && s.state !== 'warn')
+  const core = steps.filter((s) => s.state !== 'optional' && s.state !== 'warn')
   if (core.some((s) => s.state === 'error')) return 'error'
   if (core.every((s) => s.state === 'done')) return 'ready'
   return core.find((s) => s.id === 'files')?.state === 'done' ? 'partial' : 'none'

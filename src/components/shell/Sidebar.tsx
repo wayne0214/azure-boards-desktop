@@ -1,4 +1,4 @@
-import { ChevronDown, Download, ClipboardList, Clock3, Columns3, DoorOpen, FileInput, FlaskConical, GitPullRequest, FolderKanban, LayoutDashboard, ListTree, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
+import { ChevronDown, Download, ClipboardList, Clock3, Columns3, DoorOpen, FileInput, FlaskConical, GitPullRequest, FolderKanban, ListTree, Tag, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { pendingImports, useImportStore } from '@/components/imports/useImportStore'
@@ -59,7 +59,7 @@ export function Sidebar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects, q, settings.pinnedProjects, activeOrg])
 
-  const openProject = (p: Project, target: 'overview' | 'board' | 'list' | 'reqs' | 'tests' | 'plans' | 'team') => {
+  const openProject = (p: Project, target: 'board' | 'list' | 'reqs' | 'tests' | 'plans' | 'team' | 'versioning') => {
     if (view !== target) setView(target)
     if (selectedProject?.id !== p.id) void selectProject(p)
   }
@@ -67,7 +67,6 @@ export function Sidebar() {
   const projectMenu = (p: Project) => {
     const url = activeOrg ? `https://dev.azure.com/${encodeURIComponent(activeOrg)}/${encodeURIComponent(p.name)}` : null
     void api().showContextMenu([
-      { label: 'Overview', action: () => openProject(p, 'overview') },
       { label: 'Requirements', action: () => openProject(p, 'reqs') },
       { label: 'Test Cases', action: () => openProject(p, 'tests') },
       { label: 'Test Plans', action: () => openProject(p, 'plans') },
@@ -75,6 +74,7 @@ export function Sidebar() {
       { label: 'Team', action: () => openProject(p, 'team') },
       { label: 'Open List', action: () => openProject(p, 'list') },
       { label: 'Pull Requests', action: () => { usePrStore.getState().setScope(p.id); setView('prs') } },
+      { label: 'Versioning', action: () => openProject(p, 'versioning') },
       { separator: true },
       { label: isPinned(p) ? 'Unpin' : 'Pin to Top', action: () => void togglePin(p) },
       { separator: true },
@@ -85,15 +85,15 @@ export function Sidebar() {
 
   const renderProject = (p: Project) => {
     const active = selectedProject?.id === p.id
-    const inProject = view === 'overview' || view === 'board' || view === 'list' || view === 'reqs' || view === 'tests' || view === 'plans' || view === 'team'
+    const inProject = view === 'board' || view === 'list' || view === 'reqs' || view === 'tests' || view === 'plans' || view === 'team' || view === 'versioning'
     const onBoard = view === 'board' || view === 'list'
     return (
       <div key={p.id}>
         <button
           type="button"
           className={`nav-item ${active && inProject ? 'parent' : ''}`}
-          // A project opens on its overview; from the board it stays on the board.
-          onClick={() => openProject(p, active && inProject ? (view as 'overview' | 'board' | 'list' | 'reqs' | 'tests' | 'plans' | 'team') : onBoard ? view : 'overview')}
+          // A project opens on its requirements; from the board it stays on the board.
+          onClick={() => openProject(p, active && inProject ? (view as 'board' | 'list' | 'reqs' | 'tests' | 'plans' | 'team' | 'versioning') : onBoard ? view : 'reqs')}
           onContextMenu={(e) => { e.preventDefault(); projectMenu(p) }}
           title={p.description ?? p.name}
         >
@@ -111,10 +111,6 @@ export function Sidebar() {
         </button>
         {active && (
           <div className="nav-sub">
-            <button type="button" className={`nav-item ${view === 'overview' ? 'active' : ''}`} onClick={() => openProject(p, 'overview')}>
-              <span className="ico"><LayoutDashboard size={14} /></span>
-              <span className="label">Overview</span>
-            </button>
             <button type="button" className={`nav-item ${view === 'reqs' ? 'active' : ''}`} onClick={() => openProject(p, 'reqs')}>
               <span className="ico"><ListTree size={14} /></span>
               <span className="label">Requirements</span>
@@ -143,6 +139,10 @@ export function Sidebar() {
             <button type="button" className={`nav-item ${view === 'prs' && prScope === p.id ? 'active' : ''}`} onClick={() => { usePrStore.getState().setScope(p.id); setView('prs') }}>
               <span className="ico"><GitPullRequest size={14} /></span>
               <span className="label">Pull Requests</span>
+            </button>
+            <button type="button" className={`nav-item ${view === 'versioning' ? 'active' : ''}`} onClick={() => openProject(p, 'versioning')}>
+              <span className="ico"><Tag size={14} /></span>
+              <span className="label">Versioning</span>
             </button>
           </div>
         )}

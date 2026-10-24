@@ -70,7 +70,7 @@ describe('versioningSteps', () => {
     const steps = versioningSteps({ ...ready, policies: { master: ['Minimum number of reviewers'], develop: [] } }, repo, project).steps
     expect(overall(steps)).toBe('ready')
     expect(steps.find((x) => x.id === 'policies')?.detail).toContain('master has branch policies')
-    expect(steps.find((x) => x.id === 'pr-id')?.state).toBe('manual')
+    expect(steps.find((x) => x.id === 'pr-id')?.state).toBe('optional')
   })
 
   it('names the token scope a 403 needs instead of failing the whole check', () => {

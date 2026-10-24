@@ -1894,13 +1894,7 @@ input.input.tp-version-input { width: 140px; height: 30px; font-size: var(--fs-s
 .mini-booking svg { margin-top: 2px; color: var(--accent); flex-shrink: 0; }
 .mini-drop { display: flex; align-items: center; gap: 6px; margin: 10px 12px 0; padding: 8px; border: 1px dashed var(--border-strong); border-radius: 8px; font-size: 12px; }
 
-/* Project overview */
-.ov-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 4px 0 20px; }
-.ov-link { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--text); font-size: var(--fs-sm); text-align: left; cursor: pointer; }
-.ov-link:hover { border-color: var(--border-strong); background: var(--bg-hover); }
-.ov-link svg { color: var(--accent); flex: 0 0 auto; }
-.ov-section { margin: 0 0 2px; font-size: var(--fs-md); font-weight: 600; }
-.ov-hint { margin: 0 0 10px; font-size: var(--fs-xs); }
+/* Versioning */
 .ov-repos { display: flex; flex-direction: column; gap: 8px; }
 .ov-repo { background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
 .ov-repo-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; background: none; border: 0; color: var(--text); font-size: var(--fs-sm); text-align: left; cursor: pointer; flex-wrap: wrap; }
@@ -1915,7 +1909,8 @@ input.input.tp-version-input { width: 140px; height: 30px; font-size: var(--fs-s
 .ov-step.done .ov-state { background: var(--success-soft); color: var(--success); }
 .ov-step.todo .ov-state, .ov-step.running .ov-state { background: var(--accent-soft); color: var(--accent); }
 .ov-step.failed .ov-state, .ov-step.error .ov-state { background: var(--danger-soft); color: var(--danger); }
-.ov-step.warn .ov-state, .ov-step.manual .ov-state { background: var(--warn-soft); color: var(--warn); }
+.ov-step.warn .ov-state { background: var(--warn-soft); color: var(--warn); }
+.ov-step.optional .ov-step-title { font-weight: 500; color: var(--text-2); }
 .ov-step-text { flex: 1; min-width: 0; }
 .ov-step-title { font-weight: 600; }
 .ov-step.done .ov-step-title, .ov-step.waiting .ov-step-title { font-weight: 500; color: var(--text-2); }

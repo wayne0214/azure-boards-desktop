@@ -1,5 +1,5 @@
-import { AlertTriangle, Check, ChevronDown, ChevronRight, CircleDashed, ClipboardList, Columns3, ExternalLink, FlaskConical, GitBranch, GitPullRequest, Hand, ListTree, Loader2, RefreshCw, Users, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, CircleDashed, GitBranch, Info, Loader2, RefreshCw, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Empty } from '@/components/ui/Empty'
 import { api } from '@/lib/api'
 import { confirmAsync } from '@/lib/confirm'
@@ -8,8 +8,7 @@ import { errorMessage } from '@/lib/types'
 import { overall, versioningSteps, type Overall, type StepState, type VersioningFacts, type VersioningStep } from '@/lib/versioning/evaluate'
 import { WORKFLOW_PATH, defaultNames } from '@/lib/versioning/template'
 import { useAppStore } from '@/store/useAppStore'
-import { usePrStore } from '@/store/usePrStore'
-import { useUiStore, type View } from '@/store/useUiStore'
+import { useUiStore } from '@/store/useUiStore'
 
 /** Repositories checked as soon as the page opens; the rest when expanded. */
 const AUTO_CHECK = 6
@@ -17,15 +16,6 @@ const AUTO_CHECK = 6
 const RUN_POLL_MS = 10000
 
 type Check = { facts?: VersioningFacts; loading: boolean; error?: string }
-
-const LINKS: { view: View; label: string; icon: ReactNode }[] = [
-  { view: 'reqs', label: 'Requirements', icon: <ListTree size={18} /> },
-  { view: 'tests', label: 'Test Cases', icon: <FlaskConical size={18} /> },
-  { view: 'plans', label: 'Test Plans', icon: <ClipboardList size={18} /> },
-  { view: 'board', label: 'Board', icon: <Columns3 size={18} /> },
-  { view: 'team', label: 'Team', icon: <Users size={18} /> },
-  { view: 'prs', label: 'Pull Requests', icon: <GitPullRequest size={18} /> },
-]
 
 const BADGE: Record<Overall, { label: string; cls: string }> = {
   ready: { label: 'Versioning ready', cls: 'ok' },
@@ -40,16 +30,15 @@ function StateIcon({ state }: { state: StepState }) {
     case 'running': return <Loader2 size={14} className="spin" />
     case 'failed': case 'error': return <X size={14} />
     case 'warn': return <AlertTriangle size={14} />
-    case 'manual': return <Hand size={14} />
+    case 'optional': return <Info size={14} />
     default: return <CircleDashed size={14} />
   }
 }
 
-/** A project's front page: where to go next, its repositories, and each repository's git-tools versioning setup. */
-export function ProjectOverview() {
+/** Each repository's git-tools versioning setup on Azure Pipelines, as a checklist with fixes. */
+export function VersioningView() {
   const org = useAppStore((s) => s.activeOrg)
   const project = useAppStore((s) => s.selectedProject)
-  const setView = useUiStore((s) => s.setView)
   const toast = useUiStore((s) => s.toast)
   const [repos, setRepos] = useState<Repo[] | null>(null)
   const [reposError, setReposError] = useState<string | null>(null)
@@ -113,13 +102,9 @@ export function ProjectOverview() {
     return () => window.clearInterval(t)
   }, [running, checks, check])
 
-  if (!project || !org) return <Empty title="Choose a project">Pick a project in the sidebar to see its overview.</Empty>
+  if (!project || !org) return <Empty title="Choose a project">Pick a project in the sidebar to set up versioning for its repositories.</Empty>
 
   const url = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project.name)}`
-  const go = (v: View) => {
-    if (v === 'prs') usePrStore.getState().setScope(project.id)
-    setView(v)
-  }
   const toggle = (r: Repo) => {
     const n = new Set(open)
     if (n.has(r.id)) n.delete(r.id)
@@ -156,29 +141,17 @@ export function ProjectOverview() {
   }
 
   return (
-    <div className="req overview">
+    <div className="req versioning">
       <div className="req-head">
         <div className="req-title">
-          <strong>{project.name}</strong>
-          {project.description && <span className="faint">{project.description}</span>}
+          <strong>Versioning</strong>
+          <span className="faint">git-tools on Azure Pipelines: conventional commits on Git Flow branches bump .cz.toml and tag each release.</span>
         </div>
         <span className="grow" />
-        <button type="button" className="btn sm ghost" onClick={() => void api().openUrl(url)}><ExternalLink size={14} /> Open in Azure DevOps</button>
         <button type="button" className="icon-btn" title="Reload" onClick={() => void load()} disabled={repos === null && !reposError}><RefreshCw size={16} className={repos === null && !reposError ? 'spin' : ''} /></button>
       </div>
 
       <div className="req-body">
-        <div className="ov-links">
-          {LINKS.map((l) => (
-            <button key={l.view} type="button" className="ov-link" onClick={() => go(l.view)}>
-              {l.icon}<span>{l.label}</span>
-            </button>
-          ))}
-        </div>
-
-        <h3 className="ov-section">Repositories</h3>
-        <p className="faint ov-hint">Versioning is git-tools on Azure Pipelines: conventional commits on Git Flow branches bump .cz.toml and tag each release.</p>
-
         {reposError ? (
           <div className="ts-note danger"><span className="msg">{reposError}</span><button type="button" className="btn sm primary" onClick={() => void load()}>Try again</button></div>
         ) : repos === null ? (

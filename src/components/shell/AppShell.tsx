@@ -20,7 +20,7 @@ import { TestCasesView } from '../testcases/TestCasesView'
 import { PlansView } from '../plans/PlansView'
 import { TeamView } from '../team/TeamView'
 import { PrView } from '../pr/PrView'
-import { ProjectOverview } from '../overview/ProjectOverview'
+import { VersioningView } from '../versioning/VersioningView'
 import { CompletePrSheet } from '../pr/CompletePrSheet'
 import { NewPrSheet } from '../pr/NewPrSheet'
 import { checkForUpdates, startUpdateChecks } from '@/lib/updater'
@@ -44,7 +44,7 @@ import { MiniView } from '../mini/MiniView'
 import { refreshCurrentView, refreshInBackground, refreshOnFocus } from '@/lib/refresh'
 import { usePrStore } from '@/store/usePrStore'
 
-const VIEW_NAMES: Record<View, string> = { board: 'The board', list: 'The list', mine: 'My Work', timesheet: 'Timesheet', prs: 'Pull Requests', rooms: 'Meeting Rooms', reqs: 'Requirements', tests: 'Test Cases', plans: 'Test Plans', team: 'Team', imports: 'Imports', overview: 'Project overview' }
+const VIEW_NAMES: Record<View, string> = { board: 'The board', list: 'The list', mine: 'My Work', timesheet: 'Timesheet', prs: 'Pull Requests', rooms: 'Meeting Rooms', reqs: 'Requirements', tests: 'Test Cases', plans: 'Test Plans', team: 'Team', imports: 'Imports', versioning: 'Versioning' }
 
 export function AppShell() {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen)
@@ -227,7 +227,7 @@ export function AppShell() {
         <div className="main-body">
           <div className="content" onClick={onBlankClick}>
             <ErrorBoundary key={view} where={VIEW_NAMES[view]} inline>
-            {view === 'overview' ? <ProjectOverview /> : view === 'imports' ? <ImportsView /> : view === 'team' ? <TeamView /> : view === 'reqs' ? <RequirementsView /> : view === 'tests' ? <TestCasesView /> : view === 'plans' ? <PlansView /> : view === 'rooms' ? <MeetingRoomView /> : view === 'prs' ? <PrView /> : view === 'timesheet' ? <TimesheetView /> : view === 'mine' ? <MyWorkView /> : view === 'list' ? <ListView /> : <BoardView />}
+            {view === 'versioning' ? <VersioningView /> : view === 'imports' ? <ImportsView /> : view === 'team' ? <TeamView /> : view === 'reqs' ? <RequirementsView /> : view === 'tests' ? <TestCasesView /> : view === 'plans' ? <PlansView /> : view === 'rooms' ? <MeetingRoomView /> : view === 'prs' ? <PrView /> : view === 'timesheet' ? <TimesheetView /> : view === 'mine' ? <MyWorkView /> : view === 'list' ? <ListView /> : <BoardView />}
             </ErrorBoundary>
           </div>
           {inspectorOpen && view !== 'timesheet' && view !== 'rooms' && view !== 'imports' && <Inspector floating={view !== 'board'} />}
