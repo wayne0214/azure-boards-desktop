@@ -4,3 +4,4 @@ pub mod wiql;
 pub mod pr;
 pub mod testplans;
 pub mod plans;
+pub mod versioning;

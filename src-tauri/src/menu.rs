@@ -102,6 +102,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
                 .accelerator("CmdOrCtrl+I")
                 .build(app)?,
         )
+        .item(&MenuItemBuilder::with_id("toggle-mini", "Mini Mode").accelerator("CmdOrCtrl+Shift+D").build(app)?)
         .separator()
         .item(&MenuItemBuilder::with_id("text-bigger", "Make Text Bigger").accelerator("CmdOrCtrl+=").build(app)?)
         .item(&MenuItemBuilder::with_id("text-smaller", "Make Text Smaller").accelerator("CmdOrCtrl+-").build(app)?)

@@ -206,6 +206,8 @@ Do this after every release or hotfix, so `develop` gets the fixes without takin
 
 3. Open the PR into `develop` titled `Backmerge Release 1.1.0` and merge it. For a hotfix, use `--backmerge-hotfix-pr` and the title `Backmerge Hotfix X.Y.Z`.
 4. Delete the release (or hotfix) branch and the integration branch.
+5. Open the next cycle on `develop`: title the next feature PR into `develop` `Start X.Y.Z` (for example `Start 1.3.0` after releasing 1.2.0) and squash-merge it with that subject. CI tags `X.Y.Z-alpha.0`. Without it, `develop` keeps tagging the old line (`1.1.0-alpha.N` after 1.2.0 shipped).
+   - `Start` only accepts the next step from `develop`'s version. If the back-merge changed no files, git-tools skips catching `develop` up to the release, and `Start` fails with "not a valid next-cycle target". Fix it first with a PR into `develop` titled `chore(release): catch develop up to X.Y.Z` that only sets the version files to the released version; the bump workflow skips `chore(release):` commits.
 
 ### If a tag didn't get pushed
 

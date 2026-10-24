@@ -78,7 +78,7 @@ const __ts = {
   async confirmDialog(re, timeout = 2500) {
     const t0 = Date.now();
     while (Date.now() - t0 < timeout) {
-      const btn = Array.from(document.querySelectorAll('[role=dialog] button, .rz-dialog button')).find((b) => re.test(__ts.text(b)));
+      const btn = Array.from(document.querySelectorAll('[role=dialog] button, [role=alertdialog] button, .rz-dialog button')).find((b) => re.test(__ts.text(b)));
       if (btn) { btn.click(); await this.sleep(400); return true; }
       await this.sleep(150);
     }
@@ -101,9 +101,10 @@ const __ts = {
       if (dayTexts.length < 7) continue;
       const hours = dayTexts.map((t) => __ts.parseHours(t === '—' ? '0' : t));
       const total = __ts.parseHours(texts[projectIdx + 8] || '0');
-      const actionsText = texts.slice(projectIdx + 9).join(' ');
+      // The status badge may sit in the first cell or among the actions.
+      const statusText = texts.slice(0, projectIdx).concat(texts.slice(projectIdx + 9)).join(' ');
       const buttons = Array.from(row.querySelectorAll('button')).map((b) => __ts.text(b) || b.getAttribute('aria-label') || '');
-      const status = /approved/i.test(actionsText) ? 'approved' : /submitted/i.test(actionsText) ? 'submitted' : /reject|needs/i.test(actionsText) ? 'rejected' : 'saved';
+      const status = /approved/i.test(statusText) ? 'approved' : /submitted|awaiting/i.test(statusText) ? 'submitted' : /reject|needs/i.test(statusText) ? 'rejected' : 'saved';
       const locked = !buttons.some((b) => /edit/i.test(b));
       rows.push({ project, hours, total, status, locked, buttons, index: all.indexOf(row) });
     }
@@ -311,16 +312,32 @@ export function saveRowBody(project: string, hours: number[], note: string): str
   `
 }
 
-/** On the Saved entries page, submit everything that is saved. */
-export const submitAllBody = `
+/**
+ * On the week page, press "Submit saved" in the Saved group's header and confirm.
+ * Only this week's saved rows go; the Saved entries page's "Submit all saved" would send every week.
+ */
+export const submitWeekBody = `
   if (__ts.isLogin()) throw new Error('login');
   await __ts.waitFor(() => document.querySelector('[role=grid]'), 20000);
-  await __ts.sleep(400);
-  if (/no saved entries/i.test(__ts.text(document.querySelector('main')))) return { submitted: 0 };
-  const btn = __ts.buttonByText(/submit all saved/i);
-  if (!btn) throw new Error('Submit all saved button not found');
+  const findSubmit = () => {
+    const b = document.querySelector('button.ts-action--submit') || __ts.buttonByText(/^(send\\s*)?submit saved$/i);
+    return b && !b.disabled && b.getAttribute('aria-disabled') !== 'true' ? b : null;
+  };
+  // The grid may draw before its rows arrive: only call the week empty once its rows have stayed without a saved one.
+  const t0 = Date.now();
+  let quietSince = 0;
+  let btn = null;
+  while (Date.now() - t0 < 15000) {
+    btn = findSubmit();
+    if (btn) break;
+    const rows = __ts.readWeek().rows;
+    if (rows.length && rows.every((r) => r.locked)) { quietSince = quietSince || Date.now(); if (Date.now() - quietSince > 2000) return { submitted: 0 }; }
+    else quietSince = 0;
+    await __ts.sleep(200);
+  }
+  if (!btn) throw new Error('Submit saved button not found');
   btn.click();
-  await __ts.confirmDialog(/^(yes|submit|confirm|ok|submit all)$/i, 3000);
-  await __ts.waitFor(() => /no saved entries/i.test(__ts.text(document.querySelector('main'))), 20000);
+  if (!(await __ts.confirmDialog(/^(ok|yes|submit|confirm)$/i, 5000))) throw new Error('The submit confirmation did not appear');
+  await __ts.waitFor(() => !findSubmit(), 20000, 200, 'the week to show as submitted');
   return { submitted: true };
 `

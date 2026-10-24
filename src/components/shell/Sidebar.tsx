@@ -1,4 +1,4 @@
-import { ChevronDown, Download, ClipboardList, Clock3, Columns3, DoorOpen, FileInput, FlaskConical, GitPullRequest, FolderKanban, ListTree, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
+import { ChevronDown, Download, Clock3, Columns3, DoorOpen, FileInput, FlaskConical, GitPullRequest, FolderKanban, ListTree, Tag, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { pendingImports, useImportStore } from '@/components/imports/useImportStore'
@@ -7,7 +7,7 @@ import { installUpdate, useUpdateStore } from '@/lib/updater'
 import { useAppStore } from '@/store/useAppStore'
 import { attentionCount, useMyWorkStore } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
-import { useUiStore } from '@/store/useUiStore'
+import { lastTestingView, useUiStore } from '@/store/useUiStore'
 import type { Project } from '@/lib/types'
 
 export function Sidebar() {
@@ -59,7 +59,7 @@ export function Sidebar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects, q, settings.pinnedProjects, activeOrg])
 
-  const openProject = (p: Project, target: 'board' | 'list' | 'reqs' | 'tests' | 'plans' | 'team') => {
+  const openProject = (p: Project, target: 'board' | 'list' | 'reqs' | 'tests' | 'plans' | 'team' | 'versioning') => {
     if (view !== target) setView(target)
     if (selectedProject?.id !== p.id) void selectProject(p)
   }
@@ -68,12 +68,12 @@ export function Sidebar() {
     const url = activeOrg ? `https://dev.azure.com/${encodeURIComponent(activeOrg)}/${encodeURIComponent(p.name)}` : null
     void api().showContextMenu([
       { label: 'Requirements', action: () => openProject(p, 'reqs') },
-      { label: 'Test Cases', action: () => openProject(p, 'tests') },
-      { label: 'Test Plans', action: () => openProject(p, 'plans') },
+      { label: 'Testing', action: () => openProject(p, lastTestingView()) },
       { label: 'Open Board', action: () => openProject(p, 'board') },
       { label: 'Team', action: () => openProject(p, 'team') },
       { label: 'Open List', action: () => openProject(p, 'list') },
       { label: 'Pull Requests', action: () => { usePrStore.getState().setScope(p.id); setView('prs') } },
+      { label: 'Versioning', action: () => openProject(p, 'versioning') },
       { separator: true },
       { label: isPinned(p) ? 'Unpin' : 'Pin to Top', action: () => void togglePin(p) },
       { separator: true },
@@ -84,7 +84,7 @@ export function Sidebar() {
 
   const renderProject = (p: Project) => {
     const active = selectedProject?.id === p.id
-    const inProject = view === 'board' || view === 'list' || view === 'reqs' || view === 'tests' || view === 'plans' || view === 'team'
+    const inProject = view === 'board' || view === 'list' || view === 'reqs' || view === 'tests' || view === 'plans' || view === 'team' || view === 'versioning'
     const onBoard = view === 'board' || view === 'list'
     return (
       <div key={p.id}>
@@ -92,7 +92,7 @@ export function Sidebar() {
           type="button"
           className={`nav-item ${active && inProject ? 'parent' : ''}`}
           // A project opens on its requirements; from the board it stays on the board.
-          onClick={() => openProject(p, active && inProject ? (view as 'board' | 'list' | 'reqs' | 'tests' | 'plans' | 'team') : onBoard ? view : 'reqs')}
+          onClick={() => openProject(p, active && inProject ? (view as 'board' | 'list' | 'reqs' | 'tests' | 'plans' | 'team' | 'versioning') : onBoard ? view : 'reqs')}
           onContextMenu={(e) => { e.preventDefault(); projectMenu(p) }}
           title={p.description ?? p.name}
         >
@@ -114,13 +114,9 @@ export function Sidebar() {
               <span className="ico"><ListTree size={14} /></span>
               <span className="label">Requirements</span>
             </button>
-            <button type="button" className={`nav-item ${view === 'tests' ? 'active' : ''}`} onClick={() => openProject(p, 'tests')}>
+            <button type="button" className={`nav-item ${view === 'tests' || view === 'plans' ? 'active' : ''}`} onClick={() => openProject(p, view === 'tests' || view === 'plans' ? view : lastTestingView())}>
               <span className="ico"><FlaskConical size={14} /></span>
-              <span className="label">Test Cases</span>
-            </button>
-            <button type="button" className={`nav-item ${view === 'plans' ? 'active' : ''}`} onClick={() => openProject(p, 'plans')}>
-              <span className="ico"><ClipboardList size={14} /></span>
-              <span className="label">Test Plans</span>
+              <span className="label">Testing</span>
             </button>
             <button type="button" className={`nav-item ${onBoard ? 'active' : ''}`} onClick={() => openProject(p, view === 'list' ? 'list' : 'board')}>
               <span className="ico"><Columns3 size={14} /></span>
@@ -138,6 +134,10 @@ export function Sidebar() {
             <button type="button" className={`nav-item ${view === 'prs' && prScope === p.id ? 'active' : ''}`} onClick={() => { usePrStore.getState().setScope(p.id); setView('prs') }}>
               <span className="ico"><GitPullRequest size={14} /></span>
               <span className="label">Pull Requests</span>
+            </button>
+            <button type="button" className={`nav-item ${view === 'versioning' ? 'active' : ''}`} onClick={() => openProject(p, 'versioning')}>
+              <span className="ico"><Tag size={14} /></span>
+              <span className="label">Versioning</span>
             </button>
           </div>
         )}

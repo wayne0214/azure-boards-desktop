@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ImagePlus } from 'lucide-react'
 import { api } from '@/lib/api'
 import { itemUrl } from '@/lib/format'
+import { listenForPastedImages, takesImages } from '@/lib/pasteBug'
 import { inEditable, isModKey } from '@/lib/shortcuts'
 import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
@@ -19,6 +20,7 @@ import { TestCasesView } from '../testcases/TestCasesView'
 import { PlansView } from '../plans/PlansView'
 import { TeamView } from '../team/TeamView'
 import { PrView } from '../pr/PrView'
+import { VersioningView } from '../versioning/VersioningView'
 import { CompletePrSheet } from '../pr/CompletePrSheet'
 import { NewPrSheet } from '../pr/NewPrSheet'
 import { checkForUpdates, startUpdateChecks } from '@/lib/updater'
@@ -38,10 +40,12 @@ import { StatusBar } from './StatusBar'
 import { Toolbar } from './Toolbar'
 import { confirmAsync } from '@/lib/confirm'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
+import { MiniView } from '../mini/MiniView'
+import { fitMiniPopup } from '@/lib/miniWindow'
 import { refreshCurrentView, refreshInBackground, refreshOnFocus } from '@/lib/refresh'
 import { usePrStore } from '@/store/usePrStore'
 
-const VIEW_NAMES: Record<View, string> = { board: 'The board', list: 'The list', mine: 'My Work', timesheet: 'Timesheet', prs: 'Pull Requests', rooms: 'Meeting Rooms', reqs: 'Requirements', tests: 'Test Cases', plans: 'Test Plans', team: 'Team', imports: 'Imports' }
+const VIEW_NAMES: Record<View, string> = { board: 'The board', list: 'The list', mine: 'My Work', timesheet: 'Timesheet', prs: 'Pull Requests', rooms: 'Meeting Rooms', reqs: 'Requirements', tests: 'Test Cases', plans: 'Test Plans', team: 'Team', imports: 'Imports', versioning: 'Versioning' }
 
 export function AppShell() {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen)
@@ -52,6 +56,7 @@ export function AppShell() {
   const density = useUiStore((s) => s.density)
   const pending = useUiStore((s) => s.pending > 0)
   const paletteOpen = useUiStore((s) => s.paletteOpen)
+  const mini = useUiStore((s) => s.mini)
 
   const runCommand = useCallback((id: string) => {
     const ui = useUiStore.getState()
@@ -76,6 +81,7 @@ export function AppShell() {
       case 'view-rooms': ui.setView('rooms'); break
       case 'toggle-sidebar': ui.toggleSidebar(); break
       case 'toggle-inspector': ui.toggleInspector(); break
+      case 'toggle-mini': ui.setMini(!ui.mini); break
       case 'text-bigger': ui.setTextScale(ui.textScale + 0.1); break
       case 'text-smaller': ui.setTextScale(ui.textScale - 0.1); break
       case 'text-reset': ui.setTextScale(1); break
@@ -106,6 +112,7 @@ export function AppShell() {
       if (mod && k === 'f') { e.preventDefault(); runCommand('find'); return }
       if (mod && k === 'i' && !e.shiftKey) { e.preventDefault(); runCommand('toggle-inspector'); return }
       if (mod && e.shiftKey && k === 's') { e.preventDefault(); runCommand('toggle-sidebar'); return }
+      if (mod && e.shiftKey && k === 'd') { e.preventDefault(); runCommand('toggle-mini'); return }
       if (mod && e.shiftKey && k === 'i') { e.preventDefault(); runCommand('import'); return }
       if (mod && e.shiftKey && k === 'e') { e.preventDefault(); runCommand('export'); return }
       if (mod && e.shiftKey && k === 'm') { e.preventDefault(); runCommand('assign-me'); return }
@@ -139,7 +146,7 @@ export function AppShell() {
   useEffect(() => {
     const hasImage = (e: DragEvent) => Array.from(e.dataTransfer?.items ?? []).some((i) => i.kind === 'file' && i.type.startsWith('image/'))
     // Rich text fields and the run screenshot area take the image themselves.
-    const ownDrop = (t: EventTarget | null) => t instanceof Element && !!t.closest('[contenteditable="true"], .tc-drop, input, textarea')
+    const ownDrop = takesImages
     const free = () => !useUiStore.getState().sheet
     const onOver = (e: DragEvent) => {
       if (!e.dataTransfer?.types.includes('Files')) return
@@ -160,8 +167,22 @@ export function AppShell() {
     }
     window.addEventListener('dragover', onOver)
     window.addEventListener('drop', onDrop)
-    return () => { window.removeEventListener('dragover', onOver); window.removeEventListener('drop', onDrop) }
+    // Pasting a screenshot outside a field does the same.
+    const stopPaste = listenForPastedImages((images) => useUiStore.getState().openSheet('new-item', { type: 'Bug', images }), free)
+    return () => {
+      window.removeEventListener('dragover', onOver)
+      window.removeEventListener('drop', onDrop)
+      stopPaste()
+    }
   }, [])
+
+  // In mini mode the bug form fills the small window, which grows only if it is too small for it.
+  const popup = mini && sheet === 'new-item'
+  useEffect(() => {
+    document.body.classList.toggle('mini-popup', popup)
+    if (!mini) return
+    fitMiniPopup(popup).catch((e) => useUiStore.getState().toast({ kind: 'error', title: 'Could not resize the window', detail: String((e as Error)?.message ?? e) }))
+  }, [mini, popup])
 
   // The sidebar counts load as soon as an organization is active, so they are right from the start.
   useEffect(() => {
@@ -195,6 +216,18 @@ export function AppShell() {
     if (useUiStore.getState().inspectorOpen) useUiStore.getState().toggleInspector(false)
   }
 
+  const dropOverlay = dropHint && <div className="drop-hint"><div><ImagePlus size={28} /><b>Drop to report a bug</b><span>The image goes into a new Bug's Symptom.</span></div></div>
+
+  if (mini) {
+    return (
+      <div className={`shell-mini ${density}`}>
+        <ErrorBoundary where="Mini mode" inline><MiniView /></ErrorBoundary>
+        {sheet === 'new-item' && <NewItemSheet />}
+        {dropOverlay}
+      </div>
+    )
+  }
+
   return (
     <div className={`shell ${sidebarOpen ? '' : 'no-sidebar'} ${density} ${pending ? 'pending' : ''}`}>
       <div className={`busy-bar ${pending ? 'on' : ''}`} role="progressbar" aria-hidden={!pending} aria-label="Sending to Azure DevOps" />
@@ -204,7 +237,7 @@ export function AppShell() {
         <div className="main-body">
           <div className="content" onClick={onBlankClick}>
             <ErrorBoundary key={view} where={VIEW_NAMES[view]} inline>
-            {view === 'imports' ? <ImportsView /> : view === 'team' ? <TeamView /> : view === 'reqs' ? <RequirementsView /> : view === 'tests' ? <TestCasesView /> : view === 'plans' ? <PlansView /> : view === 'rooms' ? <MeetingRoomView /> : view === 'prs' ? <PrView /> : view === 'timesheet' ? <TimesheetView /> : view === 'mine' ? <MyWorkView /> : view === 'list' ? <ListView /> : <BoardView />}
+            {view === 'versioning' ? <VersioningView /> : view === 'imports' ? <ImportsView /> : view === 'team' ? <TeamView /> : view === 'reqs' ? <RequirementsView /> : view === 'tests' ? <TestCasesView /> : view === 'plans' ? <PlansView /> : view === 'rooms' ? <MeetingRoomView /> : view === 'prs' ? <PrView /> : view === 'timesheet' ? <TimesheetView /> : view === 'mine' ? <MyWorkView /> : view === 'list' ? <ListView /> : <BoardView />}
             </ErrorBoundary>
           </div>
           {inspectorOpen && view !== 'timesheet' && view !== 'rooms' && view !== 'imports' && <Inspector floating={view !== 'board'} />}
@@ -222,7 +255,7 @@ export function AppShell() {
       {sheet === 'whats-new' && <WhatsNewSheet />}
       <GitToolsPanel />
       {paletteOpen && <CommandPalette onCommand={runCommand} />}
-      {dropHint && <div className="drop-hint"><div><ImagePlus size={28} /><b>Drop to report a bug</b><span>The image goes into a new Bug's Symptom.</span></div></div>}
+      {dropOverlay}
     </div>
   )
 }

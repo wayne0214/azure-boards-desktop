@@ -137,7 +137,7 @@ FILES=("$OUT"/*)
 PRERELEASE=()
 case "$VERSION" in *-*) PRERELEASE=(--prerelease) ;; esac
 if gh release view "$TAG" >/dev/null 2>&1; then
-  echo "Updating the existing release $TAG…"
+  echo "Updating the existing release ${TAG}…"
   gh release upload "$TAG" "${FILES[@]}" --clobber
 else
   # The ${…+…} form: macOS's bash 3.2 treats an empty array as unset under set -u.

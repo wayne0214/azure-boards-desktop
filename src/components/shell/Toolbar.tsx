@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronDown, ClipboardList, Clock3, DoorOpen, FlaskConical, ListTree, Users, GitPullRequest, Columns3, ExternalLink, Filter, LayoutList, PanelLeft, PanelRight, Plus, RefreshCw, Search, User, X, FileInput } from 'lucide-react'
+import { CalendarDays, Tag, ChevronDown, ClipboardList, Clock3, DoorOpen, FlaskConical, ListTree, Users, GitPullRequest, Columns3, ExternalLink, Filter, LayoutList, PanelLeft, PanelRight, Plus, RefreshCw, Search, User, X, FileInput } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { boardUrl } from '@/lib/format'
@@ -118,8 +118,10 @@ export function Toolbar() {
   const isReqs = view === 'reqs' || view === 'tests' || view === 'plans'
   const isTests = view === 'tests'
   const isPlans = view === 'plans'
-  const section = isPlans ? 'Test Plans' : isTests ? 'Test Cases' : 'Requirements'
+  const isTesting = isTests || isPlans
+  const section = isTesting ? 'Testing' : 'Requirements'
   const isTeam = view === 'team'
+  const isVersioning = view === 'versioning'
   const refreshing = isMine ? mineLoading : boardRefreshing
 
   return (
@@ -135,15 +137,27 @@ export function Toolbar() {
         </button>
       )}
 
-      {isTeam ? (
+      {isVersioning ? (
+        <div className="crumbs no-drag">
+          <span className="crumb"><Tag size={16} /><span className="txt">{project?.name ?? 'Versioning'}</span></span>
+          {project && <><span className="crumb-sep">/</span><span className="crumb sub"><span className="txt">Versioning</span></span></>}
+        </div>
+      ) : isTeam ? (
         <div className="crumbs no-drag">
           <span className="crumb"><Users size={16} /><span className="txt">{project?.name ?? 'Team'}</span></span>
           {project && <><span className="crumb-sep">/</span><span className="crumb sub"><span className="txt">Team</span></span></>}
         </div>
       ) : isReqs ? (
         <div className="crumbs no-drag">
-          <span className="crumb">{isPlans ? <ClipboardList size={16} /> : isTests ? <FlaskConical size={16} /> : <ListTree size={16} />}<span className="txt">{project ? `${project.name}` : section}</span></span>
-          {project && <><span className="crumb-sep">/</span><span className="crumb sub"><span className="txt">{section}</span></span></>}
+          <span className="crumb">{isTesting ? <FlaskConical size={16} /> : <ListTree size={16} />}<span className="txt">{project ? `${project.name}` : section}</span></span>
+          {project && !isTesting && <><span className="crumb-sep">/</span><span className="crumb sub"><span className="txt">{section}</span></span></>}
+          {isTesting && (
+            // Test Cases and Test Plans are one sidebar item; this switches between them.
+            <div className="segmented toolbar-switch">
+              <button type="button" className={isTests ? 'on' : ''} onClick={() => setView('tests')}><FlaskConical size={14} /> Test Cases</button>
+              <button type="button" className={isPlans ? 'on' : ''} onClick={() => setView('plans')}><ClipboardList size={14} /> Test Plans</button>
+            </div>
+          )}
         </div>
       ) : isRooms ? (
         <div className="crumbs no-drag">
@@ -193,7 +207,7 @@ export function Toolbar() {
         </div>
       )}
 
-      {!isMine && !isTimesheet && !isPrs && !isRooms && !isReqs && !isTeam && project && (
+      {!isMine && !isTimesheet && !isPrs && !isRooms && !isReqs && !isTeam && !isVersioning && project && (
         <>
           <div className="search-box no-drag">
             <Search size={14} />
@@ -217,18 +231,18 @@ export function Toolbar() {
         </>
       )}
 
-      {!isTimesheet && !isPrs && !isRooms && !isReqs && !isTeam && <button type="button" className="icon-btn no-drag" onClick={refreshCurrentView} title="Refresh (⌘R)" disabled={refreshing}>
+      {!isTimesheet && !isPrs && !isRooms && !isReqs && !isTeam && !isVersioning && <button type="button" className="icon-btn no-drag" onClick={refreshCurrentView} title="Refresh (⌘R)" disabled={refreshing}>
         <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
       </button>}
-      {!isMine && !isTimesheet && !isPrs && !isRooms && !isReqs && !isTeam && project && team && boardId && !boardId.startsWith('virtual:') && (
+      {!isMine && !isTimesheet && !isPrs && !isRooms && !isReqs && !isTeam && !isVersioning && project && team && boardId && !boardId.startsWith('virtual:') && (
         <button type="button" className="icon-btn no-drag" title="Open in Azure DevOps" onClick={() => activeOrg && void api().openUrl(boardUrl(activeOrg, project.name, team.name, boards.find((b) => b.id === boardId)?.name ?? ''))}>
           <ExternalLink size={16} />
         </button>
       )}
-      {!isTimesheet && !isPrs && !isRooms && <button type="button" className={`icon-btn no-drag ${inspectorOpen ? 'on' : ''}`} onClick={() => toggleInspector()} title="Details (⌘I)">
+      {!isTimesheet && !isPrs && !isRooms && !isVersioning && <button type="button" className={`icon-btn no-drag ${inspectorOpen ? 'on' : ''}`} onClick={() => toggleInspector()} title="Details (⌘I)">
         <PanelRight size={17} />
       </button>}
-      {!isTimesheet && !isPrs && !isRooms && !isReqs && !isTeam && (project || isMine) && (
+      {!isTimesheet && !isPrs && !isRooms && !isReqs && !isTeam && !isVersioning && (project || isMine) && (
         <button type="button" className="btn primary no-drag" onClick={() => openSheet('new-item')} title="New work item (⌘N)">
           <Plus size={15} /> New
         </button>

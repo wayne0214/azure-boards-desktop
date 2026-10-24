@@ -1,6 +1,7 @@
 import { create } from 'zustand'
+import { setMiniWindow } from '@/lib/miniWindow'
 
-export type View = 'board' | 'list' | 'mine' | 'timesheet' | 'prs' | 'rooms' | 'reqs' | 'tests' | 'plans' | 'team' | 'imports'
+export type View = 'board' | 'list' | 'mine' | 'timesheet' | 'prs' | 'rooms' | 'reqs' | 'tests' | 'plans' | 'team' | 'imports' | 'versioning'
 export type SheetKind = 'new-item' | 'import' | 'settings' | 'shortcuts' | 'connect' | 'new-pr' | 'complete-pr' | 'start-work' | 'whats-new' | null
 export type Theme = 'system' | 'light' | 'dark'
 
@@ -30,6 +31,8 @@ interface UiState {
   doneDays: number
   /** Changes sent to Azure DevOps that have not answered yet. */
   pending: number
+  /** The window is a small always-on-top panel showing only what needs me. */
+  mini: boolean
 
   setView(v: View): void
   toggleSidebar(): void
@@ -39,6 +42,7 @@ interface UiState {
   setTheme(t: Theme): void
   setDensity(d: 'comfortable' | 'compact'): void
   setDoneDays(d: number): void
+  setMini(on: boolean): void
   openSheet(kind: SheetKind, payload?: Record<string, unknown>): void
   closeSheet(): void
   setPaletteOpen(open: boolean): void
@@ -65,6 +69,12 @@ const write = (key: string, value: unknown) => {
 
 let toastSeq = 1
 
+/** A bug reported by dropping or pasting a screenshot: in mini mode its form opens over the small window. */
+export const opensInMini = (sheet: SheetKind, payload?: Record<string, unknown>): boolean => sheet === 'new-item' && Array.isArray(payload?.images)
+
+/** Test Cases or Test Plans, whichever was open last: the sidebar's Testing item goes back to it. */
+export const lastTestingView = (): 'tests' | 'plans' => read<'tests' | 'plans'>('ui.testing', 'tests')
+
 export const useUiStore = create<UiState>((set, get) => ({
   view: read<View>('ui.view', 'board'),
   sidebarOpen: read('ui.sidebar', true),
@@ -79,9 +89,11 @@ export const useUiStore = create<UiState>((set, get) => ({
   density: read('ui.density', 'comfortable'),
   doneDays: read('ui.doneDays', 30),
   pending: 0,
+  mini: false,
 
   setView: (view) => {
     write('ui.view', view)
+    if (view === 'tests' || view === 'plans') write('ui.testing', view)
     // Moving to another section closes the details panel; it reopens when an item is picked there.
     set((s) => ({ view, inspectorOpen: view === s.view ? s.inspectorOpen : false }))
   },
@@ -113,7 +125,16 @@ export const useUiStore = create<UiState>((set, get) => ({
     write('ui.doneDays', doneDays)
     set({ doneDays })
   },
-  openSheet: (sheet, payload) => set({ sheet, sheetPayload: payload ?? null }),
+  setMini: (mini) => {
+    if (mini === get().mini) return
+    set({ mini, paletteOpen: false })
+    setMiniWindow(mini).catch((e) => get().toast({ kind: 'error', title: mini ? 'Could not switch to mini mode' : 'Could not restore the window', detail: String((e as Error)?.message ?? e) }))
+  },
+  // Forms need the full window, so opening one leaves mini mode; a bug from a screenshot opens as a popup over it.
+  openSheet: (sheet, payload) => {
+    if (sheet && get().mini && !opensInMini(sheet, payload)) get().setMini(false)
+    set({ sheet, sheetPayload: payload ?? null })
+  },
   closeSheet: () => set({ sheet: null, sheetPayload: null }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   toast: (t) => {
