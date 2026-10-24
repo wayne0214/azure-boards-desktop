@@ -1893,3 +1893,28 @@ input.input.tp-version-input { width: 140px; height: 30px; font-size: var(--fs-s
 .mini-booking { display: flex; align-items: flex-start; gap: 8px; margin: 8px 12px 0; padding: 8px; border-radius: 8px; background: var(--accent-soft); }
 .mini-booking svg { margin-top: 2px; color: var(--accent); flex-shrink: 0; }
 .mini-drop { display: flex; align-items: center; gap: 6px; margin: 10px 12px 0; padding: 8px; border: 1px dashed var(--border-strong); border-radius: 8px; font-size: 12px; }
+
+/* Versioning */
+.ov-repos { display: flex; flex-direction: column; gap: 8px; }
+.ov-repo { background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.ov-repo-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; background: none; border: 0; color: var(--text); font-size: var(--fs-sm); text-align: left; cursor: pointer; flex-wrap: wrap; }
+.ov-repo-head:hover { background: var(--bg-hover); }
+.ov-repo-head .nm { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-branch { font-family: var(--mono); font-size: var(--fs-xs); }
+.ov-steps { border-top: 1px solid var(--border); padding: 4px 12px 10px; }
+.ov-step { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
+.ov-step:last-of-type { border-bottom: 0; }
+.ov-step .btn { flex: 0 0 auto; align-self: center; }
+.ov-state { flex: 0 0 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--bg-hover); color: var(--text-3); }
+.ov-step.done .ov-state { background: var(--success-soft); color: var(--success); }
+.ov-step.todo .ov-state, .ov-step.running .ov-state { background: var(--accent-soft); color: var(--accent); }
+.ov-step.failed .ov-state, .ov-step.error .ov-state { background: var(--danger-soft); color: var(--danger); }
+.ov-step.warn .ov-state { background: var(--warn-soft); color: var(--warn); }
+.ov-step.optional .ov-step-title { font-weight: 500; color: var(--text-2); }
+.ov-step-text { flex: 1; min-width: 0; }
+.ov-step-title { font-weight: 600; }
+.ov-step.done .ov-step-title, .ov-step.waiting .ov-step-title { font-weight: 500; color: var(--text-2); }
+.ov-step-detail { color: var(--text-2); font-size: var(--fs-xs); margin-top: 2px; overflow-wrap: anywhere; }
+.ov-step.error .ov-step-detail, .ov-step.failed .ov-step-detail { color: var(--danger); }
+.ov-steps-foot { display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-size: var(--fs-xs); flex-wrap: wrap; }
+.ov-repo-head .grow, .ov-steps-foot .grow { flex: 1; }

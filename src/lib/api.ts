@@ -19,6 +19,7 @@ import type {
 } from './types'
 import type { BranchWorkItem, PrDetail, PullRequest, Repo, Thread } from './pr/types'
 import type { Booking, NewBooking, Room } from './rooms/types'
+import type { VersioningFacts, VersioningFix } from './versioning/evaluate'
 import type { Markable, NewPlanInput, RunInput, TpConfiguration, TpPlan, TpPoint, TpResult, TpRun, TpSuite } from './testplans/types'
 import { useUiStore } from '@/store/useUiStore'
 
@@ -105,6 +106,10 @@ export interface Api {
 
   // ----- Pull requests -----
   prListRepos(org: string, project: string): Promise<Repo[]>
+  /** What is set up for git-tools versioning in a repository; read only. */
+  versioningFacts(org: string, projectId: string, project: string, repoId: string, workflowPath: string, secureFile: string): Promise<VersioningFacts>
+  /** One versioning setup change, made only after the user confirms it. */
+  versioningFix(org: string, projectId: string, project: string, repoId: string, fix: VersioningFix): Promise<Record<string, unknown>>
   /** An empty project lists across the whole organization. */
   prList(org: string, project: string, status: string, opts?: { creatorId?: string; reviewerId?: string; repoId?: string; top?: number }): Promise<PullRequest[]>
   prDetail(org: string, projectId: string, repoId: string, prId: number): Promise<PrDetail>
