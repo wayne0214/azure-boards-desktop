@@ -3,6 +3,7 @@ import type { Booking } from './rooms/types'
 import type { WorkItem } from './types'
 import { waitingForReview } from './notify/watch'
 import { isFinished, stateCategory, type TypesByProject } from '@/store/useMyWorkStore'
+import { clock } from '@/store/useRoomStore'
 
 const changed = (it: WorkItem) => Date.parse(String(it.fields['System.ChangedDate'] ?? '')) || 0
 
@@ -41,12 +42,12 @@ export function nextBooking(bookings: Booking[] | null, now = Date.now()): Booki
   return (bookings ?? []).filter((b) => new Date(b.end_dt).getTime() > now).sort((a, b) => new Date(a.start_dt).getTime() - new Date(b.start_dt).getTime())[0] ?? null
 }
 
-/** "in 12 min", "now", "at 14:30" or "Tue 09:00" for a booking's start. */
+/** "in 12 min", "now", "at 2:30pm" or "Tue 9:00am" for a booking's start. */
 export function startsIn(b: Booking, now = Date.now()): string {
   const start = new Date(b.start_dt)
   const mins = Math.round((start.getTime() - now) / 60000)
   if (mins <= 0) return 'now'
   if (mins < 60) return `in ${mins} min`
-  const time = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const time = clock(start.getHours() * 60 + start.getMinutes())
   return start.toDateString() === new Date(now).toDateString() ? `at ${time}` : `${start.toLocaleDateString([], { weekday: 'short' })} ${time}`
 }

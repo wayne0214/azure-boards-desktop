@@ -41,6 +41,7 @@ import { Toolbar } from './Toolbar'
 import { confirmAsync } from '@/lib/confirm'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { MiniView } from '../mini/MiniView'
+import { fitMiniPopup } from '@/lib/miniWindow'
 import { refreshCurrentView, refreshInBackground, refreshOnFocus } from '@/lib/refresh'
 import { usePrStore } from '@/store/usePrStore'
 
@@ -175,6 +176,14 @@ export function AppShell() {
     }
   }, [])
 
+  // In mini mode the bug form fills the small window, which grows only if it is too small for it.
+  const popup = mini && sheet === 'new-item'
+  useEffect(() => {
+    document.body.classList.toggle('mini-popup', popup)
+    if (!mini) return
+    fitMiniPopup(popup).catch((e) => useUiStore.getState().toast({ kind: 'error', title: 'Could not resize the window', detail: String((e as Error)?.message ?? e) }))
+  }, [mini, popup])
+
   // The sidebar counts load as soon as an organization is active, so they are right from the start.
   useEffect(() => {
     void useMyWorkStore.getState().load({ silent: true })
@@ -213,6 +222,7 @@ export function AppShell() {
     return (
       <div className={`shell-mini ${density}`}>
         <ErrorBoundary where="Mini mode" inline><MiniView /></ErrorBoundary>
+        {sheet === 'new-item' && <NewItemSheet />}
         {dropOverlay}
       </div>
     )

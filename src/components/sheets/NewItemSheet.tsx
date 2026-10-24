@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { restoreImageSources, uploadImageHtml } from '@/lib/attachments'
 import { identityKey, typeColor } from '@/lib/format'
+import { miniBugProject, rememberMiniBugProject } from '@/lib/pasteBug'
 import { REPRO_STEPS, customFieldsFor, descriptionField, fieldKind, isIdLike, symptomField, usesReproSteps } from '@/lib/customFields'
 import type { Project, TeamContext } from '@/lib/types'
 import { CustomFieldInput } from '@/components/ui/CustomFieldInput'
@@ -30,7 +31,9 @@ export function NewItemSheet() {
   const me = useAppStore((s) => s.account())
 
   // The project is always visible and can be changed; another project's types and people load here.
-  const [proj, setProj] = useState<Project | null>(selectedProject ?? projects[0] ?? null)
+  // From mini mode no project is in view, so a screenshot bug starts where the last one went.
+  const [fromMini] = useState(() => useUiStore.getState().mini && !!payload?.images?.length)
+  const [proj, setProj] = useState<Project | null>(() => (fromMini ? miniBugProject(projects, selectedProject) : selectedProject ?? projects[0] ?? null))
   const sameProject = !!proj && proj.id === selectedProject?.id
   const [otherCtx, setOtherCtx] = useState<{ projectId: string; ctx: TeamContext } | null>(null)
   const [ctxError, setCtxError] = useState<string | null>(null)
@@ -164,6 +167,7 @@ export function NewItemSheet() {
     setBusy(false)
     submitting.current = false
     if (!created) return
+    if (fromMini && proj) rememberMiniBugProject(proj.id)
     toast({ kind: 'success', title: `Created #${created.id}`, detail: !sameProject ? `In ${proj?.name}.` : boardTypes.includes(type) ? undefined : `${type} items are on a different board.` })
     if (keepOpen) {
       setTitle(''); setDescription(''); setSymptom(''); setPoints('')

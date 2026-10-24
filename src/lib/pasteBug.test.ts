@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { listenForPastedImages } from './pasteBug'
+import { listenForPastedImages, miniBugProject, rememberMiniBugProject } from './pasteBug'
 
 const paste = (target: Element, files: File[]) => {
   const e = new Event('paste', { bubbles: true, cancelable: true })
@@ -39,5 +39,25 @@ describe('listenForPastedImages', () => {
     const e = new Event('beforepaste', { bubbles: true, cancelable: true })
     document.body.dispatchEvent(e)
     expect(e.defaultPrevented).toBe(true)
+  })
+})
+
+describe('miniBugProject', () => {
+  const a = { id: 'a' }, b = { id: 'b' }, c = { id: 'c' }
+  afterEach(() => localStorage.clear())
+
+  it('starts in the project open in the full window, else the first', () => {
+    expect(miniBugProject([a, b, c], b)).toBe(b)
+    expect(miniBugProject([a, b, c], null)).toBe(a)
+  })
+
+  it('starts where the last screenshot bug went', () => {
+    rememberMiniBugProject('c')
+    expect(miniBugProject([a, b, c], b)).toBe(c)
+  })
+
+  it('ignores a remembered project that is no longer listed', () => {
+    rememberMiniBugProject('gone')
+    expect(miniBugProject([a, b, c], b)).toBe(b)
   })
 })
