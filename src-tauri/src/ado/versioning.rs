@@ -57,7 +57,21 @@ fn branch_tip(branches: &[Value], name: &str) -> Option<String> {
 }
 
 /// "<project> Build Service (<org>)": the identity the pipeline pushes as.
-async fn build_service(client: &AdoClient, project: &str) -> AppResult<Option<Value>> {
+async fn build_service(client: &AdoClient, project_id: &str, project: &str) -> AppResult<Option<Value>> {
+    // The project build service is `Build\{project id}`: look it up by descriptor, which does not
+    // depend on the display name search matching.
+    let conn = client.get::<Value>(&client.url(&format!("/_apis/connectionData?{PREVIEW}"))).await.ok();
+    if let Some(host) = conn.as_ref().and_then(|c| c.get("instanceId")).and_then(|v| v.as_str()) {
+        let url = format!(
+            "https://vssps.dev.azure.com/{}/_apis/identities?descriptors={}&queryMembership=None&api-version=7.1",
+            enc(client.org()),
+            enc(&build_descriptor(host, project_id))
+        );
+        let by_id = client.get::<Value>(&url).await.map(list).unwrap_or_default();
+        if let Some(found) = by_id.into_iter().find(|i| i.get("descriptor").is_some()) {
+            return Ok(Some(found));
+        }
+    }
     let name = format!("{project} Build Service ({})", client.org());
     let url = format!(
         "https://vssps.dev.azure.com/{}/_apis/identities?searchFilter=General&filterValue={}&queryMembership=None&api-version=7.1",
@@ -65,7 +79,17 @@ async fn build_service(client: &AdoClient, project: &str) -> AppResult<Option<Va
         enc(&name)
     );
     let found = list(client.get::<Value>(&url).await?);
-    Ok(found.into_iter().find(|i| i.get("providerDisplayName").and_then(|n| n.as_str()) == Some(name.as_str())))
+    Ok(found.into_iter().find(|i| is_build_service(i, project_id, &name)))
+}
+
+fn build_descriptor(host: &str, project_id: &str) -> String {
+    format!("Microsoft.TeamFoundation.ServiceIdentity;{host}:Build:{project_id}")
+}
+
+fn is_build_service(identity: &Value, project_id: &str, name: &str) -> bool {
+    let descriptor = identity.get("descriptor").and_then(|d| d.as_str()).unwrap_or("");
+    let display = identity.get("providerDisplayName").and_then(|n| n.as_str()).unwrap_or("");
+    descriptor.to_ascii_lowercase().ends_with(&format!(":build:{}", project_id.to_ascii_lowercase())) || display.eq_ignore_ascii_case(name)
 }
 
 /// The effective allow bits `descriptor` has on the repository. A repository with no entry of its own
@@ -223,7 +247,7 @@ pub async fn facts(client: &AdoClient, project_id: &str, project: &str, repo_id:
         }
     }
 
-    match build_service(client, project).await {
+    match build_service(client, project_id, project).await {
         Ok(Some(identity)) => {
             let descriptor = identity.get("descriptor").and_then(|d| d.as_str()).unwrap_or("").to_string();
             let name = identity.get("providerDisplayName").cloned().unwrap_or(Value::Null);
@@ -401,7 +425,7 @@ pub async fn fix_authorize(client: &AdoClient, project_id: &str, project: &str, 
 
 /// Give the project build service Read, Contribute, Create branch and Create tag on this repository.
 pub async fn fix_build_service(client: &AdoClient, project_id: &str, project: &str, repo_id: &str) -> AppResult<Value> {
-    let identity = build_service(client, project)
+    let identity = build_service(client, project_id, project)
         .await?
         .ok_or_else(|| AppError::validation(format!("Could not find \"{project} Build Service ({})\".", client.org())))?;
     let descriptor = identity.get("descriptor").and_then(|d| d.as_str()).unwrap_or("");
@@ -509,5 +533,18 @@ mod tests {
         let b = vec![json!({ "name": "refs/heads/develop-old", "objectId": "a" }), json!({ "name": "refs/heads/develop", "objectId": "b" })];
         assert_eq!(branch_tip(&b, "develop").as_deref(), Some("b"));
         assert_eq!(branch_tip(&b, "main"), None);
+    }
+
+    #[test]
+    fn build_service_is_found_by_project_id_or_name() {
+        let pid = "A44A834E-d17b-49bc-9bb8-448454d350b9";
+        let name = "Test Project Build Service (dxdhub)";
+        assert_eq!(build_descriptor("h1", pid), format!("Microsoft.TeamFoundation.ServiceIdentity;h1:Build:{pid}"));
+        let by_id = json!({ "descriptor": "Microsoft.TeamFoundation.ServiceIdentity;h1:Build:a44a834e-d17b-49bc-9bb8-448454d350b9", "providerDisplayName": "Renamed" });
+        let by_name = json!({ "descriptor": "x", "providerDisplayName": "test project build service (DXDHUB)" });
+        let collection = json!({ "descriptor": "Microsoft.TeamFoundation.ServiceIdentity;h1:Build:h1", "providerDisplayName": "Project Collection Build Service (dxdhub)" });
+        assert!(is_build_service(&by_id, pid, name));
+        assert!(is_build_service(&by_name, pid, name));
+        assert!(!is_build_service(&collection, pid, name));
     }
 }
