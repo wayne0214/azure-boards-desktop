@@ -2,6 +2,7 @@ mod ado;
 mod cache;
 mod commands;
 mod error;
+mod mcp;
 mod menu;
 mod nav_guard;
 mod secrets;
@@ -34,6 +35,7 @@ pub fn run() {
             let cache = cache::Cache::open(data_dir)?;
             app.manage(state::AppState::new(settings, cache));
             menu::build(app.handle())?;
+            mcp::init(app.handle());
             // Reading the login shell's PATH can take seconds; do it now rather than on the first Generate.
             std::thread::spawn(tools::warm_up);
             Ok(())
@@ -143,6 +145,10 @@ pub fn run() {
             tools::git_checkout_branch,
             tools::cancel_git_tools,
             updater::updater_configured,
+            mcp::mcp_status,
+            mcp::mcp_configure,
+            mcp::mcp_new_token,
+            mcp::mcp_set_context,
         ])
         .run(tauri::generate_context!())
         .expect("error while running application");
