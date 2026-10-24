@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ImagePlus } from 'lucide-react'
 import { api } from '@/lib/api'
 import { itemUrl } from '@/lib/format'
+import { listenForPastedImages, takesImages } from '@/lib/pasteBug'
 import { inEditable, isModKey } from '@/lib/shortcuts'
 import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
@@ -139,7 +140,7 @@ export function AppShell() {
   useEffect(() => {
     const hasImage = (e: DragEvent) => Array.from(e.dataTransfer?.items ?? []).some((i) => i.kind === 'file' && i.type.startsWith('image/'))
     // Rich text fields and the run screenshot area take the image themselves.
-    const ownDrop = (t: EventTarget | null) => t instanceof Element && !!t.closest('[contenteditable="true"], .tc-drop, input, textarea')
+    const ownDrop = takesImages
     const free = () => !useUiStore.getState().sheet
     const onOver = (e: DragEvent) => {
       if (!e.dataTransfer?.types.includes('Files')) return
@@ -160,7 +161,13 @@ export function AppShell() {
     }
     window.addEventListener('dragover', onOver)
     window.addEventListener('drop', onDrop)
-    return () => { window.removeEventListener('dragover', onOver); window.removeEventListener('drop', onDrop) }
+    // Pasting a screenshot outside a field does the same.
+    const stopPaste = listenForPastedImages((images) => useUiStore.getState().openSheet('new-item', { type: 'Bug', images }), free)
+    return () => {
+      window.removeEventListener('dragover', onOver)
+      window.removeEventListener('drop', onDrop)
+      stopPaste()
+    }
   }, [])
 
   // The sidebar counts load as soon as an organization is active, so they are right from the start.
