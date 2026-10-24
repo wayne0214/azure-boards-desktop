@@ -1,18 +1,11 @@
 import { Check, ExternalLink, Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 import { api } from '@/lib/api'
+import { TOKEN_ACCESS, TOKEN_NOT_NEEDED } from '@/lib/tokenAccess'
 import { errorMessage, type ConnectionInfo } from '@/lib/types'
 import { Sheet } from '@/components/ui/Sheet'
 import { useAppStore } from '@/store/useAppStore'
 import { useUiStore } from '@/store/useUiStore'
-
-/** What the token needs, and what each permission is for. Matches the Azure DevOps APIs the app calls. */
-const SCOPES: { scope: string; access: string; why: string; optional?: boolean }[] = [
-  { scope: 'Work Items', access: 'Read & write', why: 'boards, My Work, requirements, test cases' },
-  { scope: 'Project and Team', access: 'Read', why: 'projects, teams and people' },
-  { scope: 'Code', access: 'Read & write', why: 'pull requests and Start work branches' },
-  { scope: 'Test Management', access: 'Read & write', why: 'Test Plans; only if you have Test Plans access', optional: true },
-]
 
 /** Normalise what was typed ("contoso", "https://dev.azure.com/contoso/…") to the organization name. */
 const orgName = (v: string) => v.trim().replace(/^https?:\/\/dev\.azure\.com\//i, '').replace(/^https?:\/\/([^.]+)\.visualstudio\.com.*/i, '$1').split('/')[0]
@@ -29,12 +22,17 @@ function TokenSteps({ org }: { org: string }) {
       </li>
       <li>Set <strong>Organization</strong> to {name ? <code>{name}</code> : 'your organization'} and pick an expiry.</li>
       <li>
-        Under Scopes choose <strong>Custom defined</strong>, then tick:
-        <ul className="token-scopes">
-          {SCOPES.map((s) => (
-            <li key={s.scope}><code>{s.scope}: {s.access}</code> <span className="faint">{s.why}</span></li>
+        Under Scopes choose <strong>Custom defined</strong>, then tick the access for what you will use:
+        <div className="token-access">
+          {TOKEN_ACCESS.map((a) => (
+            <div key={a.feature} className="token-access-group">
+              <div className="token-access-head"><b>{a.feature}</b><span className={a.required ? 'token-tag required' : 'token-tag'}>{a.required ? 'Needed' : 'Optional'}</span></div>
+              <div className="token-access-detail faint">{a.detail}</div>
+              <ul className="token-scopes">{a.scopes.map((s) => <li key={s}><code>{s}</code></li>)}</ul>
+            </div>
           ))}
-        </ul>
+          <div className="token-access-detail faint">{TOKEN_NOT_NEEDED}</div>
+        </div>
       </li>
       <li>Create it, copy the token and paste it here. Azure DevOps shows it only once.</li>
     </ol>
