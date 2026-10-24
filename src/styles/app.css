@@ -1232,7 +1232,7 @@ button.dev-row:hover:not(:disabled) { background: var(--bg-hover); }
 .ts-log summary { cursor: default; }
 
 /* ---------- Pull requests ---------- */
-.pr { flex: 1; display: grid; grid-template-columns: 360px 1fr; min-height: 0; }
+.pr { flex: 1; display: grid; grid-template-columns: minmax(250px, min(360px, 36%)) minmax(0, 1fr); min-height: 0; }
 .pr-list { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
 .pr-list-head { padding: 10px 10px 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
 .pr-scope { display: flex; align-items: center; gap: 6px; width: 100%; font-weight: 600; font-size: var(--fs-md); padding: 4px 6px; border-radius: var(--radius-sm); text-align: left; }
@@ -1261,8 +1261,9 @@ button.dev-row:hover:not(:disabled) { background: var(--bg-hover); }
 .pr-chip.ok { background: var(--success-soft); color: var(--success); } .pr-chip.bad { background: var(--danger-soft); color: var(--danger); } .pr-chip.warn { background: var(--warn-soft); color: var(--warn); }
 .pr-detail { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .pr-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.pr-head { display: flex; gap: 12px; padding: 14px 18px 10px; border-bottom: 1px solid var(--border); align-items: flex-start; }
-.pr-head-main { flex: 1; min-width: 0; }
+/* A narrow pane moves the actions under the title instead of squeezing the title to a sliver. */
+.pr-head { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 14px 18px 10px; border-bottom: 1px solid var(--border); align-items: flex-start; }
+.pr-head-main { flex: 1 1 280px; min-width: 0; }
 .pr-title-row { display: flex; gap: 8px; align-items: flex-start; }
 .pr-title { font-size: var(--fs-lg); font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
 .pr-sub { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: var(--fs-sm); flex-wrap: wrap; }
@@ -1287,7 +1288,7 @@ button.dev-row:hover:not(:disabled) { background: var(--bg-hover); }
 .pr-new-item .id { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
 .pr-new-item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pr-new-item .via { font-size: var(--fs-xs); flex-shrink: 0; }
-.pr-head-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.pr-head-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; margin-left: auto; }
 .pr-tabs { display: flex; gap: 2px; padding: 0 18px; border-bottom: 1px solid var(--border); align-items: center; }
 .pr-tabs button { padding: 8px 10px; font-size: var(--fs-sm); color: var(--text-2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .pr-tabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
