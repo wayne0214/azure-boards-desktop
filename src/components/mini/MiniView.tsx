@@ -52,6 +52,7 @@ export function MiniView() {
   const prs = useMemo(() => (me ? prsForMe(involved, me.userId) : { review: [], mine: [] }), [involved, me])
   const recentMentions = useMemo(() => [...(mentions ?? [])].sort((a, b) => String(b.fields['System.ChangedDate']).localeCompare(String(a.fields['System.ChangedDate']))).slice(0, 3), [mentions])
   const booking = nextBooking(bookings)
+  const allClear = prs.review.length + prs.mine.length + working.length + recentMentions.length === 0 && !booking
 
   const openItem = (it: WorkItem) => {
     setMini(false)
@@ -75,13 +76,13 @@ export function MiniView() {
         <button type="button" className="icon-btn sm" title="Back to the full window (⌘⇧D)" onClick={() => setMini(false)}><Maximize2 size={13} /></button>
       </div>
       <div className="mini-body">
-        <Section icon={<GitPullRequest size={13} />} title="Reviews for me" count={prs.review.length} empty="Nothing waiting on your review.">
+        <Section icon={<GitPullRequest size={13} />} title="Reviews for me" count={prs.review.length}>
           {prs.review.map((p) => <PrRow key={`r${p.pullRequestId}`} pr={p} sub={p.createdBy.displayName} onOpen={openPr} />)}
         </Section>
-        <Section icon={<GitPullRequest size={13} />} title="My pull requests" count={prs.mine.length} empty="No open pull requests.">
+        <Section icon={<GitPullRequest size={13} />} title="My pull requests" count={prs.mine.length}>
           {prs.mine.map((p) => <PrRow key={`m${p.pullRequestId}`} pr={p} sub={STANDING[prStanding(p)]} tone={prStanding(p)} onOpen={openPr} />)}
         </Section>
-        <Section icon={<Hammer size={13} />} title="Working on" count={working.length} empty="Nothing in progress.">
+        <Section icon={<Hammer size={13} />} title="Working on" count={working.length}>
           {working.map((it) => (
             <button key={it.id} type="button" className="mini-row" onClick={() => openItem(it)} style={{ ['--type-color' as string]: typeColor(types[project(it)] ?? [], String(it.fields['System.WorkItemType'] ?? '')) }}>
               <span className="mini-type" />
@@ -89,7 +90,7 @@ export function MiniView() {
             </button>
           ))}
         </Section>
-        <Section icon={<AtSign size={13} />} title="Mentions" count={recentMentions.length} empty={mentions === null ? 'Loading…' : 'No recent mentions.'}>
+        <Section icon={<AtSign size={13} />} title="Mentions" count={recentMentions.length}>
           {recentMentions.map((it) => (
             <button key={it.id} type="button" className="mini-row" onClick={() => openItem(it)}>
               <span className="mini-text"><b>{title(it)}</b><span className="faint">#{it.id} · {project(it)}</span></span>
@@ -102,17 +103,20 @@ export function MiniView() {
             <span className="mini-text"><b>{booking.title || 'Room booking'}</b><span className="faint">{startsIn(booking)}</span></span>
           </div>
         )}
+        {allClear && <div className="mini-empty faint">{refreshing ? 'Checking…' : 'All clear: no reviews, pull requests, work in progress or mentions.'}</div>}
         <div className="mini-drop faint"><ImagePlus size={13} /> Drop or paste a screenshot to report a bug</div>
       </div>
     </div>
   )
 }
 
-function Section({ icon, title, count, empty, children }: { icon: React.ReactNode; title: string; count: number; empty: string; children: React.ReactNode }) {
+/** A list with something in it; an empty one is left out so the small window shows only what needs me. */
+function Section({ icon, title, count, children }: { icon: React.ReactNode; title: string; count: number; children: React.ReactNode }) {
+  if (count === 0) return null
   return (
     <section className="mini-section">
-      <h4>{icon}{title}{count > 0 && <span className="mini-count">{count}</span>}</h4>
-      {count > 0 ? children : <div className="mini-empty faint">{empty}</div>}
+      <h4>{icon}{title}<span className="mini-count">{count}</span></h4>
+      {children}
     </section>
   )
 }

@@ -69,6 +69,9 @@ const write = (key: string, value: unknown) => {
 
 let toastSeq = 1
 
+/** A bug reported by dropping or pasting a screenshot: in mini mode its form opens over the small window. */
+export const opensInMini = (sheet: SheetKind, payload?: Record<string, unknown>): boolean => sheet === 'new-item' && Array.isArray(payload?.images)
+
 /** Test Cases or Test Plans, whichever was open last: the sidebar's Testing item goes back to it. */
 export const lastTestingView = (): 'tests' | 'plans' => read<'tests' | 'plans'>('ui.testing', 'tests')
 
@@ -127,9 +130,9 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ mini, paletteOpen: false })
     setMiniWindow(mini).catch((e) => get().toast({ kind: 'error', title: mini ? 'Could not switch to mini mode' : 'Could not restore the window', detail: String((e as Error)?.message ?? e) }))
   },
-  // Forms need the full window, so opening one leaves mini mode.
+  // Forms need the full window, so opening one leaves mini mode; a bug from a screenshot opens as a popup over it.
   openSheet: (sheet, payload) => {
-    if (sheet && get().mini) get().setMini(false)
+    if (sheet && get().mini && !opensInMini(sheet, payload)) get().setMini(false)
     set({ sheet, sheetPayload: payload ?? null })
   },
   closeSheet: () => set({ sheet: null, sheetPayload: null }),

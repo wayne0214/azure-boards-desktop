@@ -57,7 +57,7 @@ describe('nextBooking and startsIn', () => {
   it('says when it starts', () => {
     expect(startsIn(b('2026-10-26T08:50:00', '2026-10-26T09:30:00'), now)).toBe('now')
     expect(startsIn(b('2026-10-26T09:12:00', '2026-10-26T09:30:00'), now)).toBe('in 12 min')
-    expect(startsIn(b('2026-10-26T14:30:00', '2026-10-26T15:00:00'), now)).toMatch(/^at /)
-    expect(startsIn(b('2026-10-27T09:00:00', '2026-10-27T10:00:00'), now)).not.toMatch(/^at |^in /)
+    expect(startsIn(b('2026-10-26T14:30:00', '2026-10-26T15:00:00'), now)).toBe('at 2:30pm')
+    expect(startsIn(b('2026-10-27T09:00:00', '2026-10-27T10:00:00'), now)).toMatch(/ 9:00am$/)
   })
 })
