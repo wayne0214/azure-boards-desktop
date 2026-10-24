@@ -1948,3 +1948,5 @@ body.mini-popup .sheet-foot { padding: 10px 14px 12px; flex-wrap: wrap; }
 body.mini-popup .form-row { grid-template-columns: minmax(0, 1fr); gap: 4px; margin-bottom: 10px; }
 body.mini-popup .form-row > label { padding-top: 0; }
 body.mini-popup .form-row > *, body.mini-popup .form-row .module-btn { min-width: 0; max-width: 100%; }
+/* The Mac window buttons sit over the popup's top-left corner. */
+:root.is-mac body.mini-popup .sheet-head { padding-left: 84px; }
