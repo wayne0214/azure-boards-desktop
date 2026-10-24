@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { isTauri } from '@/lib/api'
-import { listProjectsBody, readWeekBody, saveRowBody, submitAllBody } from '@/lib/timesheet/agent'
+import { listProjectsBody, readWeekBody, saveRowBody, submitWeekBody } from '@/lib/timesheet/agent'
 import { LoginRequired, clearSession, goto, hide, onSite, pageSettled, peek, reload, runEditOp, runOp, show, signedIn, trace, tryAutoLogin } from '@/lib/timesheet/client'
 import { useUiStore } from './useUiStore'
 
@@ -348,13 +348,16 @@ export const useTimesheetStore = create<TimesheetState>((set, get) => ({
   saveAndSubmit: async () => {
     const ok = await get().save()
     if (!ok) return
-    set({ phase: 'working', progress: { done: 0, total: 1, label: 'Submitting saved rows…' } })
+    set({ phase: 'working', progress: { done: 0, total: 1, label: 'Submitting this week…' } })
     try {
-      await goto(`${get().baseUrl}/pending-timesheet-entries`)
-      await runEditOp(submitAllBody, 45000)
+      await goto(`${get().baseUrl}/timsheetentrybydate/${get().weekStart}`)
+      const res = await runEditOp<{ submitted: number | boolean }>(submitWeekBody, 45000)
       set({ progress: null, phase: 'ready' })
       await get().loadWeek()
-      useUiStore.getState().toast({ kind: 'success', title: 'Week submitted', detail: 'All saved rows were sent for approval.' })
+      const { toast } = useUiStore.getState()
+      if (res.submitted === 0) toast({ kind: 'error', title: 'Nothing was submitted', detail: 'This week has no saved rows on the timesheet. Open the timesheet window to check.' })
+      else if (get().rows.some((r) => r.status === 'saved' && !r.locked)) toast({ kind: 'error', title: 'Some rows still show as saved', detail: 'The timesheet may not have taken the submit. Open the timesheet window to check.' })
+      else toast({ kind: 'success', title: 'Week submitted', detail: "This week's saved rows were sent for approval." })
     } catch (e) {
       set({ progress: null })
       if (e instanceof LoginRequired) { set({ phase: 'login', message: 'Your timesheet session expired. Sign in again in the window.' }); await show(); return }
