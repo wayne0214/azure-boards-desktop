@@ -1,7 +1,7 @@
 //! The tools the MCP server offers, on top of the app's own Azure DevOps client and signed-in account.
 
-use super::{context, McpConfig};
-use crate::ado::api;
+use super::{context, fields, sync, McpConfig};
+use crate::ado::{api, wiql};
 use crate::ado::client::AdoClient;
 use crate::error::AppError;
 use crate::state::AppState;
@@ -9,7 +9,7 @@ use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// Tools that change Azure DevOps; refused while the server is read-only.
-const WRITE_TOOLS: &[&str] = &["create_work_item", "update_work_item", "add_comment"];
+const WRITE_TOOLS: &[&str] = &["create_work_item", "update_work_item", "add_comment", "apply_work_item_sync"];
 
 pub fn definitions(read_only: bool) -> Vec<Value> {
     let id = json!({ "type": "integer", "description": "Work item ID, e.g. 1182" });
@@ -27,6 +27,35 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
         tool("list_work_item_types", "Work item types of a project with their states and fields (reference names), to know what can be set.", json!({
             "project": { "type": "string", "description": "Project name; omit for the current project" },
         }), &[], true),
+        tool("find_work_items", "List work items by type, state, sprint, assignee, recent change, text or key (the type's ID field, e.g. an SRS ID like \"SRS-182\"). E.g. all Requirements in the current sprint, or everything changed since a date.", json!({
+            "project": { "type": "string", "description": "Project name; omit for the current project" },
+            "types": { "type": "array", "items": { "type": "string" }, "description": "e.g. [\"Requirement\"]" },
+            "states": { "type": "array", "items": { "type": "string" }, "description": "Only these states; default all but Removed" },
+            "text": { "type": "string", "description": "Words in the title or an ID field" },
+            "key": { "type": "string", "description": "Exact value of an ID field, e.g. SRS-182" },
+            "iteration": { "type": "string", "description": "\"current\" for the team's current sprint, or an iteration path" },
+            "changedSince": { "type": "string", "description": "YYYY-MM-DD" },
+            "assignedToMe": { "type": "boolean" },
+            "limit": { "type": "integer", "description": "Default 100, at most 500" },
+        }), &[], true),
+        tool("get_item_changes", "What changed on a work item, field by field with old and new values, newest last. Use `since` to see only recent updates.", json!({
+            "id": id,
+            "since": { "type": "string", "description": "YYYY-MM-DD; omit for the whole history" },
+        }), &["id"], true),
+        tool("plan_work_item_sync", "Dry run for bringing many work items into Boards (e.g. SRS from a markdown file). Matches each item by its key (the type's ID field, e.g. SRS ID), then exact title, and returns a plan per row: create, update (fill fields that are empty in Boards), skip (already the same) or error, plus conflicts where Boards already has different text. Writes nothing.", json!({
+            "project": { "type": "string", "description": "Project name; omit for the current project" },
+            "type": { "type": "string", "description": "Type for items that do not name one; default Requirement" },
+            "keyField": { "type": "string", "description": "ID field to match on, if not detected (e.g. \"SRS ID\")" },
+            "overwrite": { "type": "boolean", "description": "Replace different text instead of reporting a conflict. Only when the user asked for it." },
+            "items": { "type": "array", "items": { "type": "object", "properties": {
+                "key": { "type": "string", "description": "The item's ID-field value, e.g. SRS-182" },
+                "title": { "type": "string" },
+                "type": { "type": "string" },
+                "fields": { "type": "object", "description": "Field display name or reference name → value, e.g. {\"Acceptance Criteria\": \"...\", \"Software Requirement Specification\": \"...\"}" },
+                "parentKey": { "type": "string", "description": "Parent's ID-field value, e.g. DI-12 (may be an earlier item in this list)" },
+                "parentId": { "type": "integer" },
+            } } },
+        }), &["items"], true),
     ];
     if !read_only {
         tools.extend([
@@ -48,6 +77,9 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
                 "fields": { "type": "object", "description": "Other fields by reference name; null clears one" },
             }), &["id"], false),
             tool("add_comment", "Add a discussion comment to a work item. Plain text; line breaks are kept.", json!({ "id": id, "text": { "type": "string" } }), &["id", "text"], false),
+            tool("apply_work_item_sync", "Carry out a plan from plan_work_item_sync, exactly as shown. Call only after the user has seen the plan and agreed. If Boards changed meanwhile, nothing is written and a new plan is returned.", json!({
+                "planId": { "type": "string" },
+            }), &["planId"], false),
         ]);
     }
     tools
@@ -168,8 +200,151 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
             changed(app, &item);
             Ok(json!({ "id": comment.get("id"), "workItemId": id, "url": item_url(&org, &item) }))
         }
+        "find_work_items" => find(&client, &state, &ctx, args).await,
+        "get_item_changes" => {
+            let id = int(args, "id")?;
+            let project = project_of(&fetch(&client, id).await?);
+            let since = str_arg(args, "since").map(|s| date(&s)).transpose()?;
+            let updates = api::get_updates(&client, &project, id).await?;
+            Ok(json!({ "id": id, "since": since, "changes": changes(&updates, since.as_deref()) }))
+        }
+        "plan_work_item_sync" => {
+            let field_types = state.fields(&client).await?;
+            sync::plan(&client, &field_types, args, current_project(&ctx)).await
+        }
+        "apply_work_item_sync" => {
+            let plan_id = str_arg(args, "planId").ok_or_else(|| AppError::validation("Give the planId from plan_work_item_sync."))?;
+            let field_types = state.fields(&client).await?;
+            let notify = |id: i64| { let _ = app.emit_to("main", "mcp-changed", json!({ "id": id })); };
+            sync::apply(&client, &field_types, &plan_id, &notify).await
+        }
         other => Err(AppError::validation(format!("Unknown tool: {other}"))),
     }
+}
+
+// ----- finding and history -----
+
+/// A YYYY-MM-DD date, checked before it goes into a query.
+fn date(s: &str) -> Result<String, AppError> {
+    let s = s.trim();
+    let ok = s.len() == 10 && s.chars().enumerate().all(|(i, c)| if i == 4 || i == 7 { c == '-' } else { c.is_ascii_digit() });
+    if ok { Ok(s.to_string()) } else { Err(AppError::validation(format!("\"{s}\" is not a date like 2026-10-01."))) }
+}
+
+fn str_list(args: &Value, key: &str) -> Vec<String> {
+    args.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).filter(|s| !s.trim().is_empty()).collect()).unwrap_or_default()
+}
+
+async fn find(client: &AdoClient, state: &AppState, ctx: &Value, args: &Value) -> Result<Value, AppError> {
+    let project = str_arg(args, "project").or_else(|| current_project(ctx)).ok_or_else(no_project)?;
+    let text = str_arg(args, "text").filter(|t| !t.trim().is_empty());
+    let key = str_arg(args, "key").filter(|t| !t.trim().is_empty());
+    let ptypes = fields::project_types(client, &project).await?;
+    let key_fields = fields::all_key_fields(&ptypes);
+    let mut clauses = vec![format!("[System.TeamProject] = {}", wiql::quote(&project))];
+    let types = str_list(args, "types");
+    if !types.is_empty() {
+        clauses.push(format!("[System.WorkItemType] IN ({})", wiql::in_list(&types)));
+    }
+    let states = str_list(args, "states");
+    clauses.push(if states.is_empty() { "[System.State] <> 'Removed'".into() } else { format!("[System.State] IN ({})", wiql::in_list(&states)) });
+    if args.get("assignedToMe").and_then(Value::as_bool).unwrap_or(false) {
+        clauses.push("[System.AssignedTo] = @Me".into());
+    }
+    if let Some(since) = str_arg(args, "changedSince") {
+        clauses.push(format!("[System.ChangedDate] >= {}", wiql::quote(&date(&since)?)));
+    }
+    if let Some(it) = str_arg(args, "iteration").filter(|s| !s.trim().is_empty()) {
+        if it.eq_ignore_ascii_case("current") {
+            let team = ctx.get("team").and_then(Value::as_str).filter(|t| !t.is_empty()).ok_or_else(|| AppError::validation("\"current\" needs a team open in Boards; pass an iteration path instead."))?;
+            clauses.push(format!("[System.IterationPath] = @CurrentIteration({})", wiql::quote(&format!("[{project}]\\{team}"))));
+        } else {
+            clauses.push(format!("[System.IterationPath] UNDER {}", wiql::quote(&it)));
+        }
+    }
+    let available = state.fields(client).await?;
+    if let Some(t) = &text {
+        let mut any = vec![fields::contains(&available, "System.Title", t)];
+        any.extend(key_fields.iter().map(|f| fields::contains(&available, f, t)));
+        if let Ok(id) = t.trim().trim_start_matches('#').parse::<i64>() {
+            any.push(format!("[System.Id] = {id}"));
+        }
+        clauses.push(format!("({})", any.join(" OR ")));
+    }
+    if let Some(k) = &key {
+        if key_fields.is_empty() {
+            return Err(AppError::validation("This project's types have no ID fields; search by `text` instead."));
+        }
+        let one = [k.trim().to_string()];
+        clauses.push(format!("({})", key_fields.iter().map(|f| fields::any_of(&available, f, &one)).collect::<Vec<_>>().join(" OR ")));
+    }
+    let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(100).clamp(1, 500) as u32;
+    let query = format!("SELECT [System.Id] FROM WorkItems WHERE {} ORDER BY [System.ChangedDate] DESC", clauses.join(" AND "));
+    let ids = api::run_wiql(client, "", &query, limit).await?;
+    let mut extra = key_fields.clone();
+    extra.push("System.ChangedDate".into());
+    let items = api::get_items_batch(client, "", &ids, &api::select_fields(&available, &extra)).await?;
+    // Keys stored as rich text come back as "<div>SRS-0005 </div>": compare and show them as text.
+    let key_of = |it: &Value| -> Option<(String, String)> {
+        let own = field(it, "System.WorkItemType").and_then(Value::as_str).and_then(|t| ptypes.iter().find(|p| p.name == t)).and_then(fields::key_field);
+        own.iter().chain(key_fields.iter()).find_map(|f| field(it, f).and_then(Value::as_str).map(|v| html_to_text(v).trim().to_string()).filter(|v| !v.is_empty()).map(|v| (f.clone(), v)))
+    };
+    let wanted = key.as_deref().map(|k| k.trim().to_lowercase());
+    let rows: Vec<Value> = items
+        .iter()
+        .filter(|it| wanted.as_ref().map_or(true, |w| key_fields.iter().any(|f| field(it, f).and_then(Value::as_str).is_some_and(|v| html_to_text(v).trim().to_lowercase() == *w))))
+        .map(|it| {
+            let mut s = summary(it);
+            let key = key_of(it);
+            if let Some(o) = s.as_object_mut() {
+                o.insert("key".into(), json!(key.as_ref().map(|k| &k.1)));
+                o.insert("keyField".into(), json!(key.as_ref().map(|k| &k.0)));
+                o.insert("changed".into(), field(it, "System.ChangedDate").cloned().unwrap_or(Value::Null));
+            }
+            s
+        })
+        .collect();
+    Ok(json!({ "project": project, "count": rows.len(), "truncated": rows.len() as u32 >= limit, "items": rows }))
+}
+
+/// Bookkeeping fields every update touches; they say nothing about the change itself.
+const HISTORY_NOISE: &[&str] = &["System.ChangedDate", "System.ChangedBy", "System.RevisedDate", "System.AuthorizedDate", "Microsoft.VSTS.Common.StateChangeDate", "Microsoft.VSTS.Common.StackRank"];
+
+fn clip(v: &Value) -> Value {
+    match plain(v) {
+        Value::String(s) if s.chars().count() > 600 => json!(format!("{}…", s.chars().take(600).collect::<String>())),
+        other => other,
+    }
+}
+
+pub fn changes(updates: &[Value], since: Option<&str>) -> Vec<Value> {
+    updates
+        .iter()
+        .filter_map(|u| {
+            let fields = u.get("fields").and_then(Value::as_object);
+            let at = fields
+                .and_then(|f| f.get("System.ChangedDate"))
+                .and_then(|c| c.get("newValue"))
+                .or_else(|| u.get("revisedDate"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            if since.is_some_and(|s| at.as_str() < s) {
+                return None;
+            }
+            let mut out: Vec<Value> = fields
+                .into_iter()
+                .flatten()
+                .filter(|(k, _)| !NOISE.contains(&k.as_str()) && !HISTORY_NOISE.contains(&k.as_str()) && !k.starts_with("WEF_"))
+                .map(|(k, c)| json!({ "field": k, "from": c.get("oldValue").map(clip), "to": c.get("newValue").map(clip) }))
+                .collect();
+            let rel = |kind: &str| u.pointer(&format!("/relations/{kind}")).and_then(Value::as_array).map_or(0, Vec::len);
+            if rel("added") + rel("removed") > 0 {
+                out.push(json!({ "field": "links", "added": rel("added"), "removed": rel("removed") }));
+            }
+            (!out.is_empty()).then(|| json!({ "rev": u.get("rev"), "by": u.pointer("/revisedBy/displayName"), "at": at, "changes": out }))
+        })
+        .collect()
 }
 
 // ----- arguments -----
@@ -428,6 +603,31 @@ mod tests {
         assert_eq!(d["fields"]["System.Description"], "Hi");
         assert!(d["fields"].get("System.Rev").is_none());
         assert_eq!(d["url"], "https://dev.azure.com/org/Contoso/_workitems/edit/7");
+    }
+
+    #[test]
+    fn changes_list_real_edits_since_a_date() {
+        let updates = vec![
+            json!({ "rev": 1, "fields": { "System.ChangedDate": { "newValue": "2026-09-01T00:00:00Z" }, "System.Title": { "newValue": "A" } } }),
+            json!({ "rev": 2, "revisedBy": { "displayName": "Ann" }, "fields": {
+                "System.ChangedDate": { "newValue": "2026-10-05T00:00:00Z" },
+                "Microsoft.VSTS.Common.AcceptanceCriteria": { "oldValue": "<p>old</p>", "newValue": "<p>new</p>" },
+            } }),
+            json!({ "rev": 3, "fields": { "System.ChangedDate": { "newValue": "2026-10-06T00:00:00Z" }, "System.Rev": { "newValue": 3 } } }),
+        ];
+        let c = changes(&updates, Some("2026-10-01"));
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0]["by"], "Ann");
+        assert_eq!(c[0]["changes"][0]["from"], "old");
+        assert_eq!(c[0]["changes"][0]["to"], "new");
+        assert_eq!(changes(&updates, None).len(), 2);
+    }
+
+    #[test]
+    fn dates_are_checked() {
+        assert!(date("2026-10-01").is_ok());
+        assert!(date("2026-10-01' OR 1=1").is_err());
+        assert!(date("yesterday").is_err());
     }
 
     #[test]

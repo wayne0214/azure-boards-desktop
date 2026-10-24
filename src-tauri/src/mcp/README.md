@@ -19,7 +19,31 @@ Off by default. Turn it on in **Settings → AI tools (MCP)**.
 | Tool | Writes |
 |---|---|
 | `get_context`, `get_work_item`, `search_work_items`, `list_my_work`, `list_children`, `list_comments`, `list_work_item_types` | no |
-| `create_work_item`, `update_work_item`, `add_comment` | yes |
+| `find_work_items`: by type, state, sprint, assignee, changed-since, text, or key (an ID field such as "SRS ID") | no |
+| `get_item_changes`: field-by-field history, optionally since a date | no |
+| `plan_work_item_sync`: dry run of a bulk import (see below) | no |
+| `create_work_item`, `update_work_item`, `add_comment`, `apply_work_item_sync` | yes |
+
+Prompts (Claude Code shows them as `/mcp__boards__<name>`):
+
+- `review_code_against_srs`: compare this repository's code with the SRS in scope, and list recent Boards changes.
+- `import_srs_from_markdown`: read a markdown file, plan, wait for approval, apply.
+
+### Bulk import (plan, then apply)
+
+`plan_work_item_sync` takes a list of items (`key`, `title`, `fields` by display or reference name,
+`parentKey` or `parentId`) and matches each against Boards: first by the type's ID field (e.g. `Custom.SRSID`),
+then by exact title for an item without a different key. Each row comes back as:
+
+- **create**: not in Boards yet.
+- **update**: found, and some fields are empty in Boards, so they will be filled.
+- **skip**: found and already the same.
+- **error**: unknown field or type, ambiguous match, or a parent key that matches nothing.
+
+Text that differs from Boards is reported as a **conflict** and left alone, unless the plan is made with `overwrite: true`.
+`apply_work_item_sync` takes the `planId`, checks Boards still matches the plan, and only then writes.
+If something changed in between, it writes nothing and returns a new plan. ID fields stored as rich text
+(`<div>SRS-0005</div>`) are searched by words, then compared as plain text.
 
 ## Connect
 
@@ -38,6 +62,19 @@ http_headers = { Authorization = "Bearer <token>" }
 ```
 
 The app must be running for the tools to answer.
+
+Codex has no slash commands for MCP prompts. Put the steps in the project's `AGENTS.md` instead:
+
+```markdown
+## Requirements (SRS) in Azure DevOps Boards
+Use the `boards` MCP tools. Requirements have an SRS ID (e.g. SRS-0005); find them with find_work_items
+(key, types ["Requirement"], iteration "current") and see recent edits with get_item_changes.
+- "Check my code against the SRS": for each requirement, search this repo for its SRS ID and work item ID
+  (AB#1234), compare the code with the specification and each acceptance criterion, and report
+  met / partly met / missing with file:line. Report only; change nothing.
+- "Import SRS from <file>.md": read the file, call plan_work_item_sync, show me the plan as a table,
+  and call apply_work_item_sync only after I agree. Never set overwrite unless I ask.
+```
 
 ## Remove it
 

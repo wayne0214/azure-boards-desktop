@@ -1,5 +1,6 @@
 //! The MCP JSON-RPC layer: initialize, ping, tools/list and tools/call. Transport-free, so it is tested on its own.
 
+use super::prompts;
 use serde_json::{json, Value};
 
 /// Newest first; a client asking for one of these gets it back, anything else gets the newest.
@@ -7,7 +8,9 @@ pub const PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05
 
 pub const INSTRUCTIONS: &str = "Azure DevOps Boards, through the Boards desktop app the user is signed into. \
 Call get_context first: it names the organization, the project and the work item the user has open in the app, \
-so \"this item\" or \"the current story\" means that one. Work item fields use Azure DevOps reference names \
+so \"this item\" or \"the current story\" means that one. Requirements (SRS) have a key in an ID field such as \"SRS ID\"; \
+find_work_items finds them by key, type or sprint, and get_item_changes shows what changed. To bring many items in from a file, \
+use plan_work_item_sync, show the user the plan, and apply it only after they agree. Work item fields use Azure DevOps reference names \
 (System.Title, System.State, Microsoft.VSTS.Common.AcceptanceCriteria); list_work_item_types shows what a type has.";
 
 /// What a tool call produced: a JSON result, or an error message shown to the model.
@@ -28,13 +31,18 @@ pub fn handle(msg: &Value, tools: &[Value], call: &dyn Fn(&str, Value) -> ToolOu
             let version = PROTOCOL_VERSIONS.iter().find(|v| **v == asked).unwrap_or(&PROTOCOL_VERSIONS[0]);
             Ok(json!({
                 "protocolVersion": version,
-                "capabilities": { "tools": { "listChanged": false } },
+                "capabilities": { "tools": { "listChanged": false }, "prompts": { "listChanged": false } },
                 "serverInfo": { "name": "boards", "title": "Boards (Azure DevOps)", "version": env!("CARGO_PKG_VERSION") },
                 "instructions": INSTRUCTIONS,
             }))
         }
         "ping" => Ok(json!({})),
         "tools/list" => Ok(json!({ "tools": tools })),
+        "prompts/list" => Ok(json!({ "prompts": prompts::list() })),
+        "prompts/get" => {
+            let name = params.get("name").and_then(Value::as_str).unwrap_or("");
+            prompts::get(name, params.get("arguments").unwrap_or(&Value::Null)).map_err(|e| (-32602, e))
+        }
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or("");
             if !tools.iter().any(|t| t.get("name").and_then(Value::as_str) == Some(name)) {
@@ -114,6 +122,8 @@ mod tests {
     #[test]
     fn bad_input_and_unknown_methods() {
         assert_eq!(handle_body("{", &tools(), &echo).unwrap()["error"]["code"], -32700);
+        let prompts = handle_body(r#"{"jsonrpc":"2.0","id":1,"method":"prompts/list"}"#, &tools(), &echo).unwrap();
+        assert!(prompts["result"]["prompts"].as_array().is_some_and(|p| !p.is_empty()));
         assert_eq!(handle_body(r#"{"jsonrpc":"2.0","id":1,"method":"resources/list"}"#, &tools(), &echo).unwrap()["error"]["code"], -32601);
         let batch = handle_body(r#"[{"jsonrpc":"2.0","id":1,"method":"ping"},{"jsonrpc":"2.0","method":"notifications/initialized"}]"#, &tools(), &echo).unwrap();
         assert_eq!(batch.as_array().unwrap().len(), 1);

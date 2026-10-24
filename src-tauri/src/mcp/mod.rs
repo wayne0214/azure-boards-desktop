@@ -7,7 +7,10 @@
 //! Transport: MCP "Streamable HTTP" (JSON responses, no streaming) on 127.0.0.1 only,
 //! behind a bearer token stored in `mcp.json` in the app's config folder. Off until the user turns it on.
 
+mod fields;
+mod prompts;
 mod protocol;
+mod sync;
 mod tools;
 
 use crate::error::{AppError, AppResult};
