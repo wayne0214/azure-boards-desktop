@@ -95,6 +95,7 @@ pub fn run() {
             timesheet::timesheet_report,
             timesheet::timesheet_close,
             timesheet::timesheet_reload,
+            timesheet::timesheet_clear_cookies,
             pr_commands::pr_list_repos,
             pr_commands::pr_list,
             pr_commands::pr_get,
