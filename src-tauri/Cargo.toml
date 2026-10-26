@@ -30,12 +30,13 @@ csv = "1"
 thiserror = "2"
 urlencoding = "2"
 futures = "0.3"
-arboard = { version = "3", default-features = false }
+arboard = { version = "3", default-features = false, features = ["image-data"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 tauri-plugin-notification = "2"
-# MCP server (src/mcp); remove both with that folder.
+# MCP server (src/mcp); remove these with that folder (png encodes clipboard screenshots).
 tiny_http = "0.12"
 getrandom = "0.2"
+png = "0.18"
 
 [profile.release]
 panic = "abort"

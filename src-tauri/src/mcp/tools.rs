@@ -1,7 +1,7 @@
 //! The tools the MCP server offers, on top of the app's own Azure DevOps client and signed-in account.
 
 use super::steps::{self, STEPS_FIELD, TESTS_REL};
-use super::{context, export, fields, imports, sync, McpConfig};
+use super::{context, export, fields, images, imports, sync, McpConfig};
 use crate::ado::{api, wiql};
 use crate::ado::client::AdoClient;
 use crate::error::AppError;
@@ -58,7 +58,7 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
     ];
     if !read_only {
         tools.extend([
-            tool("create_work_item", "Create a work item. Text in `description` may be plain text or HTML.", json!({
+            tool("create_work_item", "Create a work item. Text in `description` may be plain text or HTML. For a bug, put numbered steps in Microsoft.VSTS.TCM.ReproSteps and what the user sees in the Symptom field when the type has one (list_work_item_types), and attach screenshots with `images`.", json!({
                 "type": { "type": "string", "description": "Work item type, e.g. Bug, Task, User Story, Requirement" },
                 "title": { "type": "string" },
                 "description": { "type": "string" },
@@ -68,6 +68,8 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
                 "fields": { "type": "object", "description": "Any other fields by reference name" },
                 "steps": steps_schema(),
                 "tests": tests_schema(),
+                "images": images_schema(),
+                "imageField": image_field_schema(),
             }), &["type", "title"], false),
             tool("update_work_item", "Change fields of a work item: title, state, assignee, description or any field by reference name. For a test case, `steps` replaces the whole list: read the current steps with get_work_item first and send them all back with your change.", json!({
                 "id": id,
@@ -78,6 +80,8 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
                 "fields": { "type": "object", "description": "Other fields by reference name; null clears one" },
                 "steps": steps_schema(),
                 "tests": tests_schema(),
+                "images": images_schema(),
+                "imageField": image_field_schema(),
             }), &["id"], false),
             tool("add_comment", "Add a discussion comment to a work item. Plain text; line breaks are kept.", json!({ "id": id, "text": { "type": "string" } }), &["id", "text"], false),
             tool("apply_work_item_sync", "Carry out a plan from plan_work_item_sync, exactly as shown. Call only after the user has seen the plan and agreed. If Boards changed meanwhile, nothing is written and a new plan is returned.", json!({
@@ -96,6 +100,18 @@ fn steps_schema() -> Value {
             { "type": "string" },
         ],
     })
+}
+
+fn images_schema() -> Value {
+    json!({
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Screenshots to attach: full file paths, or \"clipboard\" for the image the user has copied (use it when they pasted an image into the chat and no path is shown). Each is uploaded and added after the text of the Symptom field (else Repro Steps, else Description); text and images already there are kept.",
+    })
+}
+
+fn image_field_schema() -> Value {
+    json!({ "type": "string", "description": "Put `images` in this field instead (reference or display name)" })
 }
 
 fn tests_schema() -> Value {
@@ -216,13 +232,14 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
             }
             let parent = args.get("parentId").and_then(Value::as_i64);
             let targets = test_targets(&client, &state, &project, args).await?;
+            let image_field = add_images(&client, &state, &project, &work_item_type, args, &mut fields, None).await?;
             let item = api::create_work_item(&client, &project, &work_item_type, &fields, parent).await?;
             let id = item.get("id").and_then(Value::as_i64).unwrap_or(0);
             for t in targets {
                 api::add_link(&client, &project, id, t, TESTS_REL).await?;
             }
             changed(app, &item);
-            Ok(detail(&org, &fetch(&client, id).await?))
+            Ok(with_image_field(detail(&org, &fetch(&client, id).await?), image_field))
         }
         "update_work_item" => {
             let id = int(args, "id")?;
@@ -244,8 +261,10 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
                 fields.insert("System.State".into(), json!(s));
             }
             set_common(app, &org, args, &mut fields)?;
+            let work_item_type = field(&current, "System.WorkItemType").and_then(Value::as_str).unwrap_or("").to_string();
+            let image_field = add_images(&client, &state, &project, &work_item_type, args, &mut fields, Some(&current)).await?;
             if fields.is_empty() && targets.is_empty() {
-                return Err(AppError::validation("Nothing to update: give a title, state, assignedTo, description, steps, tests or fields."));
+                return Err(AppError::validation("Nothing to update: give a title, state, assignedTo, description, steps, tests, images or fields."));
             }
             if !fields.is_empty() {
                 api::update_work_item(&client, &project, id, None, &fields).await?;
@@ -255,7 +274,7 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
             }
             let item = fetch(&client, id).await?;
             changed(app, &item);
-            Ok(detail(&org, &item))
+            Ok(with_image_field(detail(&org, &item), image_field))
         }
         "add_comment" => {
             let id = int(args, "id")?;
@@ -476,6 +495,31 @@ fn extra_fields(args: &Value) -> Result<Map<String, Value>, AppError> {
         Some(Value::Object(m)) => Ok(m.clone()),
         Some(_) => Err(AppError::validation("`fields` must be an object of reference name → value.")),
     }
+}
+
+/// Upload the call's `images` and add them after the text of their field: the text this call sets,
+/// else what `current` has (on update). Returns the field, or None when there are no images.
+async fn add_images(client: &AdoClient, state: &AppState, project: &str, work_item_type: &str, args: &Value, fields: &mut Map<String, Value>, current: Option<&Value>) -> Result<Option<String>, AppError> {
+    let specs = images::specs(args)?;
+    if specs.is_empty() {
+        return Ok(None);
+    }
+    let read = images::read_all(specs).await?;
+    let types = api::work_item_types_with_fields(client, project).await?;
+    let type_def = types.iter().find(|t| t.get("name").and_then(Value::as_str).is_some_and(|n| n.eq_ignore_ascii_case(work_item_type)));
+    let field_types = state.fields(client).await?;
+    let target = images::target_field(type_def, &field_types, str_arg(args, "imageField").as_deref())?;
+    let html = images::upload_html(client, project, read).await?;
+    let existing = fields.get(&target).cloned().or_else(|| current.and_then(|c| field(c, &target)).cloned());
+    fields.insert(target.clone(), json!(images::append(existing.as_ref(), &html)));
+    Ok(Some(target))
+}
+
+fn with_image_field(mut out: Value, image_field: Option<String>) -> Value {
+    if let (Some(f), Some(obj)) = (image_field, out.as_object_mut()) {
+        obj.insert("imagesAddedTo".into(), json!(f));
+    }
+    out
 }
 
 /// assignedTo and description, shared by create and update.
