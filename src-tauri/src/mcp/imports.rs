@@ -6,7 +6,7 @@ use super::sync::{self, SyncRequest};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -199,6 +199,9 @@ pub struct PickIn {
     /// Conflict fields (reference names, or "System.Parent") that take the file's value.
     #[serde(default)]
     pub take_file: Vec<String>,
+    /// Fields (reference names) whose file text the user edited: the text to use instead.
+    #[serde(default)]
+    pub edits: Map<String, Value>,
 }
 
 #[tauri::command]
@@ -263,6 +266,7 @@ async fn run_apply(app: &AppHandle, staged: &Staged, picks: Vec<PickIn>) -> AppR
     let mut req = staged.request.clone();
     req.overwrite = false;
     req.take_file = picks.iter().filter(|p| !p.take_file.is_empty()).map(|p| (p.row_key.clone(), p.take_file.clone())).collect();
+    req.edits = picks.iter().filter(|p| !p.edits.is_empty()).map(|p| (p.row_key.clone(), p.edits.clone())).collect();
     let picked: HashMap<String, String> = picks.into_iter().map(|p| (p.row_key, p.fp)).collect();
     let changed = |wid: i64| {
         let _ = app.emit_to("main", "mcp-changed", json!({ "id": wid }));

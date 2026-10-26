@@ -68,6 +68,11 @@ With `removeMissing: true` (only when the user says the file is complete), items
 that the file does not have show as **Only in Boards**, unpicked. Applying one never deletes it: it is set
 to Removed when its type has that state, tagged `Removed by import`, and gets a comment naming the file.
 
+**Edit** on a field changes the file's text before applying (not links, the parent, or the key the row is
+matched on). The edited text goes with the pick (`edits`) and replaces the file's value for that row when the
+import is planned again on apply; editing a conflict also picks "use the file". Rich text is written from
+the edited plain text, so its line breaks are kept but other formatting is not.
+
 **Apply** writes only the picked rows. Each row carries the item's revision from the review; if the
 item changed since, that row is left alone and reported. `get_import_result` tells the AI tool what was applied.
 Staging the same `source` again replaces a pending import of it.
