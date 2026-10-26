@@ -13,7 +13,10 @@ find_work_items finds them by key, type or sprint, and get_item_changes shows wh
 use plan_work_item_sync, show the user the plan, and apply it only after they agree. Work item fields use Azure DevOps reference names \
 (System.Title, System.State, Microsoft.VSTS.Common.AcceptanceCriteria); list_work_item_types shows what a type has. \
 The project wiki holds the team's conventions, decisions and meeting notes: search_wiki before deciding how something should work, \
-and append_to_wiki to record a decision the user asks you to keep (get_context's wikiPage is the page they have open).";
+and append_to_wiki to record a decision the user asks you to keep (get_context's wikiPage is the page they have open). \
+The team's pages follow a shape Boards reads: meeting notes under /Meeting notes named \"YYYY-MM-DD Topic\" with actions as \"- [ ] @Name what to do\" \
+(Boards turns them into Tasks), decisions under /Decision log as \"NNNN Title\" starting with \"**Status:** Proposed · **Decided by:** Name · **Date:** YYYY-MM-DD\", \
+and feedback under /Collaborator feedback with the items it became under \"## Became\" as \"- #123\".";
 
 /// What a tool call produced: a JSON result, or an error message shown to the model.
 pub type ToolOutcome = Result<Value, String>;

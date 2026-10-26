@@ -20,7 +20,7 @@ import type {
 import type { BranchWorkItem, PrDetail, PullRequest, Repo, Thread } from './pr/types'
 import type { Booking, NewBooking, Room } from './rooms/types'
 import type { VersioningFacts, VersioningFix } from './versioning/evaluate'
-import type { Wiki, WikiPage, WikiPageNode, WikiSearchResult } from './wiki/types'
+import type { FoundItems, ItemFilter, Wiki, WikiChange, WikiPage, WikiPageNode, WikiSearchResult } from './wiki/types'
 import type { Markable, NewPlanInput, RunInput, TpConfiguration, TpPlan, TpPoint, TpResult, TpRun, TpSuite } from './testplans/types'
 import { useUiStore } from '@/store/useUiStore'
 
@@ -120,6 +120,10 @@ export interface Api {
   /** An .attachments image as a data URL. */
   wikiAttachment(org: string, project: string, repoId: string, branch: string, path: string, root: string | null): Promise<string>
   wikiSearch(org: string, project: string, text: string): Promise<WikiSearchResult>
+  /** Pages changed on the wiki's branch since an ISO time, newest first, each once. `root` is a code wiki's folder. */
+  wikiChanges(org: string, project: string, repoId: string, branch: string, root: string | null, since: string): Promise<WikiChange[]>
+  /** Work items for a live block; `team` is needed for iteration "current". */
+  wikiFindItems(org: string, project: string, team: string | null, filter: ItemFilter): Promise<FoundItems>
 
   // ----- Pull requests -----
   prListRepos(org: string, project: string): Promise<Repo[]>
@@ -213,7 +217,7 @@ export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in
 let impl: Api | null = null
 
 // Calls that change something in Azure DevOps; while one is out, the app shows it is working.
-const MUTATING = /^(add|remove|create|update|set|delete|import|upload|tpMirror|tp(CreatePlan|CreateSuite|AddCases|RemoveCases|UpdatePoints|PublishRun|SetPlanState)$|roomsBook|roomsCancel|pr(CreateThread|Reply|UpdateThread|UpdateComment|DeleteComment|Vote|AddReviewer|RemoveReviewer|Update|Create|LinkWorkItem|StartBranch)$)/
+const MUTATING = /^(add|remove|create|update|set|delete|import|upload|tpMirror|tp(CreatePlan|CreateSuite|AddCases|RemoveCases|UpdatePoints|PublishRun|SetPlanState)$|roomsBook|roomsCancel|wiki(Create|Save|CreatePage|UploadAttachment)$|pr(CreateThread|Reply|UpdateThread|UpdateComment|DeleteComment|Vote|AddReviewer|RemoveReviewer|Update|Create|LinkWorkItem|StartBranch)$)/
 
 const tracked = (inner: Api): Api =>
   new Proxy(inner, {

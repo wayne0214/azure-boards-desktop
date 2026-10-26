@@ -68,3 +68,17 @@ pub async fn wiki_search(state: State<'_, AppState>, org: String, project: Strin
     let c = state.client(&org).await?;
     wiki::search(&c, &project, text.trim(), 25).await
 }
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn wiki_changes(state: State<'_, AppState>, org: String, project: String, repo_id: String, branch: String, root: Option<String>, since: String) -> AppResult<Vec<Value>> {
+    let c = state.client(&org).await?;
+    wiki::changes(&c, &project, &repo_id, &branch, root.as_deref(), &since).await
+}
+
+/// Work items for a live block on a page; `filter` takes the same fields as the AI tools' find_work_items.
+#[tauri::command]
+pub async fn wiki_find_items(state: State<'_, AppState>, org: String, project: String, team: Option<String>, filter: Value) -> AppResult<Value> {
+    let c = state.client(&org).await?;
+    crate::mcp::find_items(&c, &state, &org, &project, team.as_deref(), &filter).await
+}

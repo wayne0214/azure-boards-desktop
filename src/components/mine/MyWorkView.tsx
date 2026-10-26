@@ -11,6 +11,8 @@ import { useBoardStore } from '@/store/useBoardStore'
 import { isFinished, isToVerify, isUnseen, isWaitingOnReporter, matchesSearch, typeOf, useMyWorkStore, type TypesByProject } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
 import { useUiStore } from '@/store/useUiStore'
+import { WikiUpdatesStrip } from '@/components/wiki/WikiUpdates'
+import { useWikiStore } from '@/store/useWikiStore'
 
 const COLS = 8
 
@@ -25,6 +27,7 @@ export function MyWorkView() {
   const projects = useAppStore((s) => s.projects)
   const account = useAppStore((s) => s.account())
   const selectProject = useAppStore((s) => s.selectProject)
+  const selectedProject = useAppStore((s) => s.selectedProject)
   const setView = useUiStore((s) => s.setView)
   const toast = useUiStore((s) => s.toast)
   const types = useMyWorkStore((s) => s.types)
@@ -46,6 +49,7 @@ export function MyWorkView() {
   })
 
   useEffect(() => { if (items === null) void load() }, [items, load])
+  useEffect(() => { if (selectedProject) void useWikiStore.getState().refreshFor(selectedProject) }, [selectedProject])
   useEffect(() => {
     // Keep rows in sync with edits made in the details panel.
     const onUpdated = (e: Event) => upsert((e as CustomEvent<WorkItem>).detail)
@@ -160,6 +164,7 @@ export function MyWorkView() {
 
   return (
     <div className="list">
+      {selectedProject && <WikiUpdatesStrip project={selectedProject.name} />}
       <table>
         <thead>
           <tr><th className="num">ID</th><th>Type</th><th>Title</th><th className="disc" title="Comments in the discussion"><MessageSquare size={13} /></th><th className="pri">Pri</th><th>State</th><th>Iteration</th><th>Changed</th></tr>

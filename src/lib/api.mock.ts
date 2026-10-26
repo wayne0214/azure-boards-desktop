@@ -407,6 +407,27 @@ export const mockApi: Api = {
     await delay(300)
     return structuredClone(items.filter((i) => wanted.includes(String(i.fields['System.WorkItemType'])) && !exclude.includes(String(i.fields['System.State']))))
   },
+  wikiFindItems: async (_o, _p, _team, f) => {
+    await delay(300)
+    const field = (i: WorkItem, n: string) => i.fields[n] as string | undefined
+    const found = items.filter((i) =>
+      (!f.types?.length || f.types.some((t) => t.toLowerCase() === String(field(i, 'System.WorkItemType')).toLowerCase())) &&
+      (f.states?.length ? f.states.some((st) => st.toLowerCase() === String(field(i, 'System.State')).toLowerCase()) : field(i, 'System.State') !== 'Removed') &&
+      (!f.iteration || (f.iteration === 'current' ? String(field(i, 'System.IterationPath')).endsWith('Sprint 13') : String(field(i, 'System.IterationPath')).startsWith(f.iteration))) &&
+      (!f.assignedToMe || (i.fields['System.AssignedTo'] as { id?: string } | undefined)?.id === 'u1') &&
+      (!f.text || String(field(i, 'System.Title')).toLowerCase().includes(f.text.toLowerCase()) || String(i.id) === f.text.replace('#', '')) &&
+      (!f.changedSince || String(field(i, 'System.ChangedDate')) >= f.changedSince))
+    const limit = f.limit ?? 100
+    return {
+      count: Math.min(found.length, limit),
+      truncated: found.length > limit,
+      items: found.slice(0, limit).map((i) => ({
+        id: i.id, type: field(i, 'System.WorkItemType') ?? null, title: field(i, 'System.Title') ?? null, state: field(i, 'System.State') ?? null,
+        assignedTo: (i.fields['System.AssignedTo'] as { displayName?: string } | undefined)?.displayName ?? null,
+        iteration: field(i, 'System.IterationPath') ?? null, key: field(i, 'Custom.SRSID') ?? null, changed: field(i, 'System.ChangedDate') ?? null,
+      })),
+    }
+  },
   // Demo: two items mention the user.
   mentionedItems: async () => structuredClone(items.filter((i) => [1164, 1191].includes(i.id))),
   myWork: async () => {

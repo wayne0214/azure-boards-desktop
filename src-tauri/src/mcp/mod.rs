@@ -133,6 +133,16 @@ fn new_token() -> String {
 }
 
 /// Called once from the app's setup: loads the config and starts the server if it is turned on.
+/// `find_work_items` for the app itself: live blocks on wiki pages list work items the same way.
+pub async fn find_items(client: &crate::ado::client::AdoClient, state: &crate::state::AppState, org: &str, project: &str, team: Option<&str>, filter: &Value) -> crate::error::AppResult<Value> {
+    let ctx = serde_json::json!({ "org": org, "project": project, "team": team });
+    let mut args = filter.clone();
+    if let Some(o) = args.as_object_mut() {
+        o.insert("project".into(), Value::String(project.to_string()));
+    }
+    tools::find(client, state, &ctx, &args).await
+}
+
 pub fn init(app: &AppHandle) {
     imports::recover(app);
     let cfg = load_config(app);

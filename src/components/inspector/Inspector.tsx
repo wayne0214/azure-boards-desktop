@@ -16,6 +16,7 @@ import { useUiStore } from '@/store/useUiStore'
 import { RichText } from './RichText'
 import { HistorySection } from './HistorySection'
 import { DevSection } from './DevSection'
+import { WikiBacklinks } from '@/components/wiki/WikiBacklinks'
 import { Popover } from '@/components/ui/Popover'
 import { ModulePicker } from '@/components/ui/ModulePicker'
 import { MentionTextarea } from '@/components/ui/MentionTextarea'
@@ -355,6 +356,8 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
         {children === null ? <div className="skeleton" style={{ height: 24 }} /> : children.length === 0 ? <div className="faint" style={{ fontSize: 'var(--fs-sm)' }}>No child items.</div> : children.map((c) => <ChildRow key={c.id} item={c} onOpen={() => void openItem(c, { push: true })} />)}
 
         <DevSection item={item} org={org} canStart />
+
+        <WikiBacklinks id={item.id} org={org} project={project} />
 
         <div className="section-h">Discussion{comments && comments.length ? ` · ${comments.length}` : ''}</div>
         {comments === null ? <div className="skeleton" style={{ height: 40 }} /> : comments.map((c) => (

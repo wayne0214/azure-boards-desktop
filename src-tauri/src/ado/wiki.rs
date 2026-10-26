@@ -85,8 +85,7 @@ pub async fn upload_attachment(client: &AdoClient, project: &str, wiki_id: &str,
 /// `root` is a code wiki's folder in its repository (its `mappedPath`); a project wiki's is the repository root.
 pub async fn attachment(client: &AdoClient, project: &str, repo_id: &str, branch: &str, path: &str, root: Option<&str>) -> AppResult<String> {
     let path = attachment_path(path).ok_or_else(|| AppError::validation("Only images in the wiki's .attachments folder can be shown."))?;
-    let root = root.map(|r| r.trim().trim_end_matches('/')).filter(|r| !r.is_empty() && !r.contains("..")).unwrap_or("");
-    let path = if root.is_empty() || root.starts_with('/') { format!("{root}{path}") } else { format!("/{root}{path}") };
+    let path = format!("{}{path}", repo_root(root));
     let url = client.url(&format!(
         "/{}/_apis/git/repositories/{}/items?path={}&versionDescriptor.version={}&versionDescriptor.versionType=branch&$format=octetStream&download=true",
         enc(project),
@@ -103,6 +102,58 @@ pub async fn attachment(client: &AdoClient, project: &str, repo_id: &str, branch
 }
 
 /// `/.attachments/x.png` from how markdown may write it (`.attachments/x.png`, with a title, encoded spaces).
+/// A code wiki's folder as "/docs" (no trailing slash); "" for the repository root.
+fn repo_root(root: Option<&str>) -> String {
+    let r = root.map(|r| r.trim().trim_matches('/')).filter(|r| !r.is_empty() && !r.contains("..")).unwrap_or("");
+    if r.is_empty() { String::new() } else { format!("/{r}") }
+}
+
+/// Most commits read when listing recent changes; a busy wiki shows its latest ones.
+const MAX_COMMITS: usize = 30;
+
+/// Pages changed on the wiki's branch since `since` (an ISO time), newest first, each once:
+/// when it last changed and by whom. Deleted pages are left out.
+pub async fn changes(client: &AdoClient, project: &str, repo_id: &str, branch: &str, root: Option<&str>, since: &str) -> AppResult<Vec<Value>> {
+    let repo = format!("/{}/_apis/git/repositories/{}", enc(project), enc(repo_id));
+    let url = client.url(&format!(
+        "{repo}/commits?searchCriteria.itemVersion.version={}&searchCriteria.itemVersion.versionType=branch&searchCriteria.fromDate={}&searchCriteria.$top={MAX_COMMITS}",
+        enc(branch),
+        enc(since)
+    ));
+    let list: Value = client.get(&url).await?;
+    let commits = list["value"].as_array().cloned().unwrap_or_default();
+    let changed = futures::future::join_all(commits.iter().map(|c| {
+        let url = client.url(&format!("{repo}/commits/{}/changes?top=200", enc(c["commitId"].as_str().unwrap_or_default())));
+        async move { client.get::<Value>(&url).await.unwrap_or(Value::Null) }
+    }))
+    .await;
+    let root = repo_root(root);
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for (c, ch) in commits.iter().zip(changed) {
+        for path in changed_pages(&ch, &root) {
+            if seen.insert(path.clone()) {
+                out.push(json!({ "path": path, "date": c.pointer("/author/date"), "author": c.pointer("/author/name"), "authorEmail": c.pointer("/author/email") }));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Page paths a commit's changes touch: markdown files under the wiki's folder, not attachments, not deleted.
+fn changed_pages(changes: &Value, root: &str) -> Vec<String> {
+    changes["changes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|c| !c["changeType"].as_str().is_some_and(|t| t.contains("delete")) && !c.pointer("/item/isFolder").and_then(Value::as_bool).unwrap_or(false))
+        .filter_map(|c| c.pointer("/item/path").and_then(Value::as_str))
+        .filter_map(|p| if root.is_empty() { Some(p) } else { p.strip_prefix(root).filter(|r| r.starts_with('/')) })
+        .filter(|p| p.ends_with(".md") && !p.starts_with("/.attachments/"))
+        .map(page_path_from_git)
+        .collect()
+}
+
 fn attachment_path(src: &str) -> Option<String> {
     let s = src.trim().split(['?', '#']).next().unwrap_or("");
     let s = urlencoding::decode(s).map(|c| c.into_owned()).unwrap_or_else(|_| s.to_string());
@@ -230,6 +281,21 @@ pub fn child_path(parent: &str, name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn commits_list_the_pages_they_change() {
+        let ch = json!({ "changes": [
+            { "item": { "path": "/docs/Meeting-notes/2026%2D10%2D27-Standup.md" }, "changeType": "add" },
+            { "item": { "path": "/docs/.attachments/a.png" }, "changeType": "add" },
+            { "item": { "path": "/docs/Old.md" }, "changeType": "delete" },
+            { "item": { "path": "/docs", "isFolder": true }, "changeType": "edit" },
+            { "item": { "path": "/src/main.md" }, "changeType": "edit" },
+        ] });
+        assert_eq!(changed_pages(&ch, "/docs"), vec!["/Meeting notes/2026-10-27 Standup"]);
+        assert_eq!(repo_root(Some("docs/")), "/docs");
+        assert_eq!(repo_root(Some("/")), "");
+        assert_eq!(repo_root(Some("../x")), "");
+    }
 
     #[test]
     fn search_paths_become_page_paths() {
