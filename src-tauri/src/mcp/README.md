@@ -36,6 +36,8 @@ Prompts (Claude Code shows them as `/mcp__boards__<name>`):
   that is not detected is named in `keyFields`, e.g. `{ "Epic": "User Need ID" }`.
 - `import_test_cases_from_markdown`: the same for test cases, with their steps and the requirements they test.
 - `prepare_pull_request`: write the current branch's pull request title and message and open them with `open_pull_request_form`.
+- `report_bug_from_screenshot`: write a Bug's title, Repro Steps and Symptom from a screenshot and a note, and create it
+  with the screenshot in the Symptom.
 
 ### Pull requests
 
@@ -45,6 +47,20 @@ default branch), `title`, `description`, `workItemIds` and `draft`. It checks th
 The UI opens the New pull request form with those values (`openPrForm` in `src/lib/mcp.ts`); if another form
 is open, it shows a toast to open it instead, so nothing being typed is lost. Nothing is created until the user
 clicks Create, so the tool stays available in read-only mode.
+
+### Screenshots (`images`)
+
+An AI tool sees an image pasted into its chat but cannot pass its bytes on, so `create_work_item` and `update_work_item`
+take `images`: full file paths (`file://` URLs and `~/` work too) or `"clipboard"`, which Boards reads itself (`images.rs`).
+On the clipboard, a copied file is used as it is; a screenshot is saved as PNG.
+
+- Only PNG, JPEG, GIF and WebP (checked by their bytes, not the name), up to 25 MB each and 10 per call.
+  Relative paths are refused: the server cannot tell which folder the AI tool means.
+- Every image is read before anything is written, then uploaded as a work item attachment and added as `<img>`
+  after the text of the type's Symptom field (`Microsoft.VSTS.CMMI.Symptom` or one named Symptom), else
+  Repro Steps, else Description; `imageField` picks another. Text the call sets for that field comes first;
+  on update, what the field already has is kept.
+- The reply's `imagesAddedTo` names the field.
 
 ### Test cases
 

@@ -10,6 +10,7 @@
 mod clients;
 mod export;
 mod fields;
+mod images;
 pub mod imports;
 mod pr_form;
 mod prompts;
