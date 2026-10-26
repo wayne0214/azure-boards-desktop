@@ -7,6 +7,8 @@ import { mockWiki } from './api.mock.wiki'
 import { mockRooms } from './api.mock.rooms'
 import { mockPlans } from './api.mock.plans'
 import { serializeSteps, type StepItem } from './testcases/steps'
+// Loaded with the demo API, not on first use, so it has seen the click that opens the first menu.
+import { showFallbackContextMenu } from '../components/ui/FallbackMenu'
 import type { Board, Comment, Identity, Iteration, Project, Settings, Team, WorkItem, WorkItemType } from './types'
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms))
@@ -625,7 +627,6 @@ export const mockApi: Api = {
   onImportProgress: () => () => {},
   showContextMenu: async (menuItems) => {
     // Browser fallback: render a simple popup menu.
-    const { showFallbackContextMenu } = await import('../components/ui/FallbackMenu')
     showFallbackContextMenu(menuItems)
   },
 }
