@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown, ExternalLink, FileInput, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ExternalLink, FileInput, Pencil, RefreshCw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Empty } from '@/components/ui/Empty'
 import { api } from '@/lib/api'
@@ -108,6 +108,8 @@ function ReviewPane({ info }: { info: ImportInfo }) {
   const [picked, setPicked] = useState<Set<string>>(new Set())
   /** Row → conflict fields that take the file's value. */
   const [takeFile, setTakeFile] = useState<Record<string, string[]>>({})
+  /** Row → field → the file's text as the user edited it. */
+  const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [tab, setTab] = useState<RowCategory | 'all'>('all')
 
@@ -125,12 +127,14 @@ function ReviewPane({ info }: { info: ImportInfo }) {
         if (dropped.length) {
           setPicked((p) => new Set([...p].filter((k) => !changed.includes(k))))
           setTakeFile((t) => Object.fromEntries(Object.entries(t).filter(([k]) => !changed.includes(k))))
+          setEdits((t) => Object.fromEntries(Object.entries(t).filter(([k]) => !changed.includes(k))))
           setOpen((o) => new Set([...o, ...dropped]))
           toast({ kind: 'info', title: `${dropped.length} picked row${dropped.length > 1 ? 's' : ''} changed in Boards`, detail: 'They were unpicked and opened; check them again.' })
         }
       } else {
         setPicked(new Set(r.rows.filter((x) => PICKED_FIRST.includes(x.category)).map((x) => x.rowKey)))
         setOpen(new Set(r.rows.filter((x) => x.category === 'conflict').map((x) => x.rowKey)))
+        setEdits({})
       }
     } catch (e) {
       setError(String((e as { message?: string }).message ?? e))
@@ -178,6 +182,16 @@ function ReviewPane({ info }: { info: ImportInfo }) {
     })
     if (file) setPick(r, true)
   }
+  /** Use edited text for a field (null: back to the file's); editing a conflict means using the file's side. */
+  const editField = (r: ReviewRow, field: string, text: string | null) => {
+    setEdits((prev) => {
+      const { [field]: _, ...rest } = prev[r.rowKey] ?? {}
+      return { ...prev, [r.rowKey]: text === null ? rest : { ...rest, [field]: text } }
+    })
+    if (text === null) return
+    if (r.changes.some((c) => c.field === field && c.kind === 'conflict')) chooseFile(r, field, true)
+    else setPick(r, true)
+  }
   // Removals are picked one by one, or from their own tab.
   const visiblePickable = shown.filter((r) => pickable(r) && (r.category !== 'missing' || tab === 'missing'))
   const allShownPicked = visiblePickable.length > 0 && visiblePickable.every((r) => picked.has(r.rowKey))
@@ -204,7 +218,7 @@ function ReviewPane({ info }: { info: ImportInfo }) {
     if (!ok) return
     setBusy('apply')
     try {
-      const picks: ImportPick[] = chosen.map((r) => ({ rowKey: r.rowKey, fp: r.fp, takeFile: takeFile[r.rowKey] ?? [] }))
+      const picks: ImportPick[] = chosen.map((r) => ({ rowKey: r.rowKey, fp: r.fp, takeFile: takeFile[r.rowKey] ?? [], edits: edits[r.rowKey] ?? {} }))
       const res = await importCalls.apply(info.id, picks)
       toast(res.failed ? { kind: 'error', title: `Applied ${res.done}, ${res.failed} not applied`, detail: 'They stay here to try again; each says why.' } : { kind: 'success', title: `Applied ${res.done} change${res.done === 1 ? '' : 's'}` })
       await load()
@@ -286,6 +300,8 @@ function ReviewPane({ info }: { info: ImportInfo }) {
                 parentLabel={r.parentRow ? byKey.get(r.parentRow)?.key ?? byKey.get(r.parentRow)?.title ?? null : null}
                 open={open.has(r.rowKey)}
                 takeFile={takeFile[r.rowKey] ?? []}
+                edits={edits[r.rowKey] ?? {}}
+                onEdit={(field, text) => editField(r, field, text)}
                 onPick={(on) => setPick(r, on)}
                 onToggle={() => setOpen((o) => { const n = new Set(o); if (n.has(r.rowKey)) n.delete(r.rowKey); else n.add(r.rowKey); return n })}
                 onChoose={(field, file) => chooseFile(r, field, file)}
@@ -298,9 +314,10 @@ function ReviewPane({ info }: { info: ImportInfo }) {
   )
 }
 
-function RowCard({ row, org, project, picked, pickable, parentMissing, parentLabel, open, takeFile, onPick, onToggle, onChoose }: {
+function RowCard({ row, org, project, picked, pickable, parentMissing, parentLabel, open, takeFile, edits, onEdit, onPick, onToggle, onChoose }: {
   row: ReviewRow; org: string; project: string; picked: boolean; pickable: boolean; parentMissing: boolean; parentLabel: string | null; open: boolean
-  takeFile: string[]; onPick: (on: boolean) => void; onToggle: () => void; onChoose: (field: string, file: boolean) => void
+  takeFile: string[]; edits: Record<string, string>; onEdit: (field: string, text: string | null) => void
+  onPick: (on: boolean) => void; onToggle: () => void; onChoose: (field: string, file: boolean) => void
 }) {
   const cat = CATEGORY[row.category]
   const changes = row.changes.filter((c) => c.kind !== 'same')
@@ -337,7 +354,8 @@ function RowCard({ row, org, project, picked, pickable, parentMissing, parentLab
           {row.matchedBy === 'title' && <div className="imp-hint faint">Matched by title: this item in Boards has no {row.type} key yet.</div>}
           {row.changes.length === 0 && !row.error && <div className="faint">No fields.</div>}
           {(row.category === 'same' ? row.changes : changes).map((c) => (
-            <FieldDiff key={c.field} change={c} isNew={row.category === 'new'} removal={row.category === 'missing'} useFile={takeFile.includes(c.field)} onChoose={(file) => onChoose(c.field, file)} />
+            <FieldDiff key={c.field} change={c} isNew={row.category === 'new'} removal={row.category === 'missing'} useFile={takeFile.includes(c.field)} onChoose={(file) => onChoose(c.field, file)}
+              editable={canEdit(row, c)} edited={edits[c.field]} onEdit={(text) => onEdit(c.field, text)} />
           ))}
         </div>
       )}
@@ -345,14 +363,51 @@ function RowCard({ row, org, project, picked, pickable, parentMissing, parentLab
   )
 }
 
-function FieldDiff({ change, isNew, removal, useFile, onChoose }: { change: FieldChange; isNew: boolean; removal: boolean; useFile: boolean; onChoose: (file: boolean) => void }) {
+/** The file's text can be edited where it would be written; not links, the parent, or the key the row is matched on. */
+export function canEdit(row: ReviewRow, c: FieldChange): boolean {
+  if (row.category !== 'new' && row.category !== 'changed' && row.category !== 'conflict') return false
+  if (c.kind !== 'fill' && c.kind !== 'conflict' && !(row.category === 'new' && c.kind !== 'add')) return false
+  return !c.locked && c.field !== 'System.Parent' && !(row.key && c.after.trim() === row.key.trim())
+}
+
+function FieldDiff({ change, isNew, removal, useFile, onChoose, editable, edited, onEdit }: {
+  change: FieldChange; isNew: boolean; removal: boolean; useFile: boolean; onChoose: (file: boolean) => void
+  editable: boolean; edited: string | undefined; onEdit: (text: string | null) => void
+}) {
   const label = change.kind === 'fill' ? 'Empty in Boards' : change.kind === 'conflict' ? 'Different in Boards' : change.kind === 'add' ? 'Adds links' : null
+  const fileText = edited ?? change.after
+  const [draft, setDraft] = useState<string | null>(null)
+  const save = () => {
+    if (draft === null) return
+    onEdit(draft === change.after ? null : draft)
+    setDraft(null)
+  }
+  const fileSide = draft !== null ? (
+    <div className="imp-edit">
+      <textarea className="textarea" title="Plain text; line breaks are kept. Cmd/Ctrl+Enter saves, Esc cancels." aria-label={`${change.name} in the file`} autoFocus value={draft} rows={Math.min(14, Math.max(3, draft.split('\n').length + 1))}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') { e.preventDefault(); setDraft(null) }
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save() }
+        }} />
+      <div className="imp-edit-actions">
+        <span className="grow" />
+        <button type="button" className="btn sm" onClick={() => setDraft(null)}>Cancel</button>
+        <button type="button" className="btn sm primary" onClick={save}>Save</button>
+      </div>
+    </div>
+  ) : (
+    <div className="imp-text">{fileText || <span className="faint">Empty</span>}</div>
+  )
   return (
     <div className={`imp-field ${change.kind}`}>
       <div className="imp-field-h">
         <span className="imp-field-name">{change.name}</span>
         {label && <span className={`pr-chip ${change.kind === 'conflict' ? 'warn' : ''}`}>{label}</span>}
         <span className="grow" />
+        {edited !== undefined && <span className="pr-chip" title="You edited the file's text; this is what will be written">Edited</span>}
+        {edited !== undefined && draft === null && <button type="button" className="btn sm ghost" onClick={() => onEdit(null)}>Use original</button>}
+        {editable && draft === null && <button type="button" className="btn sm ghost" title="Change the file's text before applying" onClick={() => setDraft(fileText)}><Pencil size={12} /> Edit</button>}
         {change.kind === 'conflict' && change.locked && <span className="faint imp-hint">{change.locked}</span>}
         {change.kind === 'conflict' && !change.locked && (
           <div className="segmented small">
@@ -362,7 +417,7 @@ function FieldDiff({ change, isNew, removal, useFile, onChoose }: { change: Fiel
         )}
       </div>
       {isNew ? (
-        <div className="imp-text">{change.after}</div>
+        fileSide
       ) : (
         <div className="imp-cols">
           <div className={`imp-side before ${change.kind === 'conflict' && !useFile ? 'kept' : ''}`}>
@@ -371,7 +426,7 @@ function FieldDiff({ change, isNew, removal, useFile, onChoose }: { change: Fiel
           </div>
           <div className={`imp-side after ${change.kind !== 'conflict' || useFile ? 'kept' : ''}`}>
             <div className="imp-side-h">{removal ? 'After' : 'In the file'}</div>
-            <div className="imp-text">{change.after || <span className="faint">Empty</span>}</div>
+            {fileSide}
           </div>
         </div>
       )}

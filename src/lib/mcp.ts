@@ -141,6 +141,8 @@ export interface ImportPick {
   fp: string
   /** Conflict fields that take the file's value. */
   takeFile: string[]
+  /** Fields whose file text the user edited: reference name → the text to use instead. */
+  edits?: Record<string, string>
 }
 
 export const mcpImports = () => invoke<ImportInfo[]>('mcp_imports')

@@ -52,6 +52,9 @@ pub struct SyncRequest {
     /// Picked in the review: row key → fields (reference names, or "System.Parent") whose conflict takes the file's value.
     #[serde(skip)]
     pub take_file: HashMap<String, Vec<String>>,
+    /// Edited in the review: row key → field reference name → the text to use instead of the file's.
+    #[serde(skip)]
+    pub edits: HashMap<String, Map<String, Value>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -192,6 +195,18 @@ fn write_value(field_types: &FieldMap, reference: &str, v: &Value) -> Value {
     match (field_types.get(reference).map(String::as_str), v) {
         (Some("html"), Value::String(s)) => json!(text_to_html(s)),
         _ => v.clone(),
+    }
+}
+
+/// Text the user edited in the review replaces the file's value of fields the file has. The key a row is
+/// matched on is not editable; edited steps are numbered text like the review shows.
+fn apply_edits(incoming: &mut [(String, Value)], edits: &Map<String, Value>, key_field: Option<&str>) {
+    for (field, v) in incoming.iter_mut() {
+        if Some(field.as_str()) == key_field {
+            continue;
+        }
+        let Some(text) = edits.get(field.as_str()).and_then(Value::as_str) else { continue };
+        *v = if field == STEPS_FIELD { steps::to_value(&steps::from_input(&json!(text)).unwrap_or_default()) } else { json!(text) };
     }
 }
 
@@ -408,7 +423,7 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
         error: Option<String>,
     }
     let mut prepared: Vec<Prepared> = Vec::new();
-    for row in &req.items {
+    for (i, row) in req.items.iter().enumerate() {
         let type_name = row.type_name.clone().unwrap_or_else(|| default_type.clone());
         let t = match fields::find_type(&types, &type_name) {
             Ok(t) => t,
@@ -456,6 +471,9 @@ async fn build(client: &AdoClient, field_types: &FieldMap, req: &SyncRequest, cu
                 (None, _) => error = Some(format!("\"{}\" has no Steps field; steps belong to test cases.", t.name)),
                 (_, Err(e)) => error = Some(e),
             }
+        }
+        if let Some(edits) = req.edits.get(&format!("r{i}")) {
+            apply_edits(&mut incoming, edits, key_field.as_deref());
         }
         if row.key.is_some() && key_field.is_none() {
             error = error.or(Some(format!("\"{}\" has no ID field to put the key in; name it in `keyFields`, e.g. {{\"{}\": \"<field>\"}}.", t.name, t.name)));
@@ -1156,6 +1174,21 @@ mod tests {
         assert_eq!(add_tag("", REMOVED_TAG), "Removed by import");
         assert_eq!(add_tag("a; b", "c"), "a; b; c");
         assert_eq!(add_tag("a; removed by import", REMOVED_TAG), "a; removed by import");
+    }
+
+    #[test]
+    fn edits_replace_the_files_text_but_not_the_key() {
+        let mut incoming = vec![
+            ("System.Title".to_string(), json!("Old title")),
+            ("Custom.SRSID".to_string(), json!("SRS-1")),
+            (STEPS_FIELD.to_string(), json!([{ "action": "Open", "expected": "" }])),
+        ];
+        let edits = json!({ "System.Title": "New title", "Custom.SRSID": "SRS-9", "Custom.NotInFile": "x", STEPS_FIELD: "1. Open\n   Expected: It opens" });
+        apply_edits(&mut incoming, edits.as_object().unwrap(), Some("Custom.SRSID"));
+        assert_eq!(incoming[0].1, json!("New title"));
+        assert_eq!(incoming[1].1, json!("SRS-1"));
+        assert_eq!(steps::from_input(&incoming[2].1).unwrap(), vec![steps::Step::Step { action: "Open".into(), expected: "It opens".into() }]);
+        assert_eq!(incoming.len(), 3);
     }
 
     #[test]
