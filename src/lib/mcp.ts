@@ -168,6 +168,38 @@ function currentContext() {
   }
 }
 
+/** What open_pull_request_form sends: the New pull request form's values. */
+export interface McpPrForm {
+  projectId: string
+  repoId: string
+  source: string
+  target: string
+  title: string
+  description: string
+  isDraft: boolean
+  workItemIds: number[]
+}
+
+/**
+ * Open the New pull request form filled in by an AI tool; the user creates it. When another form is
+ * open, offer it in a toast instead so what the user is typing is not lost.
+ */
+export function openPrForm(form: McpPrForm) {
+  const open = () => {
+    const ui = useUiStore.getState()
+    ui.setView('prs')
+    ui.openSheet('new-pr', { ...form, nonce: Date.now() })
+  }
+  if (!useUiStore.getState().sheet) { open(); return }
+  useUiStore.getState().toast({
+    kind: 'info',
+    title: 'Pull request ready to review',
+    detail: form.title,
+    sticky: true,
+    action: { label: 'Open', onClick: open },
+  })
+}
+
 let started = false
 
 /** Start once at boot; does nothing outside the desktop app. */
@@ -205,6 +237,7 @@ export function startMcpBridge() {
       })
     })
   })
+  void listen<McpPrForm>('mcp-open-pr', (e) => openPrForm(e.payload))
   void listen<{ id: number | null }>('mcp-changed', (e) => {
     const id = e.payload.id
     if (typeof id !== 'number') return
