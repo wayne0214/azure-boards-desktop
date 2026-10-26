@@ -54,6 +54,8 @@ export function AppShell() {
   const activeOrg = useAppStore((s) => s.activeOrg)
   const view = useUiStore((s) => s.view)
   const sheet = useUiStore((s) => s.sheet)
+  // A new payload (e.g. a form an AI tool filled in) starts the sheet afresh.
+  const sheetKey = useUiStore((s) => String(s.sheetPayload?.nonce ?? ''))
   const density = useUiStore((s) => s.density)
   const pending = useUiStore((s) => s.pending > 0)
   const paletteOpen = useUiStore((s) => s.paletteOpen)
@@ -250,7 +252,7 @@ export function AppShell() {
       {sheet === 'settings' && <SettingsSheet />}
       {sheet === 'shortcuts' && <ShortcutsSheet />}
       {sheet === 'connect' && <ConnectScreen asSheet />}
-      {sheet === 'new-pr' && <NewPrSheet />}
+      {sheet === 'new-pr' && <NewPrSheet key={sheetKey} />}
       {sheet === 'complete-pr' && <CompletePrSheet />}
       {sheet === 'start-work' && <StartWorkSheet />}
       {sheet === 'whats-new' && <WhatsNewSheet />}

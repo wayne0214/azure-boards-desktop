@@ -1170,6 +1170,11 @@ select.input {
 .imp-side-h { font-size: var(--fs-xs); color: var(--text-3); padding: 6px 10px 0; }
 .imp-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-sm); line-height: 1.5; padding: 6px 10px 8px; max-height: 260px; overflow-y: auto; user-select: text; -webkit-user-select: text; }
 .imp-field > .imp-text { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-field); }
+.imp-edit { padding: 6px 10px 8px; display: flex; flex-direction: column; gap: 6px; }
+.imp-edit .textarea { width: 100%; font-size: var(--fs-sm); line-height: 1.5; resize: vertical; }
+.imp-edit-actions { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); }
+.imp-edit-actions .grow { flex: 1; }
+.imp-field > .imp-edit { border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-panel); }
 .imp-result-sum { display: flex; gap: 6px; margin-bottom: 4px; }
 .imp-result { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius); font-size: var(--fs-sm); }
 .imp-result .grow { flex: 1; }

@@ -142,6 +142,8 @@ export interface ImportPick {
   fp: string
   /** Conflict fields that take the file's value. */
   takeFile: string[]
+  /** Fields whose file text the user edited: reference name → the text to use instead. */
+  edits?: Record<string, string>
 }
 
 export const mcpImports = () => invoke<ImportInfo[]>('mcp_imports')
@@ -171,6 +173,38 @@ function currentContext() {
       ? { id: item.id, type: f['System.WorkItemType'] ?? null, title: f['System.Title'] ?? null, state: f['System.State'] ?? null, project: f['System.TeamProject'] ?? null }
       : null,
   }
+}
+
+/** What open_pull_request_form sends: the New pull request form's values. */
+export interface McpPrForm {
+  projectId: string
+  repoId: string
+  source: string
+  target: string
+  title: string
+  description: string
+  isDraft: boolean
+  workItemIds: number[]
+}
+
+/**
+ * Open the New pull request form filled in by an AI tool; the user creates it. When another form is
+ * open, offer it in a toast instead so what the user is typing is not lost.
+ */
+export function openPrForm(form: McpPrForm) {
+  const open = () => {
+    const ui = useUiStore.getState()
+    ui.setView('prs')
+    ui.openSheet('new-pr', { ...form, nonce: Date.now() })
+  }
+  if (!useUiStore.getState().sheet) { open(); return }
+  useUiStore.getState().toast({
+    kind: 'info',
+    title: 'Pull request ready to review',
+    detail: form.title,
+    sticky: true,
+    action: { label: 'Open', onClick: open },
+  })
 }
 
 let started = false
@@ -217,6 +251,7 @@ export function startMcpBridge() {
     void w.reloadTree()
     if (w.path === e.payload.path && w.draft === null) void w.open(e.payload.path)
   })
+  void listen<McpPrForm>('mcp-open-pr', (e) => openPrForm(e.payload))
   void listen<{ id: number | null }>('mcp-changed', (e) => {
     const id = e.payload.id
     if (typeof id !== 'number') return
