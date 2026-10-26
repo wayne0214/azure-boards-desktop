@@ -1,4 +1,4 @@
-//! Ready-made MCP prompts: step-by-step instructions for the two jobs people ask for most.
+//! Ready-made MCP prompts: step-by-step instructions for the jobs people ask for most.
 //! Claude Code shows them as slash commands (/mcp__boards__review_code_against_srs).
 
 use serde_json::{json, Value};
@@ -37,6 +37,14 @@ pub fn list() -> Vec<Value> {
             "description": "Stage the file's test cases (steps and the requirements they test) for review in Boards → Imports.",
             "arguments": [
                 { "name": "file", "description": "Path to the markdown file", "required": true },
+            ],
+        }),
+        json!({
+            "name": "prepare_pull_request",
+            "title": "Prepare a pull request",
+            "description": "Write a pull request's title and message for this repository's current branch and open them in Boards' New pull request form, for you to create.",
+            "arguments": [
+                { "name": "target", "description": "Branch to merge into; default the repository's default branch", "required": false },
             ],
         }),
     ]
@@ -121,6 +129,23 @@ pub fn get(name: &str, args: &Value) -> Result<Value, String> {
                  6. When I say I am done, call get_import_result and summarise what was applied, what failed and why."
             )
         }
+        "prepare_pull_request" => {
+            let target = arg(args, "target").map(|t| format!("into {t}")).unwrap_or_else(|| {
+                "into the branch this repository's instructions say pull requests go to (e.g. AGENTS.md, CONTRIBUTING.md), else its default branch".to_string()
+            });
+            format!(
+                "Prepare a pull request for this repository's current branch, {target}, and open it in Boards for me to create.\n\n\
+                 1. Find the current branch (git branch --show-current) and check it is pushed (git status -sb; git log @{{u}}..). \
+                 If it has commits that are not pushed, stop and tell me.\n\
+                 2. Find the Azure DevOps project and repository from the remote URL (git remote get-url origin: \
+                 dev.azure.com/<org>/<project>/_git/<repo>, or <org>.visualstudio.com/<project>/_git/<repo>).\n\
+                 3. Read every commit and the whole diff against the target branch (git log and git diff <target>...HEAD), not just the last commit.\n\
+                 4. Write a title that follows this repository's convention (e.g. Conventional Commits, \"feat: ...\"), and a markdown message: \
+                 what changed and why, then how it was tested. Find work item IDs in the branch name and commits (AB#123, #123).\n\
+                 5. Call open_pull_request_form with the project, repository, sourceBranch, targetBranch, title, description and workItemIds.\n\
+                 6. Tell me the form is open in Boards to review and create. Do not create the pull request any other way."
+            )
+        }
         other => return Err(format!("Unknown prompt: {other}")),
     };
     let description = list().into_iter().find(|p| p["name"] == name).and_then(|p| p.get("description").cloned()).unwrap_or(Value::Null);
@@ -145,6 +170,9 @@ mod tests {
         let h = get("import_hierarchy_from_markdown", &json!({ "file": "docs/trace.md" })).unwrap();
         let h = h["messages"][0]["content"]["text"].as_str().unwrap();
         assert!(h.contains("keyFields") && h.contains("parentKey") && h.contains("docs/trace.md"));
-        assert_eq!(list().len(), 4);
+        let pr = get("prepare_pull_request", &json!({ "target": "develop" })).unwrap();
+        let pr = pr["messages"][0]["content"]["text"].as_str().unwrap();
+        assert!(pr.contains("into develop") && pr.contains("open_pull_request_form"));
+        assert_eq!(list().len(), 5);
     }
 }

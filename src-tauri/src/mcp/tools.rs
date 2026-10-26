@@ -1,7 +1,7 @@
 //! The tools the MCP server offers, on top of the app's own Azure DevOps client and signed-in account.
 
 use super::steps::{self, STEPS_FIELD, TESTS_REL};
-use super::{context, export, fields, imports, sync, McpConfig};
+use super::{context, export, fields, imports, pr_form, sync, McpConfig};
 use crate::ado::{api, wiql};
 use crate::ado::client::AdoClient;
 use crate::error::AppError;
@@ -55,6 +55,8 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
             "importId": { "type": "string", "description": "From stage_import; omit for the newest" },
         }), &[], true),
         tool("plan_work_item_sync", "Dry run for bringing a few work items into Boards, approved in this chat. For many items use stage_import instead, so the user reviews them in Boards. Matches each item by its key (the type's ID field, e.g. SRS ID), then exact title, and returns a plan per row: create, update (fill fields that are empty in Boards), skip (already the same) or error, plus conflicts where Boards already has different text. Writes nothing.", sync_props(), &["items"], true),
+        // Creates nothing, so read-only mode keeps it: the user clicks Create in the form.
+        tool("open_pull_request_form", "Open Boards' New pull request form filled in with these values, for the user to review and create. Nothing is created by this call. Checks the repository and that both branches exist (the source must be pushed).", pr_form::schema(), &["repository", "sourceBranch", "title"], false),
     ];
     if !read_only {
         tools.extend([
@@ -297,6 +299,7 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
             }))
         }
         "get_import_result" => imports::result(app, str_arg(args, "importId").as_deref()),
+        "open_pull_request_form" => pr_form::open(app, &client, current_project(&ctx), args).await,
         "apply_work_item_sync" => {
             let plan_id = str_arg(args, "planId").ok_or_else(|| AppError::validation("Give the planId from plan_work_item_sync."))?;
             let field_types = state.fields(&client).await?;
@@ -772,5 +775,6 @@ mod tests {
         let names = |ro| definitions(ro).iter().map(|t| t["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
         assert!(!names(true).iter().any(|n| WRITE_TOOLS.contains(&n.as_str())));
         assert!(WRITE_TOOLS.iter().all(|w| names(false).iter().any(|n| n == w)));
+        assert!(names(true).iter().any(|n| n == "open_pull_request_form"));
     }
 }
