@@ -11,7 +11,9 @@ Call get_context first: it names the organization, the project and the work item
 so \"this item\" or \"the current story\" means that one. Requirements (SRS) have a key in an ID field such as \"SRS ID\"; \
 find_work_items finds them by key, type or sprint, and get_item_changes shows what changed. To bring many items in from a file, \
 use plan_work_item_sync, show the user the plan, and apply it only after they agree. Work item fields use Azure DevOps reference names \
-(System.Title, System.State, Microsoft.VSTS.Common.AcceptanceCriteria); list_work_item_types shows what a type has.";
+(System.Title, System.State, Microsoft.VSTS.Common.AcceptanceCriteria); list_work_item_types shows what a type has. \
+The project wiki holds the team's conventions, decisions and meeting notes: search_wiki before deciding how something should work, \
+and append_to_wiki to record a decision the user asks you to keep (get_context's wikiPage is the page they have open).";
 
 /// What a tool call produced: a JSON result, or an error message shown to the model.
 pub type ToolOutcome = Result<Value, String>;

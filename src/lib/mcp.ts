@@ -9,6 +9,7 @@ import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
 import { useUiStore } from '@/store/useUiStore'
 import { useImportStore } from '@/components/imports/useImportStore'
+import { useWikiStore } from '@/store/useWikiStore'
 
 export type SetupState = 'ready' | 'outdated' | 'missing' | 'notInstalled'
 
@@ -157,11 +158,15 @@ function currentContext() {
   const id = board.selectedId
   const item = id === null ? null : board.items.find((i) => i.id === id) ?? (board.detached?.id === id ? board.detached : null)
   const f = item?.fields ?? {}
+  const view = useUiStore.getState().view
+  const wiki = useWikiStore.getState()
   return {
     org: app.activeOrg,
     project: app.selectedProject?.name ?? null,
     team: app.selectedTeam?.name ?? null,
-    view: useUiStore.getState().view,
+    view,
+    // The wiki page open in the app: "this page".
+    wikiPage: view === 'wiki' && wiki.path ? { wiki: wiki.wikis.find((w) => w.id === wiki.wikiId)?.name ?? null, path: wiki.path } : null,
     selectedItem: item
       ? { id: item.id, type: f['System.WorkItemType'] ?? null, title: f['System.Title'] ?? null, state: f['System.State'] ?? null, project: f['System.TeamProject'] ?? null }
       : null,
@@ -189,6 +194,7 @@ export function startMcpBridge() {
   useAppStore.subscribe(push)
   useBoardStore.subscribe(push)
   useUiStore.subscribe(push)
+  useWikiStore.subscribe(push)
   push()
   // A newly staged import: refresh the list and offer to review it.
   void listen('mcp-imports', () => {
@@ -204,6 +210,12 @@ export function startMcpBridge() {
         action: { label: 'Review', onClick: () => { select(newest.id); useUiStore.getState().setView('imports') } },
       })
     })
+  })
+  // A page an AI tool added to: show the new text, unless it is being edited here.
+  void listen<{ path: string }>('mcp-wiki-changed', (e) => {
+    const w = useWikiStore.getState()
+    void w.reloadTree()
+    if (w.path === e.payload.path && w.draft === null) void w.open(e.payload.path)
   })
   void listen<{ id: number | null }>('mcp-changed', (e) => {
     const id = e.payload.id

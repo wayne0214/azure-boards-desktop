@@ -3,6 +3,7 @@
 import type { Api } from './api'
 import { addMockBranch, mockPr } from './api.mock.pr'
 import { mockVersioning } from './api.mock.versioning'
+import { mockWiki } from './api.mock.wiki'
 import { mockRooms } from './api.mock.rooms'
 import { mockPlans } from './api.mock.plans'
 import { serializeSteps, type StepItem } from './testcases/steps'
@@ -326,6 +327,7 @@ const cache = new Map<string, { value: unknown; updatedAt: number }>()
 export const mockApi: Api = {
   ...mockPr,
   ...mockVersioning,
+  ...mockWiki,
   ...mockRooms,
   ...mockPlans({
     title: (id) => String(items.find((i) => i.id === id)?.fields['System.Title'] ?? `Test case ${id}`),

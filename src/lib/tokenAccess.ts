@@ -22,6 +22,11 @@ export const TOKEN_ACCESS: TokenAccess[] = [
     scopes: ['Code: Read & write'],
   },
   {
+    feature: 'Wiki',
+    detail: 'Reading, searching and editing the project wiki, here and from AI tools.',
+    scopes: ['Wiki: Read & write'],
+  },
+  {
     feature: 'Test Plans',
     detail: 'Plans, suites, runs and results. Only if your account has Test Plans access.',
     scopes: ['Test Management: Read & write'],

@@ -1,4 +1,4 @@
-import { ChevronDown, Download, Clock3, Columns3, DoorOpen, FileInput, FlaskConical, GitPullRequest, FolderKanban, ListTree, Tag, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
+import { BookOpen, ChevronDown, Download, Clock3, Columns3, DoorOpen, FileInput, FlaskConical, GitPullRequest, FolderKanban, ListTree, Tag, Users, Inbox, Pin, RefreshCw, Search, Settings, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { pendingImports, useImportStore } from '@/components/imports/useImportStore'
@@ -59,7 +59,7 @@ export function Sidebar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects, q, settings.pinnedProjects, activeOrg])
 
-  const openProject = (p: Project, target: 'board' | 'list' | 'reqs' | 'tests' | 'plans' | 'team' | 'versioning') => {
+  const openProject = (p: Project, target: 'board' | 'list' | 'reqs' | 'tests' | 'plans' | 'team' | 'versioning' | 'wiki') => {
     if (view !== target) setView(target)
     if (selectedProject?.id !== p.id) void selectProject(p)
   }
@@ -69,6 +69,7 @@ export function Sidebar() {
     void api().showContextMenu([
       { label: 'Requirements', action: () => openProject(p, 'reqs') },
       { label: 'Testing', action: () => openProject(p, lastTestingView()) },
+      { label: 'Wiki', action: () => openProject(p, 'wiki') },
       { label: 'Open Board', action: () => openProject(p, 'board') },
       { label: 'Team', action: () => openProject(p, 'team') },
       { label: 'Open List', action: () => openProject(p, 'list') },
@@ -84,7 +85,7 @@ export function Sidebar() {
 
   const renderProject = (p: Project) => {
     const active = selectedProject?.id === p.id
-    const inProject = view === 'board' || view === 'list' || view === 'reqs' || view === 'tests' || view === 'plans' || view === 'team' || view === 'versioning'
+    const inProject = view === 'board' || view === 'list' || view === 'reqs' || view === 'tests' || view === 'plans' || view === 'team' || view === 'versioning' || view === 'wiki'
     const onBoard = view === 'board' || view === 'list'
     return (
       <div key={p.id}>
@@ -92,7 +93,7 @@ export function Sidebar() {
           type="button"
           className={`nav-item ${active && inProject ? 'parent' : ''}`}
           // A project opens on its requirements; from the board it stays on the board.
-          onClick={() => openProject(p, active && inProject ? (view as 'board' | 'list' | 'reqs' | 'tests' | 'plans' | 'team' | 'versioning') : onBoard ? view : 'reqs')}
+          onClick={() => openProject(p, active && inProject ? (view as 'board' | 'list' | 'reqs' | 'tests' | 'plans' | 'team' | 'versioning' | 'wiki') : onBoard ? view : 'reqs')}
           onContextMenu={(e) => { e.preventDefault(); projectMenu(p) }}
           title={p.description ?? p.name}
         >
@@ -117,6 +118,10 @@ export function Sidebar() {
             <button type="button" className={`nav-item ${view === 'tests' || view === 'plans' ? 'active' : ''}`} onClick={() => openProject(p, view === 'tests' || view === 'plans' ? view : lastTestingView())}>
               <span className="ico"><FlaskConical size={14} /></span>
               <span className="label">Testing</span>
+            </button>
+            <button type="button" className={`nav-item ${view === 'wiki' ? 'active' : ''}`} onClick={() => openProject(p, 'wiki')}>
+              <span className="ico"><BookOpen size={14} /></span>
+              <span className="label">Wiki</span>
             </button>
             <button type="button" className={`nav-item ${onBoard ? 'active' : ''}`} onClick={() => openProject(p, view === 'list' ? 'list' : 'board')}>
               <span className="ico"><Columns3 size={14} /></span>
