@@ -23,6 +23,7 @@ import { PrView } from '../pr/PrView'
 import { VersioningView } from '../versioning/VersioningView'
 import { CompletePrSheet } from '../pr/CompletePrSheet'
 import { NewPrSheet } from '../pr/NewPrSheet'
+import { WikiView } from '../wiki/WikiView'
 import { checkForUpdates, startUpdateChecks } from '@/lib/updater'
 import { startNotifications } from '@/lib/notify/poller'
 import { StartWorkSheet } from '../sheets/StartWorkSheet'
@@ -45,7 +46,7 @@ import { fitMiniPopup } from '@/lib/miniWindow'
 import { refreshCurrentView, refreshInBackground, refreshOnFocus } from '@/lib/refresh'
 import { usePrStore } from '@/store/usePrStore'
 
-const VIEW_NAMES: Record<View, string> = { board: 'The board', list: 'The list', mine: 'My Work', timesheet: 'Timesheet', prs: 'Pull Requests', rooms: 'Meeting Rooms', reqs: 'Requirements', tests: 'Test Cases', plans: 'Test Plans', team: 'Team', imports: 'Imports', versioning: 'Versioning' }
+const VIEW_NAMES: Record<View, string> = { board: 'The board', list: 'The list', mine: 'My Work', timesheet: 'Timesheet', prs: 'Pull Requests', rooms: 'Meeting Rooms', reqs: 'Requirements', tests: 'Test Cases', plans: 'Test Plans', team: 'Team', imports: 'Imports', versioning: 'Versioning', wiki: 'Wiki' }
 
 export function AppShell() {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen)
@@ -239,7 +240,7 @@ export function AppShell() {
         <div className="main-body">
           <div className="content" onClick={onBlankClick}>
             <ErrorBoundary key={view} where={VIEW_NAMES[view]} inline>
-            {view === 'versioning' ? <VersioningView /> : view === 'imports' ? <ImportsView /> : view === 'team' ? <TeamView /> : view === 'reqs' ? <RequirementsView /> : view === 'tests' ? <TestCasesView /> : view === 'plans' ? <PlansView /> : view === 'rooms' ? <MeetingRoomView /> : view === 'prs' ? <PrView /> : view === 'timesheet' ? <TimesheetView /> : view === 'mine' ? <MyWorkView /> : view === 'list' ? <ListView /> : <BoardView />}
+            {view === 'wiki' ? <WikiView /> : view === 'versioning' ? <VersioningView /> : view === 'imports' ? <ImportsView /> : view === 'team' ? <TeamView /> : view === 'reqs' ? <RequirementsView /> : view === 'tests' ? <TestCasesView /> : view === 'plans' ? <PlansView /> : view === 'rooms' ? <MeetingRoomView /> : view === 'prs' ? <PrView /> : view === 'timesheet' ? <TimesheetView /> : view === 'mine' ? <MyWorkView /> : view === 'list' ? <ListView /> : <BoardView />}
             </ErrorBoundary>
           </div>
           {inspectorOpen && view !== 'timesheet' && view !== 'rooms' && view !== 'imports' && <Inspector floating={view !== 'board'} />}

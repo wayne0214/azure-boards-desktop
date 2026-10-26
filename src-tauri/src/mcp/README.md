@@ -24,7 +24,9 @@ Off by default. Turn it on in **Settings → AI tools (MCP)**.
 | `export_work_items`: full text of many items at once (e.g. the whole SRS) as markdown or JSON, in pages | no |
 | `stage_import`, `get_import_result`: stage a bulk import for review in Boards → Imports (see below) | no (the user applies it in the app) |
 | `plan_work_item_sync`: dry run of a bulk import approved in the chat | no |
+| `search_wiki`, `list_wiki_pages`, `get_wiki_page`: the project wiki (conventions, decisions, meeting notes) | no |
 | `create_work_item`, `update_work_item`, `add_comment`, `apply_work_item_sync` | yes |
+| `append_to_wiki`: adds markdown to the end of a page, or creates it with `create: true` (`wiki.rs`) | yes |
 | `open_pull_request_form`: opens the New pull request form filled in, for the user to create | no (the user creates it in the app) |
 
 Prompts (Claude Code shows them as `/mcp__boards__<name>`):
@@ -61,6 +63,13 @@ On the clipboard, a copied file is used as it is; a screenshot is saved as PNG.
   Repro Steps, else Description; `imageField` picks another. Text the call sets for that field comes first;
   on update, what the field already has is kept.
 - The reply's `imagesAddedTo` names the field.
+
+### Wiki
+
+The wiki tools use the app's Wiki API code (`src/ado/wiki.rs`). `search_wiki` uses Azure DevOps Search and falls back
+to matching page titles where that is not available. `append_to_wiki` never replaces text: it reads the page, adds to
+the end and saves against the page's version, reading again once if someone saved in between. The UI reloads the page
+afterwards (`mcp-wiki-changed`) unless it is being edited there. `get_context` includes `wikiPage` while the Wiki is open.
 
 ### Test cases
 

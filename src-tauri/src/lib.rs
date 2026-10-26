@@ -11,6 +11,7 @@ mod state;
 mod timesheet;
 mod pr_commands;
 mod versioning_commands;
+mod wiki_commands;
 mod plan_commands;
 mod rooms;
 mod tools;
@@ -102,6 +103,15 @@ pub fn run() {
             pr_commands::pr_list_repos,
             versioning_commands::versioning_facts,
             versioning_commands::versioning_fix,
+            wiki_commands::wiki_list,
+            wiki_commands::wiki_create,
+            wiki_commands::wiki_tree,
+            wiki_commands::wiki_page,
+            wiki_commands::wiki_save,
+            wiki_commands::wiki_create_page,
+            wiki_commands::wiki_upload_attachment,
+            wiki_commands::wiki_attachment,
+            wiki_commands::wiki_search,
             pr_commands::pr_list,
             pr_commands::pr_get,
             pr_commands::pr_detail,

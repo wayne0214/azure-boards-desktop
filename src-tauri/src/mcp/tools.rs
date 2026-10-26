@@ -10,12 +10,12 @@ use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// Tools that change Azure DevOps; refused while the server is read-only.
-const WRITE_TOOLS: &[&str] = &["create_work_item", "update_work_item", "add_comment", "apply_work_item_sync"];
+const WRITE_TOOLS: &[&str] = &["create_work_item", "update_work_item", "add_comment", "apply_work_item_sync", "append_to_wiki"];
 
 pub fn definitions(read_only: bool) -> Vec<Value> {
     let id = json!({ "type": "integer", "description": "Work item ID, e.g. 1182" });
     let mut tools = vec![
-        tool("get_context", "What the user has open in the Boards app: organization, project, team, and the selected work item (if any). Call this first; \"this item\" means the selected one.", json!({}), &[], true),
+        tool("get_context", "What the user has open in the Boards app: organization, project, team, the selected work item and the wiki page (if any). Call this first; \"this item\" means the selected one, \"this page\" the wiki page.", json!({}), &[], true),
         tool("get_work_item", "One work item with its fields (rich text as plain text), parent, children and links.", json!({ "id": id }), &["id"], true),
         tool("search_work_items", "Find work items by text in the title (or an ID). Searches the current project unless `project` is given.", json!({
             "text": { "type": "string" },
@@ -58,6 +58,7 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
         // Creates nothing, so read-only mode keeps it: the user clicks Create in the form.
         tool("open_pull_request_form", "Open Boards' New pull request form filled in with these values, for the user to review and create. Nothing is created by this call. Checks the repository and that both branches exist (the source must be pushed).", pr_form::schema(), &["repository", "sourceBranch", "title"], false),
     ];
+    tools.extend(super::wiki::definitions(read_only));
     if !read_only {
         tools.extend([
             tool("create_work_item", "Create a work item. Text in `description` may be plain text or HTML. For a bug, put numbered steps in Microsoft.VSTS.TCM.ReproSteps and what the user sees in the Symptom field when the type has one (list_work_item_types), and attach screenshots with `images`.", json!({
@@ -143,7 +144,7 @@ fn sync_props() -> Value {
     })
 }
 
-fn tool(name: &str, description: &str, props: Value, required: &[&str], read_only: bool) -> Value {
+pub(super) fn tool(name: &str, description: &str, props: Value, required: &[&str], read_only: bool) -> Value {
     json!({
         "name": name,
         "description": description,
@@ -318,6 +319,7 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
             }))
         }
         "get_import_result" => imports::result(app, str_arg(args, "importId").as_deref()),
+        n if super::wiki::handles(n) => super::wiki::call(app, &client, current_project(&ctx), n, args).await,
         "open_pull_request_form" => pr_form::open(app, &client, current_project(&ctx), args).await,
         "apply_work_item_sync" => {
             let plan_id = str_arg(args, "planId").ok_or_else(|| AppError::validation("Give the planId from plan_work_item_sync."))?;

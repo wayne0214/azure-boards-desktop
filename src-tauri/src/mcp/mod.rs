@@ -18,6 +18,7 @@ mod protocol;
 mod steps;
 mod sync;
 mod tools;
+mod wiki;
 
 use crate::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
