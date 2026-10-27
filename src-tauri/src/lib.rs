@@ -5,6 +5,7 @@ mod error;
 mod mcp;
 mod menu;
 mod nav_guard;
+mod notify_banner;
 mod secrets;
 mod settings;
 mod state;
@@ -37,6 +38,7 @@ pub fn run() {
             let cache = cache::Cache::open(data_dir)?;
             app.manage(state::AppState::new(settings, cache));
             menu::build(app.handle())?;
+            notify_banner::present_while_in_front();
             mcp::init(app.handle());
             // Reading the login shell's PATH can take seconds; do it now rather than on the first Generate.
             std::thread::spawn(tools::warm_up);
