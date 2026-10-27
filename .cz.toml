@@ -2,7 +2,7 @@
 name = "cz_conventional_commits"
 tag_format = "v$version"
 version_scheme = "semver2"
-version = "1.4.0-alpha.5"
+version = "1.4.0-alpha.6"
 major_version_zero = false
 # git-tools keeps these in step on every bump: package.json, package-lock.json,
 # src-tauri/Cargo.toml and src-tauri/Cargo.lock. tauri.conf.json reads ../package.json.
