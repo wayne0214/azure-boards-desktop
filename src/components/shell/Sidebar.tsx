@@ -5,7 +5,7 @@ import { pendingImports, useImportStore } from '@/components/imports/useImportSt
 import { api } from '@/lib/api'
 import { installUpdate, useUpdateStore } from '@/lib/updater'
 import { useAppStore } from '@/store/useAppStore'
-import { attentionCount, useMyWorkStore } from '@/store/useMyWorkStore'
+import { attentionCount, isShown, useMyWorkStore } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
 import { lastTestingView, useUiStore } from '@/store/useUiStore'
 import type { Project } from '@/lib/types'
@@ -30,7 +30,7 @@ export function Sidebar() {
   const setView = useUiStore((s) => s.setView)
   const openSheet = useUiStore((s) => s.openSheet)
   const toast = useUiStore((s) => s.toast)
-  const myCount = useMyWorkStore((s) => attentionCount(s.items, s.types, s.seenAt))
+  const myCount = useMyWorkStore((s) => attentionCount(s.items, s.types, s.seenAt, (it) => isShown(it, s.planning, s.showPlanning, s.types)))
   const imports = useImportStore((s) => s.list)
   const importCount = pendingImports(imports)
   useEffect(() => { void useImportStore.getState().load() }, [])

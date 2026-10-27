@@ -63,6 +63,7 @@ pub fn run() {
             commands::query_board_items,
             commands::my_work,
             commands::mentioned_items,
+            commands::planning_types,
             commands::project_items,
             commands::add_link,
             commands::remove_link,

@@ -8,7 +8,7 @@ import { errorMessage } from '@/lib/types'
 import { Empty } from '@/components/ui/Empty'
 import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
-import { isFinished, isToVerify, isUnseen, isWaitingOnReporter, matchesSearch, typeOf, useMyWorkStore, type TypesByProject } from '@/store/useMyWorkStore'
+import { isFinished, isShown, isToVerify, isUnseen, isWaitingOnReporter, matchesSearch, planningCount, typeOf, useMyWorkStore, type TypesByProject } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
 import { useUiStore } from '@/store/useUiStore'
 import { WikiUpdatesStrip } from '@/components/wiki/WikiUpdates'
@@ -32,6 +32,8 @@ export function MyWorkView() {
   const toast = useUiStore((s) => s.toast)
   const types = useMyWorkStore((s) => s.types)
   const search = useMyWorkStore((s) => s.search)
+  const planning = useMyWorkStore((s) => s.planning)
+  const showPlanning = useMyWorkStore((s) => s.showPlanning)
   const highlightSince = useMyWorkStore((s) => s.highlightSince)
   const involved = usePrStore((s) => s.involved)
   const prItems = usePrStore((s) => s.prItems)
@@ -68,7 +70,7 @@ export function MyWorkView() {
       return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
     }
     // Resolved work reported by someone else waits on them, not me: it shows in their To verify instead.
-    const all = (items ?? []).filter((it) => !isFinished(it, types) && !isWaitingOnReporter(it, types) && matchesSearch(it, search))
+    const all = (items ?? []).filter((it) => isShown(it, planning, showPlanning, types) && !isFinished(it, types) && !isWaitingOnReporter(it, types) && matchesSearch(it, search))
     // Active work: most urgent first, then most recently touched. To verify: oldest first so nothing waits forever.
     const active = all.filter((it) => !isToVerify(it, types)).sort((a, b) => priorityOf(a) - priorityOf(b) || changedOf(b).localeCompare(changedOf(a)))
     const verify = all.filter((it) => isToVerify(it, types)).sort((a, b) => changedOf(a).localeCompare(changedOf(b)))
@@ -76,7 +78,7 @@ export function MyWorkView() {
       { key: 'active', title: 'Assigned to me', hint: 'Open work assigned to you', projects: byProject(active) },
       { key: 'verify', title: 'To verify', hint: 'Resolved items you reported, waiting for your check before they are closed (processes with a Resolved state, such as Agile and CMMI)', projects: byProject(verify) },
     ]
-  }, [items, types, search])
+  }, [items, types, search, planning, showPlanning])
 
   // Active pull requests I wrote or review, by the work items they link to.
   const prsByItem = useMemo(() => {
@@ -159,7 +161,12 @@ export function MyWorkView() {
   if (items === null && loading) return <div className="empty-state"><span className="spinner lg" /></div>
   if (error && !items) return <Empty title="Could not load your work" action={<button type="button" className="btn" onClick={() => void load()}>Try again</button>}>{error}</Empty>
   const shown = sections.reduce((a, sec) => a + sec.projects.reduce((b, [, l]) => b + l.length, 0), 0)
+  // A search that only matches hidden planning items offers to show them rather than saying nothing matched.
+  const hiddenMatches = showPlanning || !search.trim() ? 0 : planningCount((items ?? []).filter((it) => matchesSearch(it, search)), types, planning)
+  if (shown === 0 && hiddenMatches > 0) return <Empty icon={<SearchX size={40} strokeWidth={1.2} />} title="Only planning items match" action={<button type="button" className="btn" onClick={() => useMyWorkStore.getState().setShowPlanning(true)}>Show planning items</button>}>{hiddenMatches} hidden requirement, feature or epic{hiddenMatches === 1 ? '' : 's'} match{hiddenMatches === 1 ? 'es' : ''} “{search.trim()}”.</Empty>
   if (items && items.length > 0 && shown === 0 && search.trim()) return <Empty icon={<SearchX size={40} strokeWidth={1.2} />} title="No matching work" action={<button type="button" className="btn" onClick={() => useMyWorkStore.getState().setSearch('')}>Clear search</button>}>Nothing in My Work matches “{search.trim()}”.</Empty>
+  const hiddenPlanning = showPlanning ? 0 : planningCount(items, types, planning)
+  if (shown === 0 && hiddenPlanning > 0) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title="No tasks or bugs assigned to you" action={<button type="button" className="btn" onClick={() => useMyWorkStore.getState().setShowPlanning(true)}>Show planning items</button>}>{hiddenPlanning} planning item{hiddenPlanning === 1 ? ' is' : 's are'} hidden: requirements, features and epics assigned to you.</Empty>
   if (!items || items.length === 0) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title={`Nothing assigned to ${account?.userName ?? 'you'}`}>When work items are assigned to you in any project, or resolved and waiting for your check, they will appear here.</Empty>
 
   return (
