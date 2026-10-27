@@ -112,6 +112,8 @@ pub fn run() {
             wiki_commands::wiki_upload_attachment,
             wiki_commands::wiki_attachment,
             wiki_commands::wiki_search,
+            wiki_commands::wiki_changes,
+            wiki_commands::wiki_find_items,
             pr_commands::pr_list,
             pr_commands::pr_get,
             pr_commands::pr_detail,

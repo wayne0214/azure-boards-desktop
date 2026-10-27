@@ -41,3 +41,42 @@ export interface WikiSearchResult {
   fullText: boolean
   results: WikiSearchHit[]
 }
+
+/** A page changed on the wiki's branch: the latest change to it, newest first. */
+export interface WikiChange {
+  path: string
+  /** ISO time. */
+  date: string
+  author: string | null
+  authorEmail: string | null
+}
+
+/** Filters for a live list of work items; the same as the AI tools' find_work_items. */
+export interface ItemFilter {
+  types?: string[]
+  states?: string[]
+  /** "current" for the team's current sprint, or an iteration path. */
+  iteration?: string
+  assignedToMe?: boolean
+  text?: string
+  /** YYYY-MM-DD */
+  changedSince?: string
+  limit?: number
+}
+
+export interface FoundItem {
+  id: number
+  type: string | null
+  title: string | null
+  state: string | null
+  assignedTo: string | { displayName?: string } | null
+  iteration: string | null
+  key: string | null
+  changed: string | null
+}
+
+export interface FoundItems {
+  count: number
+  truncated: boolean
+  items: FoundItem[]
+}

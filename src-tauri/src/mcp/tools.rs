@@ -419,7 +419,7 @@ pub(super) async fn query(client: &AdoClient, state: &AppState, ctx: &Value, arg
     Ok(Found { project, ids, limit, ptypes, key_fields, available, wanted_key })
 }
 
-async fn find(client: &AdoClient, state: &AppState, ctx: &Value, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn find(client: &AdoClient, state: &AppState, ctx: &Value, args: &Value) -> Result<Value, AppError> {
     let found = query(client, state, ctx, args, "[System.ChangedDate] DESC", (100, 500)).await?;
     let mut extra = found.key_fields.clone();
     extra.push("System.ChangedDate".into());

@@ -82,3 +82,39 @@ export function attachmentSrc(src: string): string | null {
   const p = s.startsWith('/') ? s : `/${s}`
   return p.startsWith('/.attachments/') ? p : null
 }
+
+/** "**Status:** Accepted · **Decided by:** Wayne · **Date:** 2026-10-20": the facts at the top of a decision or feedback page. */
+export function pageMeta(markdown: string): { status: string | null; by: string | null; from: string | null; date: string | null } {
+  const head = markdown.split('\n').slice(0, 12).join('\n')
+  const field = (name: string) => new RegExp(`\\*\\*${name}:?\\*\\*:?\\s*([^·\\n*|]*)`, 'i').exec(head)?.[1]?.trim() || null
+  return { status: field('Status'), by: field('Decided by'), from: field('From'), date: field('Date') ?? /\b(\d{4}-\d{2}-\d{2})\b/.exec(head)?.[1] ?? null }
+}
+
+/** Pages directly under a page, in the wiki's order. */
+export function childPages(root: WikiPageNode | null, parent: string): string[] {
+  const find = (n: WikiPageNode): WikiPageNode | null => (n.path === parent ? n : (n.subPages ?? []).reduce<WikiPageNode | null>((f, k) => f ?? find(k), null))
+  const node = root ? find(root) : null
+  return [...(node?.subPages ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((n) => n.path)
+}
+
+/** The page with `line` added at the end of a "## heading" section (made at the end when missing); placeholder text there goes. */
+export function appendToSection(markdown: string, heading: string, line: string, placeholder?: RegExp): string {
+  const lines = markdown.replace(/\s+$/, '').split('\n')
+  const start = lines.findIndex((l) => new RegExp(`^##\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i').test(l))
+  if (start < 0) return `${lines.join('\n')}\n\n## ${heading}\n${line}\n`
+  let end = lines.findIndex((l, i) => i > start && /^#{1,2}\s/.test(l))
+  if (end < 0) end = lines.length
+  const body = lines.slice(start + 1, end).filter((l) => !(placeholder && placeholder.test(l)))
+  while (body.length && !body[body.length - 1].trim()) body.pop()
+  const rest = lines.slice(end)
+  return [...lines.slice(0, start + 1), ...body, line, ...(rest.length ? ['', ...rest] : [])].join('\n') + '\n'
+}
+
+/** The text under a "## heading", up to the next heading of that level or higher. */
+export function sectionText(markdown: string, heading: string): string {
+  const lines = markdown.split('\n')
+  const start = lines.findIndex((l) => new RegExp(`^##\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i').test(l))
+  if (start < 0) return ''
+  const end = lines.findIndex((l, i) => i > start && /^#{1,2}\s/.test(l))
+  return lines.slice(start + 1, end < 0 ? undefined : end).join('\n')
+}

@@ -71,6 +71,11 @@ to matching page titles where that is not available. `append_to_wiki` never repl
 the end and saves against the page's version, reading again once if someone saved in between. The UI reloads the page
 afterwards (`mcp-wiki-changed`) unless it is being edited there. `get_context` includes `wikiPage` while the Wiki is open.
 
+The server instructions describe the page shapes the app reads (meeting actions, decision status, feedback's
+"Became"), so pages an AI tool writes show up in the decision index, the feedback trace and Create tasks.
+Live blocks on pages (```` ```boards ````) are listed by the app with `wiki_find_items`, which runs `find_work_items`
+(`mcp::find_items`).
+
 ### Test cases
 
 Steps live in `Microsoft.VSTS.TCM.Steps` as XML (`steps.rs`, the same format as the app's step grid).

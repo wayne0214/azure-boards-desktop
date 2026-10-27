@@ -9,6 +9,8 @@ import { attentionCount, useMyWorkStore } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
 import { lastTestingView, useUiStore } from '@/store/useUiStore'
 import type { Project } from '@/lib/types'
+import { useWikiUpdates } from '@/components/wiki/WikiUpdates'
+import { useWikiStore } from '@/store/useWikiStore'
 
 export function Sidebar() {
   const settings = useAppStore((s) => s.settings)
@@ -33,6 +35,8 @@ export function Sidebar() {
   const importCount = pendingImports(imports)
   useEffect(() => { void useImportStore.getState().load() }, [])
   const prCount = usePrStore((s) => s.counts.review)
+  const wikiNews = useWikiUpdates()
+  const wikiProject = useWikiStore((s) => s.project?.id)
   const prError = usePrStore((s) => s.countsError)
   const prScope = usePrStore((s) => s.scope)
 
@@ -122,6 +126,7 @@ export function Sidebar() {
             <button type="button" className={`nav-item ${view === 'wiki' ? 'active' : ''}`} onClick={() => openProject(p, 'wiki')}>
               <span className="ico"><BookOpen size={14} /></span>
               <span className="label">Wiki</span>
+              {wikiProject === p.id && wikiNews.length > 0 && <span className="count attn" title="Wiki pages changed since you last looked, or that mention you">{wikiNews.length}</span>}
             </button>
             <button type="button" className={`nav-item ${onBoard ? 'active' : ''}`} onClick={() => openProject(p, view === 'list' ? 'list' : 'board')}>
               <span className="ico"><Columns3 size={14} /></span>
