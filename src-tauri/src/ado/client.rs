@@ -239,6 +239,35 @@ impl AdoClient {
         self.request(Method::PATCH, url, Some(("application/json-patch+json", body.to_string()))).await
     }
 
+    /// GET that also returns the response's ETag (a wiki page's version, needed to save it).
+    pub async fn get_with_etag(&self, url: &str) -> AppResult<(Value, Option<String>)> {
+        let resp = self.send(Method::GET, url, None).await?;
+        self.handle_etag(resp).await
+    }
+
+    /// PUT with a body as given; `if_match` makes it fail (412) when the resource changed since that
+    /// ETag was read. Returns the body and the new ETag. Not retried: a repeat could save twice.
+    pub async fn put_with_etag(&self, url: &str, content_type: &str, body: String, if_match: Option<&str>) -> AppResult<(Value, Option<String>)> {
+        let mut req = self
+            .http
+            .put(url)
+            .header(header::AUTHORIZATION, &self.auth_header)
+            .header(header::ACCEPT, "application/json")
+            .header(header::CONTENT_TYPE, content_type)
+            .body(body);
+        if let Some(tag) = if_match {
+            req = req.header(header::IF_MATCH, tag);
+        }
+        let resp = req.send().await?;
+        self.handle_etag(resp).await
+    }
+
+    async fn handle_etag(&self, resp: Response) -> AppResult<(Value, Option<String>)> {
+        let etag = resp.headers().get(header::ETAG).and_then(|v| v.to_str().ok()).map(str::to_string);
+        let (v, _) = self.handle::<Value>(resp).await?;
+        Ok((v, etag))
+    }
+
     /// Download a binary resource (e.g. an attachment image) with the user's credentials.
     pub async fn get_bytes(&self, url: &str) -> AppResult<(String, Vec<u8>)> {
         let resp = self.send(Method::GET, url, None).await?;

@@ -1,4 +1,4 @@
-import { AtSign, CalendarClock, GitPullRequest, Hammer, ImagePlus, Maximize2, RefreshCw } from 'lucide-react'
+import { AtSign, BookOpen, CalendarClock, GitPullRequest, Hammer, ImagePlus, Maximize2, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { typeColor } from '@/lib/format'
@@ -11,6 +11,9 @@ import { useMyWorkStore } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
 import { useRoomStore } from '@/store/useRoomStore'
 import { useUiStore } from '@/store/useUiStore'
+import { useWikiStore } from '@/store/useWikiStore'
+import { useWikiUpdates } from '@/components/wiki/WikiUpdates'
+import { pageTitle } from '@/lib/wiki/pages'
 
 // The panel sits beside other apps, unfocused most of the time, so it refreshes on its own clock.
 const EVERY = 2 * 60 * 1000
@@ -28,6 +31,8 @@ export function MiniView() {
   const involved = usePrStore((s) => s.involved)
   const bookings = useRoomStore((s) => s.mine)
   const setMini = useUiStore((s) => s.setMini)
+  const selectedProject = useAppStore((s) => s.selectedProject)
+  const wikiNews = useWikiUpdates().slice(0, 3)
   const [mentions, setMentions] = useState<WorkItem[] | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -38,9 +43,10 @@ export function MiniView() {
       usePrStore.getState().loadInvolved(),
       useRoomStore.getState().loadMine(),
       org ? api().mentionedItems(org).then(setMentions) : Promise.resolve(),
+      selectedProject ? useWikiStore.getState().refreshFor(selectedProject) : Promise.resolve(),
     ])
     setRefreshing(false)
-  }, [org])
+  }, [org, selectedProject])
 
   useEffect(() => {
     void refresh()
@@ -52,7 +58,7 @@ export function MiniView() {
   const prs = useMemo(() => (me ? prsForMe(involved, me.userId) : { review: [], mine: [] }), [involved, me])
   const recentMentions = useMemo(() => [...(mentions ?? [])].sort((a, b) => String(b.fields['System.ChangedDate']).localeCompare(String(a.fields['System.ChangedDate']))).slice(0, 3), [mentions])
   const booking = nextBooking(bookings)
-  const allClear = prs.review.length + prs.mine.length + working.length + recentMentions.length === 0 && !booking
+  const allClear = prs.review.length + prs.mine.length + working.length + recentMentions.length + wikiNews.length === 0 && !booking
 
   const openItem = (it: WorkItem) => {
     setMini(false)
@@ -97,13 +103,20 @@ export function MiniView() {
             </button>
           ))}
         </Section>
+        <Section icon={<BookOpen size={13} />} title="Wiki" count={wikiNews.length}>
+          {wikiNews.map((u) => (
+            <button key={u.path} type="button" className="mini-row" onClick={() => { setMini(false); void useWikiStore.getState().show(u.path) }}>
+              <span className="mini-text"><b>{pageTitle(u.path)}</b><span className="faint">{u.mention ? 'Mentions you · ' : 'Changed · '}{u.by ?? 'someone'}</span></span>
+            </button>
+          ))}
+        </Section>
         {booking && (
           <div className="mini-booking">
             <CalendarClock size={13} />
             <span className="mini-text"><b>{booking.title || 'Room booking'}</b><span className="faint">{startsIn(booking)}</span></span>
           </div>
         )}
-        {allClear && <div className="mini-empty faint">{refreshing ? 'Checking…' : 'All clear: no reviews, pull requests, work in progress or mentions.'}</div>}
+        {allClear && <div className="mini-empty faint">{refreshing ? 'Checking…' : 'All clear: no reviews, pull requests, work in progress, mentions or wiki changes.'}</div>}
         <div className="mini-drop faint"><ImagePlus size={13} /> Drop or paste a screenshot to report a bug</div>
       </div>
     </div>

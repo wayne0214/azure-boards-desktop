@@ -21,8 +21,8 @@ export function NewPrSheet() {
   const org = useAppStore((s) => s.activeOrg) ?? ''
   const s = usePrStore(useShallow((st) => ({ create: st.create, loadMembers: st.loadMembers, loadRepos: st.loadRepos, repoFilter: st.repoFilter, repos: st.repos, scope: st.scope })))
   const projects = useAppStore((st) => st.projects)
-  // Opened from a work item's branch: start from that project, repository and branch.
-  const payload = useUiStore((st) => st.sheetPayload) as { projectId?: string; repoId?: string; source?: string; target?: string; workItem?: WorkItem } | null
+  // Opened from a work item's branch, or filled in by an AI tool (open_pull_request_form): start from those values.
+  const payload = useUiStore((st) => st.sheetPayload) as { projectId?: string; repoId?: string; source?: string; target?: string; workItem?: WorkItem; title?: string; description?: string; isDraft?: boolean; workItemIds?: number[] } | null
   const [projectId, setProjectId] = useState(payload?.projectId ?? (s.scope !== 'all' ? s.scope : (s.repos[0]?.project?.id ?? projects[0]?.id ?? '')))
   const repos = s.repos.filter((r) => r.project?.id === projectId)
   const [repoId, setRepoId] = useState(payload?.repoId ?? s.repoFilter ?? repos[0]?.id ?? '')
@@ -44,9 +44,9 @@ export function NewPrSheet() {
   const [branches, setBranches] = useState<string[]>([])
   const [source, setSource] = useState(payload?.source ?? '')
   const [target, setTarget] = useState(payload?.target ?? '')
-  const [title, setTitle] = useState(payload?.workItem ? String(payload.workItem.fields['System.Title'] ?? '') : '')
-  const [desc, setDesc] = useState('')
-  const [draft, setDraft] = useState(false)
+  const [title, setTitle] = useState(payload?.title ?? (payload?.workItem ? String(payload.workItem.fields['System.Title'] ?? '') : ''))
+  const [desc, setDesc] = useState(payload?.description ?? '')
+  const [draft, setDraft] = useState(payload?.isDraft ?? false)
   const [reviewers, setReviewers] = useState<ReviewerChoice[]>([])
   const [busy, setBusy] = useState(false)
   const toast = useUiStore((st) => st.toast)
@@ -58,6 +58,18 @@ export function NewPrSheet() {
   const projectName = projects.find((p) => p.id === projectId)?.name ?? ''
   const items: (WorkItem & { linkedVia?: BranchWorkItem['linkedVia'] })[] = [...found, ...added.filter((w) => !found.some((f) => f.id === w.id))]
   const linked = items.map((w) => w.id).filter((id) => !unticked.includes(id))
+
+  // Work items an AI tool named: add those that load, once.
+  const wantedItems = useRef(payload?.workItemIds ?? [])
+  useEffect(() => {
+    const ids = wantedItems.current
+    if (ids.length === 0 || !projectName) return
+    wantedItems.current = []
+    void Promise.allSettled(ids.map((id) => api().getWorkItem(org, projectName, id))).then((res) => {
+      const loaded = res.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+      setAdded((cur) => [...cur, ...loaded.filter((w) => !cur.some((c) => c.id === w.id))])
+    })
+  }, [org, projectName])
 
   useEffect(() => {
     setFound([])

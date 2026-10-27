@@ -10,6 +10,38 @@ export interface ReleaseNote {
 /** Shown once in What's New after an update to that version. Newest first; add one per release. */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.4.0',
+    highlights: [
+      {
+        title: 'Your project wiki, in Boards',
+        detail: 'Open Wiki in a project to read, search and edit its Azure DevOps wiki next to your work. Paste or drop images into a page, and #123 links show the item\'s title. Your AI tool can read and write wiki pages too.',
+      },
+      {
+        title: 'Meeting notes that turn into work',
+        detail: 'New pages can start from a template: meeting notes, a decision, feedback, a sprint review or release notes. Press Notes on a room booking for notes with the time, room and organiser filled in. Action items like "- [ ] @Name do this" become Tasks with one click, linked back on the page.',
+      },
+      {
+        title: 'Live blocks',
+        detail: 'Add a Live block to a page to show work items, a requirement, pull requests, the decision log or feedback as they are right now, each time the page is opened.',
+      },
+      {
+        title: 'See what changed since you looked',
+        detail: 'Pages your teammates changed since you last looked are marked in the Wiki, counted in the sidebar, and listed in My Work and mini mode. @mention someone in a page, and mentions of you are highlighted.',
+      },
+      {
+        title: 'Sprint reviews and release notes, drafted',
+        detail: 'Start a sprint review from the sprint\'s items, or release notes from the pull requests merged since a date, then edit and save.',
+      },
+    ],
+    more: [
+      'The details panel lists the wiki pages that mention the item.',
+      'Feedback pages can be linked to the requirement they became, and the feedback list shows each as Waiting, In progress or Shipped.',
+      'Your AI tool can attach screenshots to a bug, and open a pull request form filled in for you to check.',
+      'Imports: edit the file\'s text for a row before applying it.',
+      'Notifications now show as a banner on macOS even while Boards is in front.',
+    ],
+  },
+  {
     version: '1.3.0',
     highlights: [
       {

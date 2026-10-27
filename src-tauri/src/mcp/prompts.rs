@@ -1,4 +1,4 @@
-//! Ready-made MCP prompts: step-by-step instructions for the two jobs people ask for most.
+//! Ready-made MCP prompts: step-by-step instructions for the jobs people ask for most.
 //! Claude Code shows them as slash commands (/mcp__boards__review_code_against_srs).
 
 use serde_json::{json, Value};
@@ -37,6 +37,23 @@ pub fn list() -> Vec<Value> {
             "description": "Stage the file's test cases (steps and the requirements they test) for review in Boards → Imports.",
             "arguments": [
                 { "name": "file", "description": "Path to the markdown file", "required": true },
+            ],
+        }),
+        json!({
+            "name": "prepare_pull_request",
+            "title": "Prepare a pull request",
+            "description": "Write a pull request's title and message for this repository's current branch and open them in Boards' New pull request form, for you to create.",
+            "arguments": [
+                { "name": "target", "description": "Branch to merge into; default the repository's default branch", "required": false },
+            ],
+        }),
+        json!({
+            "name": "report_bug_from_screenshot",
+            "title": "Report a bug from a screenshot",
+            "description": "Write a Bug's title, Repro Steps and Symptom from a screenshot and a note, and create it with the screenshot in the Symptom.",
+            "arguments": [
+                { "name": "note", "description": "What went wrong, in your words", "required": false },
+                { "name": "image", "description": "Full path to the screenshot; default the image on the clipboard", "required": false },
             ],
         }),
     ]
@@ -121,6 +138,52 @@ pub fn get(name: &str, args: &Value) -> Result<Value, String> {
                  6. When I say I am done, call get_import_result and summarise what was applied, what failed and why."
             )
         }
+        "prepare_pull_request" => {
+            let target = arg(args, "target").map(|t| format!("into {t}")).unwrap_or_else(|| {
+                "into the branch this repository's instructions say pull requests go to (e.g. AGENTS.md, CONTRIBUTING.md), else its default branch".to_string()
+            });
+            format!(
+                "Prepare a pull request for this repository's current branch, {target}, and open it in Boards for me to create.\n\n\
+                 1. Find the current branch (git branch --show-current) and check it is pushed (git status -sb; git log @{{u}}..). \
+                 If it has commits that are not pushed, stop and tell me.\n\
+                 2. Find the Azure DevOps project and repository from the remote URL (git remote get-url origin: \
+                 dev.azure.com/<org>/<project>/_git/<repo>, or <org>.visualstudio.com/<project>/_git/<repo>).\n\
+                 3. Read every commit and the whole diff against the target branch (git log and git diff <target>...HEAD), not just the last commit.\n\
+                 4. Write a title that follows this repository's convention (e.g. Conventional Commits, \"feat: ...\"), and a markdown message: \
+                 what changed and why, then how it was tested. Find work item IDs in the branch name and commits (AB#123, #123).\n\
+                 5. Call open_pull_request_form with the project, repository, sourceBranch, targetBranch, title, description and workItemIds.\n\
+                 6. Tell me the form is open in Boards to review and create. Do not create the pull request any other way."
+            )
+        }
+        "report_bug_from_screenshot" => {
+            let note = arg(args, "note").map(|n| format!("\n\nMy note: {n}")).unwrap_or_default();
+            let (where_, image) = match arg(args, "image") {
+                Some(path) => (format!("the screenshot at {path} (open it to look at it)"), format!("[\"{path}\"]")),
+                None => (
+                    "the screenshot I pasted into this chat".to_string(),
+                    "[\"clipboard\"] (I copied it to paste it here, so it is still on my clipboard; if this chat shows the image's file path, \
+                     give that path instead. If Boards says there is no image on the clipboard, ask me to copy it again or give its path)"
+                        .to_string(),
+                ),
+            };
+            format!(
+                "Report a bug in Azure DevOps Boards from {where_}.{note}\n\n\
+                 1. Look at the screenshot and my note. Work out what went wrong, on which screen, and what I was doing.\n\
+                 2. Call get_context for the project, then list_work_item_types and look at \"Bug\": does it have Repro Steps \
+                 (Microsoft.VSTS.TCM.ReproSteps), a Symptom field (Microsoft.VSTS.CMMI.Symptom or one named Symptom), and fields that are required?\n\
+                 3. Write:\n\
+                 - Title: what is wrong and where, specific and under 80 characters, e.g. \"Save stays disabled after editing a bug's title\".\n\
+                 - Repro Steps: numbered steps to get there, then \"Expected:\" and \"Actual:\". Only what the screenshot and my note show; mark a guessed step with (?).\n\
+                 - Symptom: one or two sentences on what the screen shows, quoting any error message exactly. If Bug has no Symptom field, \
+                 put this at the top of Repro Steps.\n\
+                 4. Show me the title, steps and symptom, and ask me to correct or confirm them (skip this if I said to create it straight away). \
+                 Ask about any required field you cannot fill.\n\
+                 5. Call create_work_item with type \"Bug\", the title, `fields` with Repro Steps as an HTML <ol> and the Symptom text, \
+                 and images {image}. Boards uploads the screenshot and puts it in the Symptom after the text \
+                 (`imagesAddedTo` in the reply names the field).\n\
+                 6. Reply with the new bug's ID, title and link."
+            )
+        }
         other => return Err(format!("Unknown prompt: {other}")),
     };
     let description = list().into_iter().find(|p| p["name"] == name).and_then(|p| p.get("description").cloned()).unwrap_or(Value::Null);
@@ -145,6 +208,14 @@ mod tests {
         let h = get("import_hierarchy_from_markdown", &json!({ "file": "docs/trace.md" })).unwrap();
         let h = h["messages"][0]["content"]["text"].as_str().unwrap();
         assert!(h.contains("keyFields") && h.contains("parentKey") && h.contains("docs/trace.md"));
-        assert_eq!(list().len(), 4);
+        let pr = get("prepare_pull_request", &json!({ "target": "develop" })).unwrap();
+        let pr = pr["messages"][0]["content"]["text"].as_str().unwrap();
+        assert!(pr.contains("into develop") && pr.contains("open_pull_request_form"));
+        let b = get("report_bug_from_screenshot", &json!({ "note": "save fails" })).unwrap();
+        let b = b["messages"][0]["content"]["text"].as_str().unwrap();
+        assert!(b.contains("My note: save fails") && b.contains("[\"clipboard\"]") && b.contains("create_work_item"));
+        let p = get("report_bug_from_screenshot", &json!({ "image": "/tmp/shot.png" })).unwrap();
+        assert!(p["messages"][0]["content"]["text"].as_str().unwrap().contains("[\"/tmp/shot.png\"]"));
+        assert_eq!(list().len(), 6);
     }
 }

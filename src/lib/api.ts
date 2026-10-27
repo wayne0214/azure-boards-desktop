@@ -20,6 +20,7 @@ import type {
 import type { BranchWorkItem, PrDetail, PullRequest, Repo, Thread } from './pr/types'
 import type { Booking, NewBooking, Room } from './rooms/types'
 import type { VersioningFacts, VersioningFix } from './versioning/evaluate'
+import type { FoundItems, ItemFilter, Wiki, WikiChange, WikiPage, WikiPageNode, WikiSearchResult } from './wiki/types'
 import type { Markable, NewPlanInput, RunInput, TpConfiguration, TpPlan, TpPoint, TpResult, TpRun, TpSuite } from './testplans/types'
 import { useUiStore } from '@/store/useUiStore'
 
@@ -103,6 +104,26 @@ export interface Api {
   readCsv(path: string): Promise<CsvData>
   writeTextFile(path: string, content: string): Promise<void>
   importWorkItems(org: string, project: string, rows: ImportRow[]): Promise<ImportResult[]>
+
+  // ----- Wiki -----
+  /** The project's wikis, its own project wiki first. `version` below is a code wiki's branch (null otherwise). */
+  wikiList(org: string, project: string): Promise<Wiki[]>
+  /** Create the project wiki, for a project that has none. */
+  wikiCreate(org: string, project: string, projectId: string): Promise<Wiki>
+  wikiTree(org: string, project: string, wikiId: string, version: string | null): Promise<WikiPageNode>
+  wikiPage(org: string, project: string, wikiId: string, path: string, version: string | null): Promise<WikiPage>
+  /** Save an edited page; fails if someone else saved it after `pageVersion` was read. */
+  wikiSave(org: string, project: string, wikiId: string, path: string, content: string, pageVersion: string, version: string | null): Promise<{ path: string; version: string | null }>
+  wikiCreatePage(org: string, project: string, wikiId: string, parent: string, name: string, content: string, version: string | null): Promise<{ path: string; version: string | null }>
+  /** Upload an image into the wiki's .attachments folder; `path` goes in the markdown. */
+  wikiUploadAttachment(org: string, project: string, wikiId: string, fileName: string, dataBase64: string, version: string | null): Promise<{ name: string; path: string }>
+  /** An .attachments image as a data URL. */
+  wikiAttachment(org: string, project: string, repoId: string, branch: string, path: string, root: string | null): Promise<string>
+  wikiSearch(org: string, project: string, text: string): Promise<WikiSearchResult>
+  /** Pages changed on the wiki's branch since an ISO time, newest first, each once. `root` is a code wiki's folder. */
+  wikiChanges(org: string, project: string, repoId: string, branch: string, root: string | null, since: string): Promise<WikiChange[]>
+  /** Work items for a live block; `team` is needed for iteration "current". */
+  wikiFindItems(org: string, project: string, team: string | null, filter: ItemFilter): Promise<FoundItems>
 
   // ----- Pull requests -----
   prListRepos(org: string, project: string): Promise<Repo[]>
@@ -196,7 +217,7 @@ export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in
 let impl: Api | null = null
 
 // Calls that change something in Azure DevOps; while one is out, the app shows it is working.
-const MUTATING = /^(add|remove|create|update|set|delete|import|upload|tpMirror|tp(CreatePlan|CreateSuite|AddCases|RemoveCases|UpdatePoints|PublishRun|SetPlanState)$|roomsBook|roomsCancel|pr(CreateThread|Reply|UpdateThread|UpdateComment|DeleteComment|Vote|AddReviewer|RemoveReviewer|Update|Create|LinkWorkItem|StartBranch)$)/
+const MUTATING = /^(add|remove|create|update|set|delete|import|upload|tpMirror|tp(CreatePlan|CreateSuite|AddCases|RemoveCases|UpdatePoints|PublishRun|SetPlanState)$|roomsBook|roomsCancel|wiki(Create|Save|CreatePage|UploadAttachment)$|pr(CreateThread|Reply|UpdateThread|UpdateComment|DeleteComment|Vote|AddReviewer|RemoveReviewer|Update|Create|LinkWorkItem|StartBranch)$)/
 
 const tracked = (inner: Api): Api =>
   new Proxy(inner, {

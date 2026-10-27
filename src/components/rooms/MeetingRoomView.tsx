@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Clock3, DoorOpen, KeyRound, RefreshCw, User, X } from 'lucide-react'
+import { ArrowRight, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Clock3, DoorOpen, KeyRound, NotebookPen, RefreshCw, User, X } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useMemo, useState } from 'react'
 import { Empty } from '@/components/ui/Empty'
@@ -7,6 +7,7 @@ import { confirmAsync } from '@/lib/confirm'
 import type { Booking, Room } from '@/lib/rooms/types'
 import { DAY_END, DAY_START, MINE_DAYS, STEP, clock, isoDate, span, useRoomStore } from '@/store/useRoomStore'
 import { useUiStore } from '@/store/useUiStore'
+import { useWikiStore } from '@/store/useWikiStore'
 
 const TOTAL = DAY_END - DAY_START
 const pct = (min: number) => `${((Math.min(Math.max(min, DAY_START), DAY_END) - DAY_START) / TOTAL) * 100}%`
@@ -314,6 +315,7 @@ function MyBookings({ onClose }: { onClose: () => void }) {
                     <span className="t">{b.title}{typeLabel(b) && <span className="rooms-type">{typeLabel(b)}</span>}</span>
                   </div>
                   <div className="acts">
+                    <button type="button" className="btn sm ghost" title="Meeting notes in the project wiki, with the open actions from last time" onClick={() => { onClose(); void useWikiStore.getState().notesFor(b, roomName(b)) }}><NotebookPen size={13} /> Notes</button>
                     <button type="button" className="btn sm ghost" onClick={() => show(b)}>Show</button>
                     <button type="button" className="icon-btn sm" title="Cancel this booking" onClick={() => void cancel(b)}><X size={14} /></button>
                   </div>

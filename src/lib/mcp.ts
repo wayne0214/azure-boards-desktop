@@ -9,6 +9,7 @@ import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
 import { useUiStore } from '@/store/useUiStore'
 import { useImportStore } from '@/components/imports/useImportStore'
+import { useWikiStore } from '@/store/useWikiStore'
 
 export type SetupState = 'ready' | 'outdated' | 'missing' | 'notInstalled'
 
@@ -141,6 +142,8 @@ export interface ImportPick {
   fp: string
   /** Conflict fields that take the file's value. */
   takeFile: string[]
+  /** Fields whose file text the user edited: reference name → the text to use instead. */
+  edits?: Record<string, string>
 }
 
 export const mcpImports = () => invoke<ImportInfo[]>('mcp_imports')
@@ -157,15 +160,51 @@ function currentContext() {
   const id = board.selectedId
   const item = id === null ? null : board.items.find((i) => i.id === id) ?? (board.detached?.id === id ? board.detached : null)
   const f = item?.fields ?? {}
+  const view = useUiStore.getState().view
+  const wiki = useWikiStore.getState()
   return {
     org: app.activeOrg,
     project: app.selectedProject?.name ?? null,
     team: app.selectedTeam?.name ?? null,
-    view: useUiStore.getState().view,
+    view,
+    // The wiki page open in the app: "this page".
+    wikiPage: view === 'wiki' && wiki.path ? { wiki: wiki.wikis.find((w) => w.id === wiki.wikiId)?.name ?? null, path: wiki.path } : null,
     selectedItem: item
       ? { id: item.id, type: f['System.WorkItemType'] ?? null, title: f['System.Title'] ?? null, state: f['System.State'] ?? null, project: f['System.TeamProject'] ?? null }
       : null,
   }
+}
+
+/** What open_pull_request_form sends: the New pull request form's values. */
+export interface McpPrForm {
+  projectId: string
+  repoId: string
+  source: string
+  target: string
+  title: string
+  description: string
+  isDraft: boolean
+  workItemIds: number[]
+}
+
+/**
+ * Open the New pull request form filled in by an AI tool; the user creates it. When another form is
+ * open, offer it in a toast instead so what the user is typing is not lost.
+ */
+export function openPrForm(form: McpPrForm) {
+  const open = () => {
+    const ui = useUiStore.getState()
+    ui.setView('prs')
+    ui.openSheet('new-pr', { ...form, nonce: Date.now() })
+  }
+  if (!useUiStore.getState().sheet) { open(); return }
+  useUiStore.getState().toast({
+    kind: 'info',
+    title: 'Pull request ready to review',
+    detail: form.title,
+    sticky: true,
+    action: { label: 'Open', onClick: open },
+  })
 }
 
 let started = false
@@ -189,6 +228,7 @@ export function startMcpBridge() {
   useAppStore.subscribe(push)
   useBoardStore.subscribe(push)
   useUiStore.subscribe(push)
+  useWikiStore.subscribe(push)
   push()
   // A newly staged import: refresh the list and offer to review it.
   void listen('mcp-imports', () => {
@@ -205,6 +245,13 @@ export function startMcpBridge() {
       })
     })
   })
+  // A page an AI tool added to: show the new text, unless it is being edited here.
+  void listen<{ path: string }>('mcp-wiki-changed', (e) => {
+    const w = useWikiStore.getState()
+    void w.reloadTree()
+    if (w.path === e.payload.path && w.draft === null) void w.open(e.payload.path)
+  })
+  void listen<McpPrForm>('mcp-open-pr', (e) => openPrForm(e.payload))
   void listen<{ id: number | null }>('mcp-changed', (e) => {
     const id = e.payload.id
     if (typeof id !== 'number') return

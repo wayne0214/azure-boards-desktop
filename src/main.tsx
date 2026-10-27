@@ -25,6 +25,8 @@ const openLink = (e: MouseEvent) => {
   const href = a.getAttribute('href') ?? ''
   if (href.startsWith('#')) return
   e.preventDefault()
+  // Wiki pages handle their own links: most go to other pages, not the browser.
+  if (a.closest('[data-own-links]')) return
   // In an editor a plain click places the caret; Cmd/Ctrl-click follows the link.
   if (a.closest('[contenteditable="true"]') && !(e.metaKey || e.ctrlKey)) return
   let url: URL

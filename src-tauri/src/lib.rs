@@ -5,12 +5,14 @@ mod error;
 mod mcp;
 mod menu;
 mod nav_guard;
+mod notify_banner;
 mod secrets;
 mod settings;
 mod state;
 mod timesheet;
 mod pr_commands;
 mod versioning_commands;
+mod wiki_commands;
 mod plan_commands;
 mod rooms;
 mod tools;
@@ -36,6 +38,7 @@ pub fn run() {
             let cache = cache::Cache::open(data_dir)?;
             app.manage(state::AppState::new(settings, cache));
             menu::build(app.handle())?;
+            notify_banner::present_while_in_front();
             mcp::init(app.handle());
             // Reading the login shell's PATH can take seconds; do it now rather than on the first Generate.
             std::thread::spawn(tools::warm_up);
@@ -102,6 +105,17 @@ pub fn run() {
             pr_commands::pr_list_repos,
             versioning_commands::versioning_facts,
             versioning_commands::versioning_fix,
+            wiki_commands::wiki_list,
+            wiki_commands::wiki_create,
+            wiki_commands::wiki_tree,
+            wiki_commands::wiki_page,
+            wiki_commands::wiki_save,
+            wiki_commands::wiki_create_page,
+            wiki_commands::wiki_upload_attachment,
+            wiki_commands::wiki_attachment,
+            wiki_commands::wiki_search,
+            wiki_commands::wiki_changes,
+            wiki_commands::wiki_find_items,
             pr_commands::pr_list,
             pr_commands::pr_get,
             pr_commands::pr_detail,
