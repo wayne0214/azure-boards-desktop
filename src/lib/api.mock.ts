@@ -434,13 +434,15 @@ export const mockApi: Api = {
   mentionedItems: async () => structuredClone(items.filter((i) => [1164, 1191].includes(i.id))),
   myWork: async () => {
     await delay(300)
-    const hidden = (i: WorkItem) => ['Test Case', 'Shared Steps'].includes(String(i.fields['System.WorkItemType']))
+    const hidden = (i: WorkItem) => ['Test Case', 'Shared Steps', 'Test Plan', 'Test Suite'].includes(String(i.fields['System.WorkItemType']))
     const createdByMe = (i: WorkItem) => (i.fields['System.CreatedBy'] as { id?: string } | undefined)?.id === 'u1'
     const mine = (i: WorkItem) => !hidden(i) && (i.fields['System.AssignedTo'] as { id?: string } | undefined)?.id === 'u1' && i.fields['System.State'] !== 'Closed' && (i.fields['System.State'] !== 'Resolved' || createdByMe(i))
     const toVerify = (i: WorkItem) => (i.fields['System.CreatedBy'] as { id?: string } | undefined)?.id === 'u1' && i.fields['System.State'] === 'Resolved'
     return structuredClone(items.filter((i) => mine(i) || toVerify(i)))
   },
   workItemTypes: async () => { await delay(150); return structuredClone(types) },
+  // Demo projects use the Agile process: User Story is the requirement level, Feature and Epic the portfolio.
+  planningTypes: async () => { await delay(150); return ['User Story', 'Feature', 'Epic'] },
   searchWorkItems: async (_o, _p, text) => {
     await delay(200)
     const t = text.toLowerCase()

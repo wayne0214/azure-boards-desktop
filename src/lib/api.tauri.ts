@@ -50,6 +50,7 @@ export const tauriApi: Api = {
   getTeamContext: (org, projectId, project, team) => invoke('get_team_context', { org, projectId, project, team }),
   queryBoardItems: (org, query) => invoke('query_board_items', { org, query }),
   myWork: (org) => invoke('my_work', { org }),
+  planningTypes: (org, project) => invoke('planning_types', { org, project }),
   mentionedItems: (org) => invoke('mentioned_items', { org }),
   projectItems: (org, project, types, excludeStates, extraFields, withRelations) => invoke('project_items', { org, project, types, excludeStates, extraFields, withRelations: withRelations ?? false }),
   addLink: (org, project, id, targetId, rel) => invoke('add_link', { org, project, id, targetId, rel }),

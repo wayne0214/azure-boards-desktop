@@ -46,6 +46,27 @@ export const isToVerify = (it: WorkItem, types: TypesByProject, me = useAppStore
 export const isWaitingOnReporter = (it: WorkItem, types: TypesByProject, me = useAppStore.getState().account()) =>
   isResolved(it, types) && !isMe(it.fields['System.CreatedBy'], me)
 
+/** Planning types per project name: its requirement and portfolio backlog levels; null when they could not be read. */
+export type PlanningByProject = Record<string, string[] | null>
+
+// Until a project's process configuration has loaded (or if it cannot be read), the usual names stand in.
+const PLANNING_NAMES = ['Epic', 'Feature', 'Requirement', 'User Story', 'Product Backlog Item']
+
+/** A requirement, feature or epic: something I own and plan rather than work on today. */
+export const isPlanning = (it: WorkItem, planning: PlanningByProject) =>
+  (planning[projectOf(it)] ?? PLANNING_NAMES).includes(String(it.fields['System.WorkItemType'] ?? ''))
+
+/**
+ * In My Work as the user has chosen to see it: planning items only when they are switched on. Pass types to keep
+ * planning items waiting for my check, which are never hidden.
+ */
+export const isShown = (it: WorkItem, planning: PlanningByProject, showPlanning: boolean, types?: TypesByProject) =>
+  showPlanning || !isPlanning(it, planning) || (types !== undefined && isToVerify(it, types))
+
+/** Open planning items, for the toggle's count: the ones My Work would list if they were switched on. */
+export const planningCount = (items: WorkItem[] | null, types: TypesByProject, planning: PlanningByProject) =>
+  (items ?? []).filter((it) => isPlanning(it, planning) && !isFinished(it, types) && !isWaitingOnReporter(it, types) && !isToVerify(it, types)).length
+
 /** Changed by someone else after the given time. */
 export const isUnseen = (it: WorkItem, since: number | null, me = useAppStore.getState().account()) => {
   if (since === null) return false
@@ -54,9 +75,9 @@ export const isUnseen = (it: WorkItem, since: number | null, me = useAppStore.ge
 }
 
 /** What the sidebar badge counts: items to verify, plus items someone else changed since My Work was last opened. */
-export function attentionCount(items: WorkItem[] | null, types: TypesByProject, seenAt: number | null) {
+export function attentionCount(items: WorkItem[] | null, types: TypesByProject, seenAt: number | null, shown: (it: WorkItem) => boolean = () => true) {
   const me = useAppStore.getState().account()
-  return (items ?? []).filter((it) => !isFinished(it, types) && !isWaitingOnReporter(it, types, me) && (isToVerify(it, types, me) || isUnseen(it, seenAt, me))).length
+  return (items ?? []).filter((it) => shown(it) && !isFinished(it, types) && !isWaitingOnReporter(it, types, me) && (isToVerify(it, types, me) || isUnseen(it, seenAt, me))).length
 }
 
 /** Plain-text search over the columns shown, plus tags, project and assignee. */
@@ -78,6 +99,9 @@ const readSeen = (org: string): number | null => {
 }
 const writeSeen = (org: string, at: number) => { try { localStorage.setItem(seenKey(org), String(at)) } catch { /* ignore */ } }
 
+const PLANNING_KEY = 'mine.showPlanning'
+const readShowPlanning = () => { try { return localStorage.getItem(PLANNING_KEY) === '1' } catch { return false } }
+
 /** The organization a load is running for; a load for another organization must not wait behind it. */
 let loadingOrg: string | null = null
 
@@ -88,6 +112,9 @@ interface MyWorkState {
   error: string | null
   lastLoaded: number | null
   types: TypesByProject
+  planning: PlanningByProject
+  /** Requirements, features and epics are listed too; off by default, remembered. */
+  showPlanning: boolean
   search: string
   /** When My Work was last looked at; changes by others after this count toward the badge. */
   seenAt: number | null
@@ -97,6 +124,7 @@ interface MyWorkState {
   load(opts?: { silent?: boolean }): Promise<void>
   loadTypes(projects: string[]): Promise<void>
   setSearch(q: string): void
+  setShowPlanning(show: boolean): void
   /** Call when the view opens (entering) and closes. */
   markSeen(entering: boolean): void
   upsert(it: WorkItem): void
@@ -110,13 +138,15 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
   error: null,
   lastLoaded: null,
   types: {},
+  planning: {},
+  showPlanning: readShowPlanning(),
   search: '',
   seenAt: null,
   highlightSince: null,
 
   load: async (opts) => {
     const org = useAppStore.getState().activeOrg
-    if (!org) { set({ org: null, items: null, error: null, types: {} }); return }
+    if (!org) { set({ org: null, items: null, error: null, types: {}, planning: {} }); return }
     if (loadingOrg === org) return
     const fresh = get().org !== org
     if (fresh) {
@@ -124,7 +154,7 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
       // Opening the view (markSeen) moves the clock on and keeps this value for the unseen dots.
       const seen = readSeen(org) ?? Date.now()
       writeSeen(org, seen)
-      set({ org, items: null, error: null, types: {}, search: '', seenAt: seen, highlightSince: null })
+      set({ org, items: null, error: null, types: {}, planning: {}, search: '', seenAt: seen, highlightSince: null })
     }
     loadingOrg = org
     set({ loading: true, ...(opts?.silent ? {} : { error: null }) })
@@ -149,15 +179,31 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
     const org = get().org
     if (!org) return
     const missing = projects.filter((p) => p && !get().types[p])
-    await Promise.all(missing.map(async (p) => {
-      try {
-        const list = await api().workItemTypes(org, p)
-        if (get().org === org) set((s) => ({ types: { ...s.types, [p]: list } }))
-      } catch { /* colours and state menus fall back to plain text for this project */ }
-    }))
+    const noPlanning = projects.filter((p) => p && !(p in get().planning))
+    await Promise.all([
+      ...missing.map(async (p) => {
+        try {
+          const list = await api().workItemTypes(org, p)
+          if (get().org === org) set((s) => ({ types: { ...s.types, [p]: list } }))
+        } catch { /* colours and state menus fall back to plain text for this project */ }
+      }),
+      ...noPlanning.map(async (p) => {
+        try {
+          const list = await api().planningTypes(org, p)
+          if (get().org === org) set((s) => ({ planning: { ...s.planning, [p]: list } }))
+        } catch {
+          // The usual planning type names stand in for this project; recorded so a refresh does not ask again.
+          if (get().org === org) set((s) => ({ planning: { ...s.planning, [p]: null } }))
+        }
+      }),
+    ])
   },
 
   setSearch: (search) => set({ search }),
+  setShowPlanning: (showPlanning) => {
+    try { localStorage.setItem(PLANNING_KEY, showPlanning ? '1' : '0') } catch { /* remembered for this session only */ }
+    set({ showPlanning })
+  },
 
   markSeen: (entering) => {
     const { org, seenAt } = get()

@@ -6,7 +6,7 @@ import { Dropdown, type Option } from '@/components/ui/Dropdown'
 import { useAppStore } from '@/store/useAppStore'
 import { refreshCurrentView } from '@/lib/refresh'
 import { useBoardStore } from '@/store/useBoardStore'
-import { useMyWorkStore } from '@/store/useMyWorkStore'
+import { planningCount, useMyWorkStore } from '@/store/useMyWorkStore'
 import { useUiStore } from '@/store/useUiStore'
 
 export function Toolbar() {
@@ -34,6 +34,9 @@ export function Toolbar() {
   const mineLoading = useMyWorkStore((s) => s.loading)
   const mineSearch = useMyWorkStore((s) => s.search)
   const setMineSearch = useMyWorkStore((s) => s.setSearch)
+  const showPlanning = useMyWorkStore((s) => s.showPlanning)
+  const setShowPlanning = useMyWorkStore((s) => s.setShowPlanning)
+  const planningN = useMyWorkStore((s) => planningCount(s.items, s.types, s.planning))
   const ctx = useBoardStore((s) => s.ctx)
   const board = useBoardStore((s) => s.board)
 
@@ -204,6 +207,12 @@ export function Toolbar() {
       )}
 
       <div className="grow" data-tauri-drag-region />
+
+      {isMine && planningN > 0 && (
+        <button type="button" className={`btn no-drag ${showPlanning ? 'on' : ''}`} aria-pressed={showPlanning} onClick={() => setShowPlanning(!showPlanning)} title={showPlanning ? 'Hide requirements, features and epics assigned to you' : 'Also list requirements, features and epics assigned to you'}>
+          <ListTree size={15} /> Planning items · {planningN}
+        </button>
+      )}
 
       {isMine && (
         <div className="search-box no-drag">

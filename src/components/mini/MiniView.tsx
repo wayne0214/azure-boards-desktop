@@ -7,7 +7,7 @@ import type { PullRequest } from '@/lib/pr/types'
 import type { WorkItem } from '@/lib/types'
 import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
-import { useMyWorkStore } from '@/store/useMyWorkStore'
+import { isShown, useMyWorkStore } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
 import { useRoomStore } from '@/store/useRoomStore'
 import { useUiStore } from '@/store/useUiStore'
@@ -28,6 +28,8 @@ export function MiniView() {
   const me = useAppStore((s) => s.account())
   const items = useMyWorkStore((s) => s.items)
   const types = useMyWorkStore((s) => s.types)
+  const planning = useMyWorkStore((s) => s.planning)
+  const showPlanning = useMyWorkStore((s) => s.showPlanning)
   const involved = usePrStore((s) => s.involved)
   const bookings = useRoomStore((s) => s.mine)
   const setMini = useUiStore((s) => s.setMini)
@@ -54,7 +56,7 @@ export function MiniView() {
     return () => clearInterval(t)
   }, [refresh])
 
-  const working = useMemo(() => activeWork(items, types), [items, types])
+  const working = useMemo(() => activeWork(items?.filter((it) => isShown(it, planning, showPlanning)) ?? null, types), [items, types, planning, showPlanning])
   const prs = useMemo(() => (me ? prsForMe(involved, me.userId) : { review: [], mine: [] }), [involved, me])
   const recentMentions = useMemo(() => [...(mentions ?? [])].sort((a, b) => String(b.fields['System.ChangedDate']).localeCompare(String(a.fields['System.ChangedDate']))).slice(0, 3), [mentions])
   const booking = nextBooking(bookings)
