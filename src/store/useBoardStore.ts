@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { api } from '@/lib/api'
 import { allCustomFieldRefs } from '@/lib/customFields'
 import { boardFields, boardTypes, doneStates, identityKey } from '@/lib/format'
-import type { Board, BoardColumn, TeamContext, WorkItem, WorkItemType } from '@/lib/types'
+import type { Board, BoardColumn, Identity, TeamContext, WorkItem, WorkItemType } from '@/lib/types'
 import { errorMessage, isAppError } from '@/lib/types'
 import { useAppStore } from './useAppStore'
 import { useUiStore } from './useUiStore'
@@ -48,7 +48,8 @@ interface BoardState {
   upsert(item: WorkItem): void
   moveToColumn(id: number, columnName: string, done?: boolean): Promise<void>
   updateFields(id: number, fields: Record<string, unknown>, opts?: { optimistic?: Record<string, unknown> }): Promise<WorkItem | null>
-  assign(id: number, who: string | null): Promise<void>
+  /** `people` is who `who` is looked up in; the board's team unless the item is from another project. */
+  assign(id: number, who: string | null, people?: Identity[]): Promise<void>
   bulkUpdate(ids: number[], fields: Record<string, unknown>): Promise<void>
   create(type: string, fields: Record<string, unknown>, parentId: number | null): Promise<WorkItem | null>
   remove(id: number): Promise<void>
@@ -336,9 +337,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     }
   },
 
-  assign: async (id, who) => {
-    const { ctx } = get()
-    const member = who ? ctx?.members.find((m) => identityKey(m) === who || m.uniqueName === who || m.displayName === who) : null
+  assign: async (id, who, people = get().ctx?.members) => {
+    const member = who ? people?.find((m) => identityKey(m) === who || m.uniqueName === who || m.displayName === who) : null
     const optimistic = member
       ? { 'System.AssignedTo': { id: member.id, displayName: member.displayName, uniqueName: member.uniqueName ?? undefined } }
       : { 'System.AssignedTo': null }

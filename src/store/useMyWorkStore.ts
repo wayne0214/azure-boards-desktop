@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { api } from '@/lib/api'
-import type { WorkItem, WorkItemType, WorkItemTypeState } from '@/lib/types'
+import type { Identity, WorkItem, WorkItemType, WorkItemTypeState } from '@/lib/types'
 import { errorMessage } from '@/lib/types'
 import { useAppStore } from './useAppStore'
 
@@ -45,6 +45,13 @@ export const isToVerify = (it: WorkItem, types: TypesByProject, me = useAppStore
 /** Resolved, assigned to me, but reported by someone else: the next step is theirs, so it leaves my list. */
 export const isWaitingOnReporter = (it: WorkItem, types: TypesByProject, me = useAppStore.getState().account()) =>
   isResolved(it, types) && !isMe(it.fields['System.CreatedBy'], me)
+
+/**
+ * The people an item can be assigned to or @mentioned: the board's team when the item is in the selected project,
+ * otherwise its own project's members (My Work lists items from every project).
+ */
+export const peopleFor = (project: string, selectedProject: string | undefined, boardMembers: Identity[] | undefined, members: Record<string, Identity[]>): Identity[] =>
+  (project === selectedProject ? boardMembers : undefined) ?? members[project] ?? []
 
 /** Planning types per project name: its requirement and portfolio backlog levels; null when they could not be read. */
 export type PlanningByProject = Record<string, string[] | null>
@@ -113,6 +120,8 @@ interface MyWorkState {
   lastLoaded: number | null
   types: TypesByProject
   planning: PlanningByProject
+  /** People per project name, loaded when an item from a project other than the selected one is opened. */
+  members: Record<string, Identity[]>
   /** Requirements, features and epics are listed too; off by default, remembered. */
   showPlanning: boolean
   search: string
@@ -123,6 +132,7 @@ interface MyWorkState {
   /** Fetch from the server; the cached copy is shown first on a cold start. */
   load(opts?: { silent?: boolean }): Promise<void>
   loadTypes(projects: string[]): Promise<void>
+  loadMembers(project: string): Promise<void>
   setSearch(q: string): void
   setShowPlanning(show: boolean): void
   /** Call when the view opens (entering) and closes. */
@@ -139,6 +149,7 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
   lastLoaded: null,
   types: {},
   planning: {},
+  members: {},
   showPlanning: readShowPlanning(),
   search: '',
   seenAt: null,
@@ -146,7 +157,7 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
 
   load: async (opts) => {
     const org = useAppStore.getState().activeOrg
-    if (!org) { set({ org: null, items: null, error: null, types: {}, planning: {} }); return }
+    if (!org) { set({ org: null, items: null, error: null, types: {}, planning: {}, members: {} }); return }
     if (loadingOrg === org) return
     const fresh = get().org !== org
     if (fresh) {
@@ -154,7 +165,7 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
       // Opening the view (markSeen) moves the clock on and keeps this value for the unseen dots.
       const seen = readSeen(org) ?? Date.now()
       writeSeen(org, seen)
-      set({ org, items: null, error: null, types: {}, planning: {}, search: '', seenAt: seen, highlightSince: null })
+      set({ org, items: null, error: null, types: {}, planning: {}, members: {}, search: '', seenAt: seen, highlightSince: null })
     }
     loadingOrg = org
     set({ loading: true, ...(opts?.silent ? {} : { error: null }) })
@@ -197,6 +208,16 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
         }
       }),
     ])
+  },
+
+  loadMembers: async (project) => {
+    const org = useAppStore.getState().activeOrg
+    if (!org || !project || get().members[project]) return
+    try {
+      // The members call takes a project name as well as an id.
+      const list = await api().prProjectMembers(org, project)
+      if (useAppStore.getState().activeOrg === org) set((s) => ({ members: { ...s.members, [project]: list } }))
+    } catch { /* the picker offers only Unassigned for this project */ }
   },
 
   setSearch: (search) => set({ search }),
