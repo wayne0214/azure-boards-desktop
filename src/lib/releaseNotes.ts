@@ -20,10 +20,15 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         title: 'Versions from your repository\'s tags',
         detail: 'The version boxes in Test Plans and in Test Cases Run suggest the repository\'s release tags, newest first, with pre-releases on request. You can still type any version; one without a tag is marked untagged and runs as usual.',
       },
+      {
+        title: 'My Work, sorted by what you do next',
+        detail: 'Items assigned to you for testing have their own Ready to test section. Your Resolved items stay in a collapsed section at the bottom instead of dropping off, and the To verify section is gone. Requirements, features and epics are hidden unless you turn on Planning items in the toolbar.',
+      },
     ],
     more: [
       'Your AI tool can list test results, read a result with its steps, and save a failure screenshot or log to look at.',
-      'My Work lists items assigned to you for testing under Ready to test, and keeps your Resolved items in a collapsed section at the bottom instead of dropping them. The To verify section is gone.',
+      'Test plans and test suites no longer appear in My Work.',
+      'In My Work, Assigned To and @mentions offer the people of the item\'s own project, not the project selected in the sidebar.',
     ],
   },
   {
