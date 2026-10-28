@@ -18,6 +18,7 @@ import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
 import { useReqStore } from '@/store/useReqStore'
 import { useTcStore } from '@/store/useTcStore'
+import { HistoryButton } from './CaseRuns'
 import { SrsPicker } from './SrsPicker'
 import { StepGrid } from './StepGrid'
 
@@ -103,6 +104,8 @@ export function TcEditor({ cfg, test, tree }: { cfg: TcConfig; test: WorkItem; t
         <span>{assigned ?? 'Unassigned'}</span>
         <span className={`tc-saved ${saveState ?? ''}`}>{saveState === 'saving' ? 'Saving…' : saveState === 'failed' ? 'Not saved' : saveState === 'saved' ? 'Saved to Azure DevOps' : ''}</span>
         {saveState === 'failed' && <button type="button" className="btn sm" onClick={() => void s.retrySave(test.id)}>Retry</button>}
+        <span className="grow" />
+        <HistoryButton testCaseId={test.id} title={title} />
         <button type="button" className="icon-btn sm" title="Open details" onClick={() => void useBoardStore.getState().openItem(test)}><ExternalLink size={14} /></button>
       </div>
 

@@ -22,7 +22,7 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
             "project": { "type": "string", "description": "Project name; omit for the current project" },
             "allProjects": { "type": "boolean", "description": "Search every project in the organization" },
         }), &["text"], true),
-        tool("list_my_work", "Open work assigned to the user, plus Resolved items they reported (waiting for their check).", json!({}), &[], true),
+        tool("list_my_work", "Work assigned to the user that is not finished, including Resolved and Ready to Test items still assigned to them.", json!({}), &[], true),
         tool("list_children", "Child work items of a work item.", json!({ "id": id }), &["id"], true),
         tool("list_comments", "Discussion comments on a work item, oldest first.", json!({ "id": id }), &["id"], true),
         tool("list_work_item_types", "Work item types of a project with their states and fields (reference names), to know what can be set.", json!({
@@ -59,6 +59,7 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
         tool("open_pull_request_form", "Open Boards' New pull request form filled in with these values, for the user to review and create. Nothing is created by this call. Checks the repository and that both branches exist (the source must be pushed).", pr_form::schema(), &["repository", "sourceBranch", "title"], false),
     ];
     tools.extend(super::wiki::definitions(read_only));
+    tools.extend(super::results::definitions());
     if !read_only {
         tools.extend([
             tool("create_work_item", "Create a work item. Text in `description` may be plain text or HTML. For a bug, put numbered steps in Microsoft.VSTS.TCM.ReproSteps and what the user sees in the Symptom field when the type has one (list_work_item_types), and attach screenshots with `images`.", json!({
@@ -319,6 +320,7 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
             }))
         }
         "get_import_result" => imports::result(app, str_arg(args, "importId").as_deref()),
+        n if super::results::handles(n) => super::results::call(&client, current_project(&ctx), n, args).await,
         n if super::wiki::handles(n) => super::wiki::call(app, &client, current_project(&ctx), n, args).await,
         "open_pull_request_form" => pr_form::open(app, &client, current_project(&ctx), args).await,
         "apply_work_item_sync" => {

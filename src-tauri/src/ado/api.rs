@@ -265,6 +265,32 @@ pub async fn work_item_types(client: &AdoClient, project: &str) -> AppResult<Vec
     Ok(res.value)
 }
 
+/// Planning levels of a project's process: the requirement backlog (User Story, PBI, CMMI's Requirement) and every
+/// portfolio level (Feature, Epic, custom ones). My Work hides these by default; the work itself is in Tasks and Bugs.
+pub async fn planning_types(client: &AdoClient, project: &str) -> AppResult<Vec<String>> {
+    let url = client.url(&format!("/{}/_apis/work/processconfiguration", enc(project)));
+    let config: Value = client.get(&url).await?;
+    Ok(planning_type_names(&config))
+}
+
+fn planning_type_names(config: &Value) -> Vec<String> {
+    let names = |backlog: &Value| -> Vec<String> {
+        backlog.get("workItemTypes").and_then(Value::as_array).into_iter().flatten()
+            .filter_map(|t| t.get("name").and_then(Value::as_str).map(str::to_string))
+            .collect()
+    };
+    // A team may track bugs as requirements; they are still work, never planning.
+    let bugs = config.get("bugWorkItems").map(names).unwrap_or_default();
+    let portfolios = config.get("portfolioBacklogs").and_then(Value::as_array).into_iter().flatten();
+    let mut out: Vec<String> = Vec::new();
+    for name in config.get("requirementBacklog").into_iter().chain(portfolios).flat_map(names) {
+        if !bugs.contains(&name) && !out.contains(&name) {
+            out.push(name);
+        }
+    }
+    out
+}
+
 pub async fn team_members(client: &AdoClient, project_id: &str, team_id: &str) -> AppResult<Vec<Identity>> {
     let path = format!("/_apis/projects/{}/teams/{}/members", enc(project_id), enc(team_id));
     let members: Vec<TeamMember> = list_by_skip(client, &path, 500, 10_000).await?;
@@ -494,15 +520,13 @@ pub async fn get_items_with_relations(client: &AdoClient, scope: &str, ids: &[i6
 }
 
 pub async fn my_work(client: &AdoClient, available_fields: &FieldMap) -> AppResult<Vec<Value>> {
-    // Open work assigned to me, plus Resolved items I reported: those wait for my check before they close.
-    // A Resolved item assigned to me but reported by someone else is theirs to check, so it is left out.
+    // Work assigned to me that is not finished. The app lists Ready to Test and Resolved items in sections
+    // of their own; they stay until someone else takes them or closes them.
     // WIQL has no state category, so the usual finished states are excluded here and the app drops any
-    // other Completed, Removed or Resolved state using each project's own type definitions.
+    // other Completed or Removed state using each project's own type definitions.
     let query = "SELECT [System.Id] FROM WorkItems WHERE \
-                 ([System.AssignedTo] = @Me AND [System.State] NOT IN ('Closed', 'Done', 'Removed', 'Completed', 'Cut') \
-                 AND ([System.State] <> 'Resolved' OR [System.CreatedBy] = @Me) \
-                 AND [System.WorkItemType] NOT IN ('Test Case', 'Shared Steps')) \
-                 OR ([System.CreatedBy] = @Me AND [System.State] = 'Resolved') \
+                 [System.AssignedTo] = @Me AND [System.State] NOT IN ('Closed', 'Done', 'Removed', 'Completed', 'Cut') \
+                 AND [System.WorkItemType] NOT IN ('Test Case', 'Shared Steps', 'Test Plan', 'Test Suite') \
                  ORDER BY [System.ChangedDate] DESC";
     let ids = run_wiql(client, "", query, 500).await?;
     let fields = select_fields(available_fields, &[]);
@@ -775,6 +799,21 @@ pub async fn classification_nodes(client: &AdoClient, project: &str, group: &str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn planning_types_are_requirement_and_portfolio_levels_without_bugs() {
+        let config = json!({
+            "taskBacklog": { "workItemTypes": [{ "name": "Task" }] },
+            "requirementBacklog": { "workItemTypes": [{ "name": "Requirement" }, { "name": "Bug" }] },
+            "portfolioBacklogs": [
+                { "name": "Epics", "workItemTypes": [{ "name": "Epic" }] },
+                { "name": "Features", "workItemTypes": [{ "name": "Feature" }] }
+            ],
+            "bugWorkItems": { "workItemTypes": [{ "name": "Bug" }] }
+        });
+        assert_eq!(planning_type_names(&config), vec!["Requirement", "Epic", "Feature"]);
+        assert!(planning_type_names(&json!({})).is_empty());
+    }
 
     #[test]
     fn relation_index_finds_matching_relation() {

@@ -6,7 +6,7 @@ import { mockVersioning } from './api.mock.versioning'
 import { mockWiki } from './api.mock.wiki'
 import { mockRooms } from './api.mock.rooms'
 import { mockPlans } from './api.mock.plans'
-import { serializeSteps, type StepItem } from './testcases/steps'
+import { parseSteps, serializeSteps, type StepItem } from './testcases/steps'
 // Loaded with the demo API, not on first use, so it has seen the click that opens the first menu.
 import { showFallbackContextMenu } from '../components/ui/FallbackMenu'
 import type { Board, Comment, Identity, Iteration, Project, Settings, Team, WorkItem, WorkItemType } from './types'
@@ -20,6 +20,14 @@ const people: Identity[] = [
   { id: 'u4', displayName: 'Hana Kobayashi', uniqueName: 'hana@example.com' },
   { id: 'u5', displayName: 'Tomás Ferreira', uniqueName: 'tomas@example.com' },
 ]
+
+// Only Wayne is in every project; Fabrikam Web and Internal Tools have teams of their own.
+const projectPeople: Record<string, Identity[]> = {
+  p1: people,
+  p2: [people[0], { id: 'u6', displayName: 'Sofia Lindqvist', uniqueName: 'sofia@example.com' }, { id: 'u7', displayName: 'Daniel Mensah', uniqueName: 'daniel@example.com' }],
+  p3: [people[0], people[4], { id: 'u8', displayName: 'Aiko Tanaka', uniqueName: 'aiko@example.com' }],
+}
+const everyone = [...new Map(Object.values(projectPeople).flat().map((p) => [p.id, p])).values()]
 
 const projects: Project[] = [
   { id: 'p1', name: 'Contoso Mobile', description: 'Mobile and web apps for the Contoso health service.' },
@@ -81,6 +89,7 @@ const types: WorkItemType[] = [
       { name: 'New', color: 'b2b2b2', category: 'Proposed' },
       { name: 'Active', color: '007acc', category: 'InProgress' },
       { name: 'Resolved', color: 'ff9d00', category: 'Resolved' },
+      { name: 'Ready to Test', color: 'ff9d00', category: 'Resolved' },
       { name: 'Closed', color: '339933', category: 'Completed' },
     ],
   },
@@ -216,7 +225,9 @@ let items: WorkItem[] = [
   mk(1191, 'Feature', 'Offline capture', 'Active', people[0]),
   mk(1195, 'Task', 'Write upload resume unit tests', 'New', people[0], { 'System.Parent': 1164, 'Microsoft.VSTS.Scheduling.RemainingWork': 4 }),
   mk(1196, 'Task', 'Keychain storage for resume token', 'New', people[1], { 'System.Parent': 1164, 'Microsoft.VSTS.Scheduling.RemainingWork': 6 }),
-  mk(1197, 'Bug', 'Pose check accepts a photo with the patient partly out of frame', 'New', people[2], { 'System.State': 'Resolved', 'Microsoft.VSTS.Common.Priority': 2, 'System.Tags': 'capture' }),
+  mk(1197, 'Bug', 'Pose check accepts a photo with the patient partly out of frame', 'New', people[0], { 'System.State': 'Resolved', 'Microsoft.VSTS.Common.Priority': 2, 'System.Tags': 'capture' }),
+  // On the test server and assigned to me to test.
+  mk(1198, 'Bug', 'Upload progress bar jumps back to zero after resuming', 'Review', people[0], { 'System.State': 'Ready to Test', 'Microsoft.VSTS.Common.Priority': 2, 'System.Tags': 'upload' }),
 ]
 items.find((i) => i.id === 1164)!.fields['System.Parent'] = 1191
 
@@ -297,6 +308,13 @@ items.push(
   tc(1307, 7, 'Report PDF carries the clinic letterhead', [1176], [step(2, 'Export a screening report as PDF', 'A PDF file is saved'), step(3, 'Open the PDF', 'Letterhead from clinic settings is on every page')]),
   tc(1308, 8, 'Retake keeps the previous photo until the new one passes', [1182], [step(2, 'Select Retake and take a photo that also fails', 'Pose check fails again'), step(3, 'Review the capture history', 'No discarded photos are attached')]),
 )
+// Items in the other demo projects: they show only in My Work, never on the Contoso Mobile board.
+const elsewhere: WorkItem[] = [
+  mk(2041, 'Bug', 'Portal login page loops after password reset', 'In Progress', people[0], { 'System.TeamProject': 'Fabrikam Web', 'System.AreaPath': 'Fabrikam Web', 'System.IterationPath': 'Fabrikam Web\\Sprint 4', 'System.State': 'Active' }),
+  mk(3012, 'Task', 'Rotate the build agents\' signing certificate', 'New', people[0], { 'System.TeamProject': 'Internal Tools', 'System.AreaPath': 'Internal Tools', 'System.IterationPath': 'Internal Tools' }),
+]
+const findItem = (id: number) => items.find((i) => i.id === id) ?? elsewhere.find((i) => i.id === id)
+
 const mirrorTests = () => {
   for (const t of items.filter((i) => i.fields['System.WorkItemType'] === 'Test Case')) {
     for (const r of t.relations ?? []) {
@@ -328,11 +346,18 @@ const cache = new Map<string, { value: unknown; updatedAt: number }>()
 
 export const mockApi: Api = {
   ...mockPr,
+  // By id from the pull request views, by name from an item's System.TeamProject.
+  prProjectMembers: async (_o, project) => {
+    await delay(150)
+    const p = projects.find((x) => x.id === project || x.name === project)
+    return structuredClone(projectPeople[p?.id ?? ''] ?? people)
+  },
   ...mockVersioning,
   ...mockWiki,
   ...mockRooms,
   ...mockPlans({
     title: (id) => String(items.find((i) => i.id === id)?.fields['System.Title'] ?? `Test case ${id}`),
+    steps: (id) => parseSteps(String(items.find((i) => i.id === id)?.fields['Microsoft.VSTS.TCM.Steps'] ?? '')),
     tagged: (tag) => items.filter((i) => i.fields['System.WorkItemType'] === 'Test Case' && String(i.fields['System.Tags'] ?? '').split(';').some((t) => t.trim().toLowerCase() === tag.trim().toLowerCase())).map((i) => i.id),
     testedBy: (req) => items.filter((i) => i.fields['System.WorkItemType'] === 'Test Case' && (i.relations ?? []).some((r) => r.rel === 'Microsoft.VSTS.Common.TestedBy-Reverse' && r.url.endsWith(`/${req}`))).map((i) => i.id),
   }),
@@ -434,13 +459,13 @@ export const mockApi: Api = {
   mentionedItems: async () => structuredClone(items.filter((i) => [1164, 1191].includes(i.id))),
   myWork: async () => {
     await delay(300)
-    const hidden = (i: WorkItem) => ['Test Case', 'Shared Steps'].includes(String(i.fields['System.WorkItemType']))
-    const createdByMe = (i: WorkItem) => (i.fields['System.CreatedBy'] as { id?: string } | undefined)?.id === 'u1'
-    const mine = (i: WorkItem) => !hidden(i) && (i.fields['System.AssignedTo'] as { id?: string } | undefined)?.id === 'u1' && i.fields['System.State'] !== 'Closed' && (i.fields['System.State'] !== 'Resolved' || createdByMe(i))
-    const toVerify = (i: WorkItem) => (i.fields['System.CreatedBy'] as { id?: string } | undefined)?.id === 'u1' && i.fields['System.State'] === 'Resolved'
-    return structuredClone(items.filter((i) => mine(i) || toVerify(i)))
+    const hidden = (i: WorkItem) => ['Test Case', 'Shared Steps', 'Test Plan', 'Test Suite'].includes(String(i.fields['System.WorkItemType']))
+    const mine = (i: WorkItem) => !hidden(i) && (i.fields['System.AssignedTo'] as { id?: string } | undefined)?.id === 'u1' && i.fields['System.State'] !== 'Closed'
+    return structuredClone([...items, ...elsewhere].filter(mine))
   },
   workItemTypes: async () => { await delay(150); return structuredClone(types) },
+  // Demo projects use the Agile process: User Story is the requirement level, Feature and Epic the portfolio.
+  planningTypes: async () => { await delay(150); return ['User Story', 'Feature', 'Epic'] },
   searchWorkItems: async (_o, _p, text) => {
     await delay(200)
     const t = text.toLowerCase()
@@ -448,7 +473,7 @@ export const mockApi: Api = {
   },
   getWorkItem: async (_o, _p, id) => {
     await delay(150)
-    const it = items.find((i) => i.id === id)
+    const it = findItem(id)
     if (!it) throw { kind: 'not_found', message: `Work item ${id} was not found.` }
     return structuredClone(it)
   },
@@ -478,14 +503,14 @@ export const mockApi: Api = {
   },
   updateWorkItem: async (_o, _p, id, rev, fields) => {
     await delay(300)
-    const it = items.find((i) => i.id === id)
+    const it = findItem(id)
     if (!it) throw { kind: 'not_found', message: `Work item ${id} was not found.` }
     // Like Azure DevOps: an update made against an older revision is refused.
     if (rev != null && rev !== it.rev) throw { kind: 'conflict', status: 412, message: `Work item ${id} was changed (revision ${it.rev}, not ${rev}).` }
     for (const [k, v] of Object.entries(fields)) {
       if (v === null) delete it.fields[k]
       else if (k === 'System.AssignedTo' && typeof v === 'string') {
-        const p = people.find((x) => x.uniqueName === v || x.displayName === v)
+        const p = everyone.find((x) => x.uniqueName === v || x.displayName === v)
         it.fields[k] = p ? { id: p.id, displayName: p.displayName, uniqueName: p.uniqueName ?? '' } : { displayName: v }
       } else it.fields[k] = v
     }
@@ -543,7 +568,7 @@ export const mockApi: Api = {
     const c: Comment = { id: Date.now(), text: `<p>${text}</p>`, createdBy: { displayName: 'Wayne Lai', uniqueName: 'wayne@example.com' }, createdDate: new Date().toISOString() }
     comments[id] = [...(comments[id] ?? []), c]
     // A comment is a new revision of the work item.
-    const it = items.find((i) => i.id === id)
+    const it = findItem(id)
     if (it) it.rev = (it.rev ?? 1) + 1
     return c
   },

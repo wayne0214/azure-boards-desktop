@@ -10,6 +10,28 @@ export interface ReleaseNote {
 /** Shown once in What's New after an update to that version. Newest first; add one per release. */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.5.0',
+    highlights: [
+      {
+        title: 'Test results, without opening Azure DevOps',
+        detail: 'Press History on a test case to see every recorded result, newest first, from Playwright runs and manual runs alike. Open one to see which step failed and why, the stack trace, and its screenshots and logs. In Test Plans, press Result on a point, or Last result and History in the runner.',
+      },
+      {
+        title: 'Versions from your repository\'s tags',
+        detail: 'The version boxes in Test Plans and in Test Cases Run suggest the repository\'s release tags, newest first, with pre-releases on request. You can still type any version; one without a tag is marked untagged and runs as usual.',
+      },
+      {
+        title: 'My Work, sorted by what you do next',
+        detail: 'Items assigned to you for testing have their own Ready to test section. Your Resolved items stay in a collapsed section at the bottom instead of dropping off, and the To verify section is gone. Requirements, features and epics are hidden unless you turn on Planning items in the toolbar.',
+      },
+    ],
+    more: [
+      'Your AI tool can list test results, read a result with its steps, and save a failure screenshot or log to look at.',
+      'Test plans and test suites no longer appear in My Work.',
+      'In My Work, Assigned To and @mentions offer the people of the item\'s own project, not the project selected in the sidebar.',
+    ],
+  },
+  {
     version: '1.4.0',
     highlights: [
       {

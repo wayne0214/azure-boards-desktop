@@ -116,6 +116,10 @@ impl AdoClient {
     /// Sends with retries: any request Azure DevOps throttled, and GETs (idempotent) that hit
     /// a 5xx gateway/server error or a connect/timeout failure.
     async fn send(&self, method: Method, url: &str, body: Option<(&str, String)>) -> AppResult<Response> {
+        self.send_accepting(method, url, body, "application/json").await
+    }
+
+    async fn send_accepting(&self, method: Method, url: &str, body: Option<(&str, String)>, accept: &str) -> AppResult<Response> {
         let idempotent = method == Method::GET;
         let mut attempt = 0u32;
         loop {
@@ -124,7 +128,7 @@ impl AdoClient {
                 .http
                 .request(method.clone(), url)
                 .header(header::AUTHORIZATION, &self.auth_header)
-                .header(header::ACCEPT, "application/json");
+                .header(header::ACCEPT, accept);
             if let Some((ct, b)) = &body {
                 req = req.header(header::CONTENT_TYPE, *ct).body(b.clone());
             }
@@ -270,7 +274,18 @@ impl AdoClient {
 
     /// Download a binary resource (e.g. an attachment image) with the user's credentials.
     pub async fn get_bytes(&self, url: &str) -> AppResult<(String, Vec<u8>)> {
-        let resp = self.send(Method::GET, url, None).await?;
+        self.get_bytes_accepting(url, "application/json").await
+    }
+
+    /// Download a binary resource from an endpoint that only sends the file for a non-JSON
+    /// `Accept` (test result attachments want "application/octet-stream").
+    pub async fn get_bytes_accepting(&self, url: &str, accept: &str) -> AppResult<(String, Vec<u8>)> {
+        let mut resp = self.send_accepting(Method::GET, url, None, accept).await?;
+        // As for JSON requests: an endpoint still in preview at this api-version wants the "-preview" flag.
+        if resp.status() == StatusCode::BAD_REQUEST && url.contains(&format!("api-version={API_VERSION}")) && !url.contains("-preview") {
+            let retry_url = url.replace(&format!("api-version={API_VERSION}"), &format!("api-version={API_VERSION}-preview"));
+            resp = self.send_accepting(Method::GET, &retry_url, None, accept).await?;
+        }
         let status = resp.status();
         if !status.is_success() {
             return Err(AppError::new(ErrorKind::NotFound, format!("Attachment request failed ({status})")).with_status(status.as_u16()));

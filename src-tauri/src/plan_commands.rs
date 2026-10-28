@@ -1,4 +1,5 @@
 use crate::ado::plans::{self, CreatedPlan, NewPlan, NewSuite, PointUpdate, RunInput, RunOutcome, TpConfiguration, TpPlan, TpPoint, TpResult, TpRun, TpSuite};
+use crate::ado::results::{self, ResultDetail, ResultQuery, ResultSummary};
 use crate::error::AppResult;
 use crate::state::AppState;
 use tauri::State;
@@ -79,4 +80,36 @@ pub async fn tp_run_results(state: State<'_, AppState>, org: String, project: St
 pub async fn tp_set_plan_state(state: State<'_, AppState>, org: String, project: String, plan_id: i64, plan_state: String) -> AppResult<TpPlan> {
     let c = state.client(&org).await?;
     plans::set_plan_state(&c, &project, plan_id, &plan_state).await
+}
+
+#[tauri::command]
+pub async fn tp_list_results(state: State<'_, AppState>, org: String, project: String, query: ResultQuery) -> AppResult<Vec<ResultSummary>> {
+    let c = state.client(&org).await?;
+    let limit = if query.limit == 0 { 50 } else { query.limit.min(500) };
+    results::list_results(&c, &project, &ResultQuery { limit, ..query }).await
+}
+
+#[tauri::command]
+pub async fn tp_result(state: State<'_, AppState>, org: String, project: String, run_id: i64, result_id: i64) -> AppResult<ResultDetail> {
+    let c = state.client(&org).await?;
+    results::result(&c, &project, run_id, result_id).await
+}
+
+/// An attachment's bytes as base64; the UI shows images and text and saves the rest.
+#[tauri::command]
+pub async fn tp_result_attachment(state: State<'_, AppState>, org: String, project: String, run_id: i64, result_id: i64, attachment_id: i64) -> AppResult<String> {
+    use base64::Engine;
+    let c = state.client(&org).await?;
+    let bytes = results::attachment(&c, &project, run_id, result_id, attachment_id).await?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
+/// Download an attachment straight to a path the user picked in the save dialog.
+#[tauri::command]
+pub async fn tp_save_result_attachment(state: State<'_, AppState>, org: String, project: String, run_id: i64, result_id: i64, attachment_id: i64, path: String) -> AppResult<()> {
+    state.check_path(std::path::Path::new(&path))?;
+    let c = state.client(&org).await?;
+    let bytes = results::attachment(&c, &project, run_id, result_id, attachment_id).await?;
+    std::fs::write(&path, bytes)?;
+    Ok(())
 }

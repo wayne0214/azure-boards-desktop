@@ -2,7 +2,7 @@
 //! version, when the test case has a single point in it. The run is always recorded on the test case first.
 
 use crate::ado::client::{enc, AdoClient};
-use crate::ado::plans::{publish_run, PointResult, RunFile, RunInput};
+use crate::ado::plans::{publish_run, PointResult, RunFile, RunInput, StepOutcome};
 use crate::error::AppResult;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -20,6 +20,8 @@ pub struct MirrorInput {
     pub outcome: String,
     pub comment: String,
     pub attachments: Vec<MirrorFile>,
+    #[serde(default)]
+    pub step_results: Vec<StepOutcome>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -115,6 +117,7 @@ async fn mirror(client: &AdoClient, project: &str, input: &MirrorInput) -> AppRe
             automated_test_name: None,
             automated_test_storage: None,
             attachments: input.attachments.iter().map(|f| RunFile { name: f.name.clone(), data_base64: f.data_base64.clone() }).collect(),
+            step_results: input.step_results.clone(),
         }],
     };
     publish_run(client, project, &run).await?;

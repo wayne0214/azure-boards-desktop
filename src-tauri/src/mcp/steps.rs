@@ -31,7 +31,13 @@ fn attr(tag: &str, name: &str) -> Option<String> {
 
 /// Steps from the field's XML, as plain text. Steps inside shared steps belong to that work item and are skipped.
 pub fn parse(xml: &str) -> Vec<Step> {
+    parse_with_ids(xml).into_iter().map(|(_, s)| s).collect()
+}
+
+/// Steps with their `id` attribute, which step results name in `stepIdentifier`.
+pub fn parse_with_ids(xml: &str) -> Vec<(Option<String>, Step)> {
     let mut out = Vec::new();
+    let mut step_id: Option<String> = None;
     let mut rest = xml;
     let mut shared_depth = 0usize;
     let mut strings: Vec<String> = Vec::new();
@@ -47,7 +53,7 @@ pub fn parse(xml: &str) -> Vec<Step> {
             ("compref", false) => {
                 if shared_depth == 0 {
                     if let Some(r) = attr(tag, "ref").and_then(|r| r.parse().ok()) {
-                        out.push(Step::Shared(r));
+                        out.push((attr(tag, "id"), Step::Shared(r)));
                     }
                 }
                 if !self_closing {
@@ -57,16 +63,19 @@ pub fn parse(xml: &str) -> Vec<Step> {
             ("compref", true) => shared_depth = shared_depth.saturating_sub(1),
             ("step", false) if shared_depth == 0 => {
                 in_step = true;
+                step_id = attr(tag, "id");
                 strings.clear();
                 if self_closing {
                     in_step = false;
-                    out.push(Step::Step { action: String::new(), expected: String::new() });
+                    out.push((step_id.take(), Step::Step { action: String::new(), expected: String::new() }));
                 }
             }
             ("step", true) if shared_depth == 0 && in_step => {
                 in_step = false;
                 let mut it = strings.drain(..);
-                out.push(Step::Step { action: it.next().unwrap_or_default(), expected: it.next().unwrap_or_default() });
+                let step = Step::Step { action: it.next().unwrap_or_default(), expected: it.next().unwrap_or_default() };
+                drop(it);
+                out.push((step_id.take(), step));
             }
             ("parameterizedString", false) if in_step && !self_closing => {
                 let end = after.find("</parameterizedString>").unwrap_or(after.len());
@@ -209,6 +218,12 @@ mod tests {
     use super::*;
 
     const PORTAL: &str = r#"<steps id="0" last="4"><step id="2" type="ValidateStep"><parameterizedString isformatted="true">&lt;DIV&gt;&lt;P&gt;Open the report &amp;amp; scan&lt;/P&gt;&lt;/DIV&gt;</parameterizedString><parameterizedString isformatted="true">&lt;P&gt;Report shows&lt;BR/&gt;two pages&lt;/P&gt;</parameterizedString><description/></step><compref id="3" ref="812"><step id="5" type="ActionStep"><parameterizedString isformatted="true">inner</parameterizedString><parameterizedString isformatted="true"></parameterizedString></step></compref><step id="4" type="ActionStep"><parameterizedString isformatted="true">Close it</parameterizedString><parameterizedString isformatted="true"/><description/></step></steps>"#;
+
+    #[test]
+    fn keeps_step_ids_for_step_results() {
+        let ids: Vec<Option<String>> = parse_with_ids(PORTAL).into_iter().map(|(id, _)| id).collect();
+        assert_eq!(ids, vec![Some("2".into()), Some("3".into()), Some("4".into())]);
+    }
 
     #[test]
     fn reads_the_portals_xml() {

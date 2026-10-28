@@ -179,6 +179,13 @@ pub async fn list_branches(client: &AdoClient, repo_id: &str) -> AppResult<Vec<V
     Ok(res.value)
 }
 
+/// Tag names in a repository ("v1.4.0"), without "refs/tags/". Reading them needs Code (Read) on the token.
+pub async fn list_tags(client: &AdoClient, repo_id: &str) -> AppResult<Vec<String>> {
+    let url = client.url(&format!("{}/refs?filter=tags/&$top={BRANCH_CAP}", repo_base(repo_id)));
+    let res: ListResponse<Value> = client.get(&url).await?;
+    Ok(res.value.iter().filter_map(|r| r.get("name").and_then(|n| n.as_str())).map(|n| n.trim_start_matches("refs/tags/").to_string()).collect())
+}
+
 /// Text content of a file at a commit. Returns null for binary or oversized files.
 pub async fn file_content(client: &AdoClient, repo_id: &str, path: &str, commit: &str) -> AppResult<Option<String>> {
     let url = client.url(&format!(

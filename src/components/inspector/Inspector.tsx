@@ -11,7 +11,7 @@ import { CustomFieldInput } from '@/components/ui/CustomFieldInput'
 import { Dropdown, type Option } from '@/components/ui/Dropdown'
 import { useAppStore } from '@/store/useAppStore'
 import { projectOf, useBoardStore } from '@/store/useBoardStore'
-import { useMyWorkStore } from '@/store/useMyWorkStore'
+import { peopleFor, useMyWorkStore } from '@/store/useMyWorkStore'
 import { useUiStore } from '@/store/useUiStore'
 import { RichText } from './RichText'
 import { HistorySection } from './HistorySection'
@@ -98,8 +98,12 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
   const project = projectOf(item)
   const ctx = useBoardStore((s) => s.ctx)
   // The board context belongs to the selected project; an item opened from My Work may come from another one.
-  const sameProject = useAppStore((s) => s.selectedProject?.name === project)
+  const selectedProject = useAppStore((s) => s.selectedProject?.name)
+  const sameProject = selectedProject === project
   const otherTypes = useMyWorkStore((s) => s.types[project])
+  const otherMembers = useMyWorkStore((s) => s.members)
+  const loadMembers = useMyWorkStore((s) => s.loadMembers)
+  const people = peopleFor(project, selectedProject, ctx?.members, otherMembers)
   const projectTypes = (sameProject ? ctx?.workItemTypes : otherTypes) ?? []
   const board = useBoardStore((s) => s.board)
   const onBoard = useBoardStore((s) => s.items.some((i) => i.id === item.id))
@@ -158,6 +162,7 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
     return () => { live = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id, org, project])
+  useEffect(() => { if (!sameProject) void loadMembers(project) }, [sameProject, project, loadMembers])
 
   const saveTitle = () => {
     const t = title.trim()
@@ -166,7 +171,7 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
   }
 
   const stateOptions: Option[] = (wit?.states ?? []).filter((s) => s.category !== 'Removed').map((s) => ({ value: s.name, label: s.name }))
-  const whoOptions: Option[] = [{ value: '', label: 'Unassigned' }, ...(ctx?.members ?? []).map((m) => ({ value: identityKey(m), label: m.displayName, sub: m.uniqueName ?? undefined }))]
+  const whoOptions: Option[] = [{ value: '', label: 'Unassigned' }, ...people.map((m) => ({ value: identityKey(m), label: m.displayName, sub: m.uniqueName ?? undefined }))]
   const iterOptions: Option[] = (ctx?.iterations ?? []).map((i) => ({ value: i.path, label: i.name, sub: i.attributes?.timeFrame === 'current' ? 'current' : undefined }))
   if (ctx?.settings?.backlogIteration) iterOptions.unshift({ value: ctx.settings.backlogIteration.path, label: 'Backlog', sub: ctx.settings.backlogIteration.name })
   const priOptions: Option[] = ['1', '2', '3', '4'].map((p) => ({ value: p, label: `P${p}`, sub: p === '1' ? 'Must fix' : p === '2' ? 'High' : p === '3' ? 'Normal' : 'Low' }))
@@ -189,7 +194,7 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
     if (!text) return
     setSending(true)
     try {
-      const c = await api().addComment(org, project, item.id, toWorkItemMentionHtml(text, ctx?.members ?? [], org).replace(/\n/g, '<br>'))
+      const c = await api().addComment(org, project, item.id, toWorkItemMentionHtml(text, people, org).replace(/\n/g, '<br>'))
       setComments((cs) => [...(cs ?? []), c])
       setComment('')
     } catch (e) {
@@ -250,7 +255,7 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
               <span className="txt">{who?.displayName ?? 'Unassigned'}</span>
               <ChevronDown size={14} className="chev" />
             </button>
-            <Dropdown anchor={whoBtn.current} open={menu === 'who'} onClose={() => setMenu(null)} options={whoOptions} value={who ? identityKey(who) : ''} searchable placeholder="Search people" width={280} onSelect={(v) => void assign(item.id, v || null)} />
+            <Dropdown anchor={whoBtn.current} open={menu === 'who'} onClose={() => setMenu(null)} options={whoOptions} value={who ? identityKey(who) : ''} searchable placeholder="Search people" width={280} onSelect={(v) => void assign(item.id, v || null, people)} />
           </span>
 
           <span className="k">State</span>
@@ -370,7 +375,7 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
           </div>
         ))}
         <div className="comment-box">
-          <MentionTextarea people={ctx?.members ?? []} org={org} project={project} value={comment} placeholder="Write a comment… (@ person, # work item, ! pull request)" onChange={setComment} onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void sendComment() }} />
+          <MentionTextarea people={people} org={org} project={project} value={comment} placeholder="Write a comment… (@ person, # work item, ! pull request)" onChange={setComment} onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void sendComment() }} />
           <div className="row">
             <span className="hint">@ person · # work item · ! pull request</span>
             <button type="button" className="btn sm primary" disabled={sending || !comment.trim()} onClick={() => void sendComment()}>{sending ? 'Posting…' : 'Post'}</button>

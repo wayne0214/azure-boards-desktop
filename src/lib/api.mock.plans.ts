@@ -1,6 +1,7 @@
 // Demo Test Plans data for browser mode.
 import type { Api } from './api'
-import type { TpConfiguration, TpPerson, TpPlan, TpPoint, TpResult, TpRun, TpSuite } from './testplans/types'
+import type { StepItem } from './testcases/steps'
+import type { ResultAttachment, StepResult, TestResultDetail, TestResultSummary, TpConfiguration, TpPerson, TpPlan, TpPoint, TpResult, TpRun, TpSuite } from './testplans/types'
 
 const delay = (ms = 200) => new Promise((r) => setTimeout(r, ms))
 const daysAgo = (d: number) => new Date(Date.now() - d * 86400000).toISOString()
@@ -15,9 +16,11 @@ export interface MockLookup {
   testedBy(requirementId: number): number[]
   /** Test cases carrying a tag. */
   tagged(tag: string): number[]
+  /** A test case's (or shared steps') steps. */
+  steps(id: number): StepItem[]
 }
 
-export function mockPlans(lookup: MockLookup): Pick<Api, 'tpPlans' | 'tpCreatePlan' | 'tpSuites' | 'tpCreateSuite' | 'tpAddCases' | 'tpRemoveCases' | 'tpConfigurations' | 'tpPoints' | 'tpUpdatePoints' | 'tpPublishRun' | 'tpRuns' | 'tpRunResults' | 'tpSetPlanState'> {
+export function mockPlans(lookup: MockLookup): Pick<Api, 'tpPlans' | 'tpCreatePlan' | 'tpSuites' | 'tpCreateSuite' | 'tpAddCases' | 'tpRemoveCases' | 'tpConfigurations' | 'tpPoints' | 'tpUpdatePoints' | 'tpPublishRun' | 'tpRuns' | 'tpRunResults' | 'tpSetPlanState' | 'tpListResults' | 'tpResult' | 'tpResultAttachment' | 'tpSaveResultAttachment'> {
   const configurations: TpConfiguration[] = [{ id: 1, name: 'macOS', isDefault: true }, { id: 2, name: 'Windows 11', isDefault: false }]
   const plans: TpPlan[] = [
     { id: 10, name: 'Release 2.1.0', state: 'Active', iteration: 'Contoso Mobile\\Sprint 24', areaPath: 'Contoso Mobile', rootSuiteId: 100, owner: 'Wayne Lai', startDate: daysAgo(6), endDate: daysAgo(-8), updatedDate: daysAgo(0) },
@@ -84,7 +87,90 @@ export function mockPlans(lookup: MockLookup): Pick<Api, 'tpPlans' | 'tpCreatePl
   addRun(10, 'SDV run 0.4.0', '0.4.0', false, pointsOf([101, 102, 103, 104]).map((p, i) => ({ pointId: p.id, outcome: i % 5 === 3 ? 'failed' : 'passed' })), 9)
   addRun(10, 'Automated · results.json · 0.5.0', '0.5.0', true, pointsOf([101, 104]).filter((p) => p.testCaseId === 1301).map((p) => ({ pointId: p.id, outcome: 'passed' })), 1)
 
+  // A Playwright run that passed, then one that failed at step 3 with a screenshot and logs.
+  const upload = points.find((p) => p.suiteId === 101 && p.testCaseId === 1302 && p.configurationId === 1)!
+  addRun(10, 'Playwright · e2e/upload.spec.ts', '0.5.0', true, [{ pointId: upload.id, outcome: 'passed' }], 3)
+  const failedRun = addRun(10, 'Playwright · e2e/upload.spec.ts', '0.5.0', true, [{ pointId: upload.id, outcome: 'failed' }], 0)
+  const failed = runs.find((r) => r.id === failedRun)!.results[0]
+  Object.assign(upload, { outcome: 'failed', lastRunId: failedRun, lastResultId: failed.resultId, lastRunDate: failed.completedDate, lastRunBy: me.displayName, isAutomated: true })
+  const failure = new Map<string, { error: string; stack: string; atStep: number }>([[`${failedRun}:${failed.resultId}`, {
+    error: 'expected upload queue to have 1 item, received 0',
+    stack: "Error: expected upload queue to have 1 item, received 0\n    at e2e/upload.spec.ts:58:41\n    at runStep (e2e/helpers/steps.ts:22:5)",
+    atStep: 1,
+  }]])
+  const logText = (runId: number) => Array.from({ length: 40 }, (_, i) => `2026-10-28T09:14:${String(i).padStart(2, '0')}Z ${i % 9 === 8 ? 'WARN' : 'INFO'} [run ${runId}] ${i % 9 === 8 ? 'retrying upload chunk 3/8 after network error' : `upload step ${i}: ok`}`).join('\n')
+  const screenshot = (): string => {
+    const c = document.createElement('canvas')
+    c.width = 640
+    c.height = 400
+    const g = c.getContext('2d')!
+    g.fillStyle = '#f4f5f7'
+    g.fillRect(0, 0, 640, 400)
+    g.fillStyle = '#1f2937'
+    g.font = '20px sans-serif'
+    g.fillText('Upload queue', 32, 56)
+    g.fillStyle = '#b91c1c'
+    g.fillText('0 items: the retake was not queued', 32, 110)
+    return c.toDataURL('image/png').split(',')[1]
+  }
+  const files = (runId: number, resultId: number): (ResultAttachment & { body: () => string })[] => failure.has(`${runId}:${resultId}`) ? [
+    { id: 1, fileName: '1-screenshot.png', size: 234900, kind: 'image', body: screenshot },
+    { id: 2, fileName: '2-app-log.txt', size: logText(runId).length, kind: 'text', body: () => btoa(logText(runId)) },
+    { id: 3, fileName: '3-inference-20261028.log', size: 96, kind: 'text', body: () => btoa('model=pose-v4 frames=1 verdict=fail reason=partial_frame\n') },
+    { id: 4, fileName: 'trace.zip', size: 4, kind: 'file', body: () => btoa('PK..') },
+  ] : []
+  const summaryOf = (r: TpResult, run: TpRun & { planId: number }): TestResultSummary | null => {
+    const p = points.find((x) => x.id === r.pointId)
+    if (!p) return null
+    const f = failure.get(`${r.runId}:${r.resultId}`)
+    return { runId: r.runId, runName: run.name, resultId: r.resultId, testCaseId: p.testCaseId, testCaseTitle: p.testCaseTitle, pointId: p.id, planId: run.planId, outcome: r.outcome, completedDate: r.completedDate, durationMs: run.isAutomated ? 5321 : undefined, configuration: p.configurationName, isAutomated: run.isAutomated, runBy: r.runBy, errorMessage: f?.error }
+  }
+  /** Every result: those of the runs, and the points' last results made before the demo's runs. */
+  const allResults = (): TestResultSummary[] => {
+    const out = runs.flatMap((run) => run.results.map((r) => summaryOf(r, run)).filter((x): x is TestResultSummary => !!x))
+    for (const p of points) {
+      if (p.lastRunId == null || p.lastResultId == null || out.some((r) => r.runId === p.lastRunId && r.resultId === p.lastResultId)) continue
+      out.push({ runId: p.lastRunId, runName: p.isAutomated ? 'Automated run' : 'Manual run', resultId: p.lastResultId, testCaseId: p.testCaseId, testCaseTitle: p.testCaseTitle, pointId: p.id, planId: planOf(p.suiteId), outcome: p.outcome, completedDate: p.lastRunDate, configuration: p.configurationName, isAutomated: p.isAutomated, runBy: p.lastRunBy })
+    }
+    return out.sort((a, b) => (b.completedDate ?? '').localeCompare(a.completedDate ?? '') || b.runId - a.runId)
+  }
+  /** What manual runs published in the demo recorded: their comment and step outcomes. */
+  const recorded = new Map<string, { comment?: string; steps: StepResult[] }>()
+  /** Steps as a run records them: all passed, or passed up to the failing step and not executed after it. */
+  const stepResults = (r: TestResultSummary, atStep: number): StepResult[] => {
+    const ids = lookup.steps(r.testCaseId).flatMap((s) => s.kind === 'shared' ? lookup.steps(s.ref).map((x) => `${s.id};${x.id}`) : [String(s.id)])
+    if (!r.isAutomated || ids.length === 0) return []
+    const at = r.outcome === 'failed' ? Math.min(atStep, ids.length - 1) : ids.length
+    return ids.map((stepId, i) => i < at ? { stepId, outcome: 'passed', durationMs: 400 + i * 120 } : i === at ? { stepId, outcome: 'failed', durationMs: 5000, errorMessage: r.errorMessage } : { stepId, outcome: 'notExecuted' })
+  }
+
   return {
+    tpListResults: async (_o, _p, q) => {
+      await delay(250)
+      const list = allResults().filter((r) => (q.testCaseId == null || r.testCaseId === q.testCaseId) && (q.planId == null || r.planId === q.planId) && (q.runId == null || r.runId === q.runId) && (!q.outcome || r.outcome.toLowerCase() === q.outcome.toLowerCase()))
+      return structuredClone(list.slice(0, q.limit ?? 50))
+    },
+    tpResult: async (_o, _p, runId, resultId) => {
+      await delay(300)
+      const r = allResults().find((x) => x.runId === runId && x.resultId === resultId)
+      if (!r) throw { kind: 'notFound', message: `Result ${resultId} of run ${runId} was not found.` }
+      const f = failure.get(`${runId}:${resultId}`)
+      const detail: TestResultDetail = {
+        ...r, stackTrace: f?.stack, automatedTestName: r.isAutomated ? 'upload › resumes and requeues the retake' : undefined,
+        comment: recorded.get(`${runId}:${resultId}`)?.comment,
+        steps: recorded.get(`${runId}:${resultId}`)?.steps ?? stepResults(r, f?.atStep ?? 0), iterations: r.isAutomated ? 1 : 0,
+        attachments: files(runId, resultId).map(({ body: _body, ...a }) => a),
+        runUrl: `https://dev.azure.com/contoso/Contoso%20Mobile/_TestManagement/Runs?runId=${runId}`,
+      }
+      return structuredClone(detail)
+    },
+    tpSaveResultAttachment: async () => { await delay(300) },
+    tpResultAttachment: async (_o, _p, runId, resultId, attachmentId) => {
+      await delay(350)
+      const f = files(runId, resultId).find((a) => a.id === attachmentId)
+      if (!f) throw { kind: 'notFound', message: 'Attachment not found.' }
+      return f.body()
+    },
     tpPlans: async (_o, _p, activeOnly) => { await delay(); return structuredClone(plans.filter((p) => !activeOnly || p.state === 'Active')) },
     tpCreatePlan: async (_o, _p, input) => {
       await delay(400)
@@ -147,9 +233,11 @@ export function mockPlans(lookup: MockLookup): Pick<Api, 'tpPlans' | 'tpCreatePl
     tpPublishRun: async (_o, _p, input) => {
       await delay(600)
       const runId = addRun(input.planId, input.name, input.buildNumber, input.automated, input.results.map((r) => ({ pointId: r.pointId, outcome: lower(r.outcome) })))
+      const run = runs.find((x) => x.id === runId)!
+      input.results.forEach((r, i) => recorded.set(`${runId}:${run.results[i].resultId}`, { comment: r.comment, steps: (r.stepResults ?? []).map((x) => ({ stepId: x.stepId, outcome: lower(x.outcome) })) }))
       for (const r of input.results) {
         const p = points.find((x) => x.id === r.pointId)
-        if (p) Object.assign(p, { outcome: lower(r.outcome), lastRunDate: new Date().toISOString(), lastRunBy: me.displayName, lastRunId: runId, isAutomated: input.automated })
+        if (p) Object.assign(p, { outcome: lower(r.outcome), lastRunDate: new Date().toISOString(), lastRunBy: me.displayName, lastRunId: runId, lastResultId: run.results.find((x) => x.pointId === r.pointId)?.resultId, isAutomated: input.automated })
       }
       return { runId, published: input.results.length }
     },
