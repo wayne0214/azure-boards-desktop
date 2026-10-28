@@ -1,8 +1,9 @@
-import { Archive, ArrowLeft, Bot, Tag, Check, ChevronRight, ClipboardList, ExternalLink, FileCheck2, Folder, FolderPlus, ListPlus, PlayCircle, Plus, RefreshCw, Search, Upload, X } from 'lucide-react'
+import { Archive, ArrowLeft, Bot, Tag, Check, ClipboardList, ExternalLink, FileCheck2, FileSearch, Folder, FolderPlus, History, ListPlus, MoreHorizontal, PlayCircle, Plus, RefreshCw, Search, Upload, X } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Dropdown } from '@/components/ui/Dropdown'
 import { Empty } from '@/components/ui/Empty'
+import { RunHistorySheet } from '@/components/testcases/CaseRuns'
 import { RunCase } from '@/components/testcases/RunView'
 import { api } from '@/lib/api'
 import { confirmAsync } from '@/lib/confirm'
@@ -21,6 +22,8 @@ import { ImportResultsSheet } from './ImportResultsSheet'
 import { usePlanLookups, type PlanLookups } from './lookups'
 import { AddCasesSheet, NewPlanSheet, NewSuiteSheet, type NewSuiteKind } from './PlanSheets'
 import { PlanReport } from './PlanReport'
+import { LastResultPill, ResultSheet } from './ResultSheet'
+import { useTagVersions } from './TagVersions'
 import { CloseProjectSheet, StartRunSheet, VersionBar } from './VersionBar'
 
 type SheetKind = null | 'plan' | 'import' | 'start' | 'close' | { suite: NewSuiteKind; parentId: number } | { add: number }
@@ -37,6 +40,9 @@ export function PlansView() {
   })))
   const lookups = usePlanLookups()
   const [sheet, setSheet] = useState<SheetKind>(null)
+  const tags = useTagVersions()
+  const moreBtn = useRef<HTMLButtonElement>(null)
+  const [more, setMore] = useState(false)
 
   useEffect(() => {
     if (!project || !ctx) return
@@ -58,21 +64,18 @@ export function PlansView() {
   if (!ctx) return <div className="empty-state"><span className="spinner lg" /><p>Loading {project.name}…</p></div>
 
   const reload = () => { void s.loadPlans(); void useTcStore.getState().load({ silent: true }) }
-  const rootCounts = plan ? totals.get(plan.rootSuiteId) : undefined
 
   return (
     <div className="req">
       <div className="req-head">
         <div className="req-title tp-title">
           <strong>Test Plans</strong>
-          {plan && <span className="faint">{plan.iteration}{rootCounts ? ` · ${rootCounts.total} points` : ''}</span>}
         </div>
         {s.plans.length > 0 && (
           <select className="input tp-plan-pick" value={s.planId ?? ''} onChange={(e) => void s.openPlan(Number(e.target.value))} aria-label="Test plan">
             {s.plans.map((p) => <option key={p.id} value={p.id}>{p.name}{p.state === 'Inactive' ? ' (inactive)' : ''}</option>)}
           </select>
         )}
-        <label className="tp-toggle faint"><input type="checkbox" checked={s.showInactive} onChange={(e) => s.setShowInactive(e.target.checked)} /> Inactive plans</label>
         {plan && (
           <div className="segmented">
             <button type="button" className={s.tab === 'points' ? 'on' : ''} onClick={() => s.setTab('points')}><ClipboardList size={14} /> Points</button>
@@ -80,11 +83,39 @@ export function PlansView() {
           </div>
         )}
         <span className="grow" />
-        {plan && <button type="button" className="btn" onClick={() => setSheet('import')} title="Publish a Playwright JSON report or a JUnit XML file to this plan"><Upload size={14} /> Import results</button>}
-        <button type="button" className="btn" onClick={() => setSheet('plan')}><Plus size={14} /> New plan</button>
-        {plan && plan.state !== 'Inactive' && <button type="button" className="icon-btn" title="Close project: save the final report and set the plan inactive" onClick={() => setSheet('close')}><Archive size={16} /></button>}
-        {plan && org && <button type="button" className="icon-btn" title="Open in Azure DevOps" onClick={() => void api().openUrl(planUrl(org, project.name, plan.id))}><ExternalLink size={16} /></button>}
         <button type="button" className="icon-btn" title="Reload" onClick={reload} disabled={s.plansLoading}><RefreshCw size={16} className={s.plansLoading ? 'spin' : ''} /></button>
+        <button ref={moreBtn} type="button" className="icon-btn" title="More: import results, new plan, version tags…" aria-label="More" onClick={() => setMore(true)}><MoreHorizontal size={16} /></button>
+        <Dropdown<string>
+          anchor={moreBtn.current}
+          open={more}
+          align="right"
+          width={280}
+          onClose={() => setMore(false)}
+          multi
+          value={[...(s.showInactive ? ['inactive'] : []), ...(tags.prerelease ? ['prerelease'] : []), `repo:${tags.repoId ?? ''}`]}
+          options={[
+            ...(plan ? [{ value: 'import', label: 'Import results…', icon: <Upload size={14} />, group: 'Plan' }] : []),
+            { value: 'new', label: 'New plan…', icon: <Plus size={14} />, group: 'Plan' },
+            ...(plan && org ? [{ value: 'open', label: 'Open in Azure DevOps', icon: <ExternalLink size={14} />, group: 'Plan' }] : []),
+            ...(plan && plan.state !== 'Inactive' ? [{ value: 'close', label: 'Close project…', icon: <Archive size={14} />, group: 'Plan' }] : []),
+            { value: 'inactive', label: 'Show inactive plans', group: 'Show' },
+            ...(tags.repos?.length ? [
+              ...tags.repos.map((r) => ({ value: `repo:${r.id}`, label: r.id === tags.repoId && tags.error ? `${r.name} (no access: needs Code Read)` : r.name, group: 'Suggest versions from tags in' })),
+              { value: 'repo:', label: 'No repository', group: 'Suggest versions from tags in' },
+              { value: 'prerelease', label: 'Include pre-release tags', group: 'Suggest versions from tags in' },
+            ] : []),
+          ]}
+          onSelect={(v) => {
+            if (v.startsWith('repo:')) { void tags.setRepo(v.slice(5) || null); return }
+            if (v === 'prerelease') { tags.setPrerelease(!tags.prerelease); return }
+            if (v === 'inactive') { s.setShowInactive(!s.showInactive); return }
+            setMore(false)
+            if (v === 'import') setSheet('import')
+            else if (v === 'new') setSheet('plan')
+            else if (v === 'close') setSheet('close')
+            else if (v === 'open' && plan && org) void api().openUrl(planUrl(org, project.name, plan.id))
+          }}
+        />
       </div>
 
       {plan && plan.state !== 'Inactive' && <VersionBar plan={plan} lookups={lookups} onStart={() => setSheet('start')} />}
@@ -192,6 +223,8 @@ function PointsPanel({ lookups, onAdd }: { lookups: PlanLookups; onAdd: (suiteId
   const me = useAppStore((a) => a.account())
   const org = useAppStore((a) => a.activeOrg)
   const projectId = useAppStore((a) => a.selectedProject?.id)
+  const planProject = usePlanStore((st) => st.project)
+  const [result, setResult] = useState<{ runId: number; resultId: number } | null>(null)
   const s = usePlanStore(useShallow((st) => ({
     suites: st.suites, suiteId: st.suiteId, points: st.points, pointsLoading: st.pointsLoading, pointsError: st.pointsError, configurations: st.configurations,
     outcome: st.outcome, configurationId: st.configurationId, mine: st.mine, search: st.search, selected: st.selected,
@@ -287,9 +320,13 @@ function PointsPanel({ lookups, onAdd }: { lookups: PlanLookups; onAdd: (suiteId
                   </td>
                   <td>{p.configurationName}</td>
                   <td>{p.tester?.displayName ?? <span className="faint">Unassigned</span>}</td>
-                  <td><OutcomePill outcome={p.outcome} /></td>
+                  <td><LastResultPill point={p} /></td>
                   <td className="muted" title={p.lastRunDate ? `${new Date(p.lastRunDate).toLocaleString()}${p.lastRunBy ? ` by ${p.lastRunBy}` : ''}` : undefined}>{p.lastRunDate ? relativeTime(p.lastRunDate) : '—'}</td>
-                  <td className="tp-go"><button type="button" className="btn sm ghost" onClick={(e) => { e.stopPropagation(); s.setRunning(p.id) }}>Run <ChevronRight size={13} /></button></td>
+                  <td className="tp-go">
+                    <span className="tp-go-btns">
+                      {p.lastRunId != null && p.lastResultId != null && <button type="button" className="btn sm tp-result-btn" title="Open the last recorded result: steps, error, screenshots and logs" onClick={(e) => { e.stopPropagation(); setResult({ runId: p.lastRunId!, resultId: p.lastResultId! }) }} onDoubleClick={(e) => e.stopPropagation()}><FileSearch size={13} /> Result</button>}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -298,6 +335,7 @@ function PointsPanel({ lookups, onAdd }: { lookups: PlanLookups; onAdd: (suiteId
         </div>
       )}
 
+      {result && planProject && <ResultSheet project={planProject} runId={result.runId} resultId={result.resultId} onClose={() => setResult(null)} />}
       {sel.length > 0 && (
         <div className="bulk-bar">
           <span className="n">{sel.length} selected</span>
@@ -332,8 +370,10 @@ function PointRunner({ plan, lookups }: { plan: TpPlan; lookups: PlanLookups }) 
   const me = useAppStore((a) => a.account())
   const s = usePlanStore(useShallow((st) => ({
     points: st.points, suiteId: st.suiteId, runningId: st.runningId, outcome: st.outcome, configurationId: st.configurationId, mine: st.mine, search: st.search,
-    setRunning: st.setRunning, afterRun: st.afterRun, mark: st.mark, version: st.version,
+    setRunning: st.setRunning, afterRun: st.afterRun, mark: st.mark, version: st.version, project: st.project,
   })))
+  // What was recorded before: the last result, or the test case's whole history.
+  const [past, setPast] = useState<null | 'history' | { runId: number; resultId: number }>(null)
   const tc = useTcStore(useShallow((st) => ({ cfg: st.cfg, shared: st.shared, loading: st.loading })))
   const reqCfg = useReqStore((r) => r.cfg)
   const sharedById = useMemo(() => new Map(tc.shared.map((w) => [w.id, w])), [tc.shared])
@@ -355,7 +395,9 @@ function PointRunner({ plan, lookups }: { plan: TpPlan; lookups: PlanLookups }) 
         <span className="faint">{i >= 0 ? `${i + 1} of ${queue.length}` : ''} · {plan.name}</span>
         <span className="grow" />
         <OutcomePill outcome={point.outcome} />
-        {point.lastRunDate && <span className="faint">{relativeTime(point.lastRunDate)}{point.lastRunBy ? ` by ${point.lastRunBy}` : ''}</span>}
+        {point.lastRunDate ? <span className="faint">{relativeTime(point.lastRunDate)}{point.lastRunBy ? ` by ${point.lastRunBy}` : ''}</span> : <span className="faint">Not run yet</span>}
+        {point.lastRunId != null && point.lastResultId != null && <button type="button" className="btn sm" onClick={() => setPast({ runId: point.lastRunId!, resultId: point.lastResultId! })} title="What was recorded last time: steps, error, screenshots and logs"><FileSearch size={13} /> Last result</button>}
+        <button type="button" className="btn sm" onClick={() => setPast('history')} title="Every recorded result of this test case"><History size={13} /> History</button>
       </div>
       {test && tc.cfg && reqCfg ? (
         <RunCase
@@ -375,6 +417,8 @@ function PointRunner({ plan, lookups }: { plan: TpPlan; lookups: PlanLookups }) 
       ) : (
         <QuickMark point={point} onMarked={next} onMark={(o) => s.mark([point.id], o)} />
       )}
+      {past === 'history' && s.project && <RunHistorySheet testCaseId={point.testCaseId} title={point.testCaseTitle} project={s.project} onClose={() => setPast(null)} />}
+      {past && past !== 'history' && s.project && <ResultSheet project={s.project} runId={past.runId} resultId={past.resultId} onClose={() => setPast(null)} />}
     </div>
   )
 }

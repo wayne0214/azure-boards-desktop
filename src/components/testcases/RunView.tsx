@@ -2,6 +2,8 @@ import DOMPurify from 'dompurify'
 import { useShallow } from 'zustand/react/shallow'
 import { Bug, Check, ChevronRight, ClipboardList, ImagePlus, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
+import { UntaggedNote, useTagVersions } from '@/components/plans/TagVersions'
+import { HistoryButton } from './CaseRuns'
 import { Empty } from '@/components/ui/Empty'
 import { imageFiles } from '@/lib/attachments'
 import { fieldText, idOf, plainText, type ReqConfig, type ReqTree } from '@/lib/requirements'
@@ -40,7 +42,8 @@ export function RunView({ cfg, reqCfg, tree, coverage }: { cfg: TcConfig; reqCfg
   }, [org, projectName])
   // The plan runs here are copied into; its versions are what the release box suggests.
   const planFor = planState.scopeKey === `${org}/${projectName}` ? theProjectPlan(planState) : null
-  const releaseOptions = [...new Set([...(planFor && planFor.id === planState.planId ? planVersions(planState) : []), ...s.releases])]
+  const tags = useTagVersions()
+  const releaseOptions = [...new Set([...tags.offered, ...(planFor && planFor.id === planState.planId ? planVersions(planState) : []), ...s.releases])]
   const openPlan = (id: number) => { void usePlanStore.getState().openPlan(id); useUiStore.getState().setView('plans') }
 
   // Every test case, in SDV order.
@@ -71,6 +74,7 @@ export function RunView({ cfg, reqCfg, tree, coverage }: { cfg: TcConfig; reqCfg
         <label className="faint tc-run-label">Release</label>
         <input className="input" style={{ width: 200 }} list="tc-releases" value={release} placeholder="e.g. v2.1.0 RC1" onChange={(e) => setRelease(e.target.value)} />
         <datalist id="tc-releases">{releaseOptions.map((r) => <option key={r} value={r} />)}</datalist>
+        <UntaggedNote version={release} />
         <select className="input" style={{ width: 240 }} value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
           <option value="all">All test cases</option>
           <option value="notrun">Not run in this release</option>
@@ -181,7 +185,7 @@ export function RunCase({ cfg, reqCfg, tree, test, release, last, shared, point,
 
   return (
     <div className="tc-ed tc-run" onPaste={(e: ClipboardEvent) => { const f = imageFiles(e.clipboardData); if (f.length) { e.preventDefault(); addFiles(f) } }}>
-      <div className="tc-ed-top"><span className="tc-sdv tc-sdv-ro">{sdvOf(cfg, test)}</span><strong className="tc-title">{String(test.fields['System.Title'] ?? '')}</strong>{point?.configurationName && <span className="tp-config">{point.configurationName}</span>}</div>
+      <div className="tc-ed-top"><span className="tc-sdv tc-sdv-ro">{sdvOf(cfg, test)}</span><strong className="tc-title">{String(test.fields['System.Title'] ?? '')}</strong>{point?.configurationName && <span className="tp-config">{point.configurationName}</span>}{!point && <><span className="grow" /><HistoryButton testCaseId={test.id} title={String(test.fields['System.Title'] ?? '')} /></>}</div>
       {last && <div className="faint tc-run-last">Last run in {release}: <b className={last.outcome}>{last.outcome === 'pass' ? 'Passed' : 'Failed'}</b> on {last.date} by {last.by}</div>}
 
       {linked.length > 0 && reqCfg.acceptanceField && (

@@ -25,6 +25,8 @@ Off by default. Turn it on in **Settings → AI tools (MCP)**.
 | `stage_import`, `get_import_result`: stage a bulk import for review in Boards → Imports (see below) | no (the user applies it in the app) |
 | `plan_work_item_sync`: dry run of a bulk import approved in the chat | no |
 | `search_wiki`, `list_wiki_pages`, `get_wiki_page`: the project wiki (conventions, decisions, meeting notes) | no |
+| `list_test_results`, `get_test_result`: Azure Test Plans results by test case, plan or run, with step results and attachments (`results.rs`) | no |
+| `get_test_attachment`: saves a result's screenshot or log to a temp folder and returns the path | no (writes only a local file) |
 | `create_work_item`, `update_work_item`, `add_comment`, `apply_work_item_sync` | yes |
 | `append_to_wiki`: adds markdown to the end of a page, or creates it with `create: true` (`wiki.rs`) | yes |
 | `open_pull_request_form`: opens the New pull request form filled in, for the user to create | no (the user creates it in the app) |

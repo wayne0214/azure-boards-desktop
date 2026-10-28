@@ -201,6 +201,13 @@ pub async fn pr_branches(state: State<'_, AppState>, org: String, repo_id: Strin
     pr::list_branches(&c, &repo_id).await
 }
 
+/// A repository's tag names, offered as versions to test.
+#[tauri::command]
+pub async fn git_tags(state: State<'_, AppState>, org: String, repo_id: String) -> AppResult<Vec<String>> {
+    let c = state.client(&org).await?;
+    pr::list_tags(&c, &repo_id).await
+}
+
 /// Create a branch for a work item and link the two. A failed link does not undo the branch; the result says whether it linked.
 #[tauri::command]
 pub async fn pr_start_branch(state: State<'_, AppState>, org: String, project_id: String, repo_id: String, name: String, base: String, work_item_id: i64) -> AppResult<Value> {

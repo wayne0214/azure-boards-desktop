@@ -130,8 +130,15 @@ const threads: Record<number, Thread[]> = {
   ],
 }
 
-export const mockPr: Pick<Api, 'prListRepos' | 'prList' | 'prDetail' | 'prWorkItemIds' | 'prBranchWorkItems' | 'prLinkWorkItem' | 'prChanges' | 'prThreads' | 'prCreateThread' | 'prReply' | 'prUpdateThread' | 'prUpdateComment' | 'prDeleteComment' | 'prVote' | 'prAddReviewer' | 'prRemoveReviewer' | 'prUpdate' | 'prCreate' | 'prBranches' | 'prGet' | 'prChecks' | 'prFile' | 'prProjectMembers'> = {
+/** Release tags per demo repository, as git-tools writes them. */
+const tags: Record<string, string[]> = {
+  r1: ['v0.3.0', 'v0.4.0', 'v0.5.0-alpha.0', 'v0.5.0-alpha.1', 'v0.5.0-rc.0', 'mobile-hotfix-note'],
+  r2: ['v1.0.0', 'v1.1.0', 'v1.2.0-alpha.3'],
+}
+
+export const mockPr: Pick<Api, 'prListRepos' | 'gitTags' | 'prList' | 'prDetail' | 'prWorkItemIds' | 'prBranchWorkItems' | 'prLinkWorkItem' | 'prChanges' | 'prThreads' | 'prCreateThread' | 'prReply' | 'prUpdateThread' | 'prUpdateComment' | 'prDeleteComment' | 'prVote' | 'prAddReviewer' | 'prRemoveReviewer' | 'prUpdate' | 'prCreate' | 'prBranches' | 'prGet' | 'prChecks' | 'prFile' | 'prProjectMembers'> = {
   prListRepos: async (_o, project) => { await delay(); return structuredClone(repos.filter((r) => r.project.name === project)) },
+  gitTags: async (_o, repoId) => { await delay(150); return [...(tags[repoId] ?? [])] },
   prList: async (_o, project, status, opts) => {
     await delay(250)
     return structuredClone(prs.filter((p) => (!project || p.repository.project?.name === project) && (status === 'all' || p.status === status) && (!opts?.creatorId || p.createdBy.id === opts.creatorId) && (!opts?.reviewerId || p.reviewers.some((r) => r.id === opts.reviewerId)) && (!opts?.repoId || p.repository.id === opts.repoId)))

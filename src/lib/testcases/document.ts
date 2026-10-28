@@ -27,13 +27,14 @@ function dis(tree: ReqTree, rootDiId?: number | null): { di: ReqNode; num: numbe
 }
 
 /** A test case's steps with shared steps written out, as [action, expected] HTML pairs. */
-export function flatSteps(t: WorkItem, shared: Map<number, WorkItem>): { action: string; expected: string; from?: string }[] {
+/** Steps in run order, shared steps expanded. `stepId` is what a step result names: "2", or "3;2" inside shared steps. */
+export function flatSteps(t: WorkItem, shared: Map<number, WorkItem>): { action: string; expected: string; from?: string; stepId?: string }[] {
   return parseSteps(t.fields[STEPS] as string | undefined).flatMap((it) => {
-    if (it.kind === 'step') return [{ action: it.action, expected: it.expected }]
+    if (it.kind === 'step') return [{ action: it.action, expected: it.expected, stepId: it.id != null ? String(it.id) : undefined }]
     if (it.kind === 'shared') {
       const sh = shared.get(it.ref)
       const inner = parseSteps(sh?.fields[STEPS] as string | undefined).filter((x) => x.kind === 'step')
-      return inner.map((x) => ({ action: x.kind === 'step' ? x.action : '', expected: x.kind === 'step' ? x.expected : '', from: sh ? titleOf(sh) : `Shared steps #${it.ref}` }))
+      return inner.map((x) => ({ action: x.kind === 'step' ? x.action : '', expected: x.kind === 'step' ? x.expected : '', from: sh ? titleOf(sh) : `Shared steps #${it.ref}`, stepId: it.id != null && x.id != null ? `${it.id};${x.id}` : undefined }))
     }
     return []
   })
