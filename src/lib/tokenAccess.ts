@@ -28,7 +28,7 @@ export const TOKEN_ACCESS: TokenAccess[] = [
   },
   {
     feature: 'Test Plans',
-    detail: 'Plans, suites, runs and results. Only if your account has Test Plans access.',
+    detail: 'Plans, suites, runs and results. Only if your account has Test Plans access. Suggesting versions from repository tags also needs Code: Read (Pull requests already includes it).',
     scopes: ['Test Management: Read & write'],
   },
   {

@@ -21,7 +21,7 @@ import type { BranchWorkItem, PrDetail, PullRequest, Repo, Thread } from './pr/t
 import type { Booking, NewBooking, Room } from './rooms/types'
 import type { VersioningFacts, VersioningFix } from './versioning/evaluate'
 import type { FoundItems, ItemFilter, Wiki, WikiChange, WikiPage, WikiPageNode, WikiSearchResult } from './wiki/types'
-import type { Markable, NewPlanInput, RunInput, TpConfiguration, TpPlan, TpPoint, TpResult, TpRun, TpSuite } from './testplans/types'
+import type { Markable, NewPlanInput, ResultQuery, RunInput, TestResultDetail, TestResultSummary, TpConfiguration, TpPlan, TpPoint, TpResult, TpRun, TpSuite } from './testplans/types'
 import { useUiStore } from '@/store/useUiStore'
 
 export interface Api {
@@ -54,7 +54,7 @@ export interface Api {
   /** Field-change history of a work item, raw from Azure DevOps. */
   getUpdates(org: string, project: string, id: number): Promise<unknown[]>
   /** Copy a run from Run mode to the release's existing plan; `mirrored` is false with no reason when there is no such plan. */
-  tpMirrorResult(org: string, project: string, input: { planId?: number; release: string; testCaseId: number; outcome: 'Passed' | 'Failed'; comment: string; attachments: { name: string; dataBase64: string }[] }): Promise<{ mirrored: boolean; reason?: string }>
+  tpMirrorResult(org: string, project: string, input: { planId?: number; release: string; testCaseId: number; outcome: 'Passed' | 'Failed'; comment: string; attachments: { name: string; dataBase64: string }[]; stepResults?: { stepId: string; outcome: 'Passed' | 'Failed' }[] }): Promise<{ mirrored: boolean; reason?: string }>
   // ----- Test Plans -----
   tpPlans(org: string, project: string, activeOnly?: boolean): Promise<TpPlan[]>
   /** Needs Basic + Test Plans access. */
@@ -75,6 +75,14 @@ export interface Api {
   /** The plan's test runs, newest first; each run's build number is the version it tested. */
   tpRuns(org: string, project: string, planId: number): Promise<TpRun[]>
   tpRunResults(org: string, project: string, runIds: number[]): Promise<TpResult[]>
+  /** Recorded results by test case (its history across plans), plan or run, newest first. Read-only. */
+  tpListResults(org: string, project: string, query: ResultQuery): Promise<TestResultSummary[]>
+  /** One result with its step results and attachment list. */
+  tpResult(org: string, project: string, runId: number, resultId: number): Promise<TestResultDetail>
+  /** A result attachment's bytes, base64. */
+  tpResultAttachment(org: string, project: string, runId: number, resultId: number, attachmentId: number): Promise<string>
+  /** Download a result attachment to a path from pickSavePath. */
+  tpSaveResultAttachment(org: string, project: string, runId: number, resultId: number, attachmentId: number, path: string): Promise<void>
   /** A project's work item types with their states (no field definitions). */
   workItemTypes(org: string, project: string): Promise<WorkItemType[]>
   searchWorkItems(org: string, project: string | null, text: string): Promise<WorkItem[]>
@@ -129,6 +137,8 @@ export interface Api {
 
   // ----- Pull requests -----
   prListRepos(org: string, project: string): Promise<Repo[]>
+  /** A repository's tag names ("v1.4.0"), offered as versions to test. Needs Code (Read). */
+  gitTags(org: string, repoId: string): Promise<string[]>
   /** What is set up for git-tools versioning in a repository; read only. */
   versioningFacts(org: string, projectId: string, project: string, repoId: string, workflowPath: string, secureFile: string): Promise<VersioningFacts>
   /** One versioning setup change, made only after the user confirms it. */

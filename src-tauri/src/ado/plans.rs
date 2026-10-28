@@ -449,6 +449,24 @@ pub struct PointResult {
     pub automated_test_storage: Option<String>,
     #[serde(default)]
     pub attachments: Vec<RunFile>,
+    /// Each step's outcome, so Azure DevOps (and Boards' result view) show it per step.
+    #[serde(default)]
+    pub step_results: Vec<StepOutcome>,
+}
+
+/// One step's outcome in a result.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StepOutcome {
+    /// The test case step's id ("2"); inside shared steps, "compref id;step id" ("3;2").
+    pub step_id: String,
+    /// "Passed" or "Failed".
+    pub outcome: String,
+}
+
+/// "3;2" → "0000000300000002": Azure DevOps' action path, each step id as 8 hex digits.
+pub fn action_path(step_id: &str) -> Option<String> {
+    step_id.split(';').map(|p| p.trim().parse::<u32>().ok().map(|n| format!("{n:08x}"))).collect()
 }
 
 #[derive(Debug, Deserialize)]
@@ -497,6 +515,15 @@ pub fn result_body(result_id: i64, r: &PointResult) -> AppResult<Value> {
     }
     if let Some(n) = trimmed(&r.automated_test_storage, 512) {
         v["automatedTestStorage"] = json!(n);
+    }
+    let actions: Vec<Value> = r
+        .step_results
+        .iter()
+        .filter(|s| matches!(s.outcome.as_str(), "Passed" | "Failed"))
+        .filter_map(|s| Some(json!({ "actionPath": action_path(&s.step_id)?, "stepIdentifier": s.step_id, "iterationId": 1, "outcome": s.outcome })))
+        .collect();
+    if !actions.is_empty() {
+        v["iterationDetails"] = json!([{ "id": 1, "outcome": r.outcome, "actionResults": actions }]);
     }
     Ok(v)
 }
@@ -764,7 +791,7 @@ mod tests {
     fn result_bodies_are_trimmed_and_checked() {
         let r = PointResult {
             point_id: 1, outcome: "Failed".into(), comment: Some("  ".into()), error_message: Some("x".repeat(5000)), stack_trace: None,
-            duration_ms: Some(1200), automated_test_name: Some("login › works".into()), automated_test_storage: Some("e2e/login.spec.ts".into()), attachments: vec![],
+            duration_ms: Some(1200), automated_test_name: Some("login › works".into()), automated_test_storage: Some("e2e/login.spec.ts".into()), attachments: vec![], step_results: vec![],
         };
         let v = result_body(42, &r).unwrap();
         assert_eq!(v["id"], 42);
@@ -772,6 +799,25 @@ mod tests {
         assert_eq!(v["errorMessage"].as_str().unwrap().len(), 4000);
         assert_eq!(v["durationInMs"], 1200);
         assert!(result_body(42, &PointResult { outcome: "Skipped".into(), ..r }).is_err());
+    }
+
+    #[test]
+    fn step_outcomes_become_step_results() {
+        let r = PointResult {
+            point_id: 1, outcome: "Failed".into(), comment: None, error_message: None, stack_trace: None, duration_ms: None, automated_test_name: None, automated_test_storage: None, attachments: vec![],
+            step_results: vec![
+                StepOutcome { step_id: "2".into(), outcome: "Passed".into() },
+                StepOutcome { step_id: "3;2".into(), outcome: "Failed".into() },
+                StepOutcome { step_id: "x".into(), outcome: "Passed".into() },
+            ],
+        };
+        let v = result_body(7, &r).unwrap();
+        let a = &v["iterationDetails"][0]["actionResults"];
+        assert_eq!(v["iterationDetails"][0]["outcome"], "Failed");
+        assert_eq!((a[0]["actionPath"].as_str(), a[0]["stepIdentifier"].as_str(), a[0]["outcome"].as_str()), (Some("00000002"), Some("2"), Some("Passed")));
+        assert_eq!(a[1]["actionPath"], "0000000300000002");
+        assert_eq!(a.as_array().unwrap().len(), 2);
+        assert!(result_body(7, &PointResult { step_results: vec![], ..r }).unwrap().get("iterationDetails").is_none());
     }
 
     #[test]

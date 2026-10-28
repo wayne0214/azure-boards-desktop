@@ -6,7 +6,7 @@ import { mockVersioning } from './api.mock.versioning'
 import { mockWiki } from './api.mock.wiki'
 import { mockRooms } from './api.mock.rooms'
 import { mockPlans } from './api.mock.plans'
-import { serializeSteps, type StepItem } from './testcases/steps'
+import { parseSteps, serializeSteps, type StepItem } from './testcases/steps'
 // Loaded with the demo API, not on first use, so it has seen the click that opens the first menu.
 import { showFallbackContextMenu } from '../components/ui/FallbackMenu'
 import type { Board, Comment, Identity, Iteration, Project, Settings, Team, WorkItem, WorkItemType } from './types'
@@ -357,6 +357,7 @@ export const mockApi: Api = {
   ...mockRooms,
   ...mockPlans({
     title: (id) => String(items.find((i) => i.id === id)?.fields['System.Title'] ?? `Test case ${id}`),
+    steps: (id) => parseSteps(String(items.find((i) => i.id === id)?.fields['Microsoft.VSTS.TCM.Steps'] ?? '')),
     tagged: (tag) => items.filter((i) => i.fields['System.WorkItemType'] === 'Test Case' && String(i.fields['System.Tags'] ?? '').split(';').some((t) => t.trim().toLowerCase() === tag.trim().toLowerCase())).map((i) => i.id),
     testedBy: (req) => items.filter((i) => i.fields['System.WorkItemType'] === 'Test Case' && (i.relations ?? []).some((r) => r.rel === 'Microsoft.VSTS.Common.TestedBy-Reverse' && r.url.endsWith(`/${req}`))).map((i) => i.id),
   }),

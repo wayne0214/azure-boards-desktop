@@ -9,6 +9,7 @@ import type { TpPlan, TpSuite } from '@/lib/testplans/types'
 import { planVersions, usePlanStore } from '@/store/usePlanStore'
 import { useUiStore } from '@/store/useUiStore'
 import type { PlanLookups } from './lookups'
+import { UntaggedNote, useTagVersions } from './TagVersions'
 import { exportVersionReport } from './versionExport'
 
 const NEW = '__new'
@@ -20,9 +21,11 @@ export function VersionBar({ plan, lookups, onStart }: { plan: TpPlan; lookups: 
     setVersion: st.setVersion, addVersion: st.addVersion, setView: st.setView,
   })))
   const versions = useMemo(() => planVersions(s), [s.runs, s.addedVersions]) // eslint-disable-line react-hooks/exhaustive-deps
+  const tags = useTagVersions()
+  // Tags first; versions only this plan used (typed, or from imports) after them.
+  const used = versions.filter((v) => !tags.offered.includes(v))
   const [adding, setAdding] = useState(false)
   const [text, setText] = useState('')
-  const runsOn = s.version ? s.runs.filter((r) => r.buildNumber?.trim() === s.version).length : 0
   const add = () => { if (text.trim()) { s.addVersion(text); setAdding(false); setText('') } }
   const reportBtn = useRef<HTMLButtonElement>(null)
   const [reportMenu, setReportMenu] = useState(false)
@@ -39,10 +42,13 @@ export function VersionBar({ plan, lookups, onStart }: { plan: TpPlan; lookups: 
       ) : (
         <select id="tp-version" className="input tp-filter" value={s.version ?? ''} onChange={(e) => (e.target.value === NEW ? setAdding(true) : s.setVersion(e.target.value || null))}>
           <option value="">None</option>
-          {versions.map((v) => <option key={v} value={v}>{v}</option>)}
+          {tags.offered.length > 0 && <optgroup label={`Tags in ${tags.repoName ?? 'the repository'}`}>{tags.offered.map((v) => <option key={v} value={v}>{v}</option>)}</optgroup>}
+          {used.length > 0 && (tags.offered.length > 0 ? <optgroup label="Used in this plan">{used.map((v) => <option key={v} value={v}>{v}</option>)}</optgroup> : used.map((v) => <option key={v} value={v}>{v}</option>))}
+          {s.version && !versions.includes(s.version) && !tags.offered.includes(s.version) && <option value={s.version}>{s.version}</option>}
           <option value={NEW}>New version…</option>
         </select>
       )}
+      <UntaggedNote version={s.version} />
       {s.version && (
         <div className="segmented small">
           <button type="button" className={s.view === 'latest' ? 'on' : ''} onClick={() => s.setView('latest')} title="Each point's latest outcome, whatever version it was on">Latest</button>
@@ -50,7 +56,6 @@ export function VersionBar({ plan, lookups, onStart }: { plan: TpPlan; lookups: 
         </div>
       )}
       {s.versionLoading && <span className="spinner" />}
-      <span className="faint" title="Runs, imports and marks from this plan are tagged with the version.">{s.version ? `${runsOn} run${runsOn === 1 ? '' : 's'} on ${s.version}` : 'Choose the version you are testing'}</span>
       <span className="grow" />
       {s.version && <button ref={reportBtn} type="button" className="btn sm" onClick={() => setReportMenu(true)} title="The record of this version: every result, the run IDs behind them, coverage and a sign-off block"><FileText size={13} /> Version report</button>}
       <button type="button" className="btn sm" onClick={onStart}><PlayCircle size={13} /> Start run…</button>
@@ -73,6 +78,7 @@ export function StartRunSheet({ plan, onClose }: { plan: TpPlan; onClose: () => 
   const s = usePlanStore(useShallow((st) => ({ suites: st.suites, points: st.points, version: st.version, runs: st.runs, addedVersions: st.addedVersions, startRun: st.startRun, loadAllPoints: st.loadAllPoints })))
   const toast = useUiStore((u) => u.toast)
   const versions = useMemo(() => planVersions(s), [s.runs, s.addedVersions]) // eslint-disable-line react-hooks/exhaustive-deps
+  const tags = useTagVersions()
   const [version, setVersion] = useState(s.version ?? '')
   const [picked, setPicked] = useState<Set<number>>(() => new Set([plan.rootSuiteId]))
   const [busy, setBusy] = useState(false)
@@ -122,7 +128,8 @@ export function StartRunSheet({ plan, onClose }: { plan: TpPlan; onClose: () => 
         <label htmlFor="tp-start-version">Version</label>
         <div>
           <input id="tp-start-version" className="input" list="tp-start-versions" value={version} placeholder="e.g. 0.4.0" autoFocus onChange={(e) => setVersion(e.target.value)} />
-          <datalist id="tp-start-versions">{versions.map((v) => <option key={v} value={v} />)}</datalist>
+          <datalist id="tp-start-versions">{[...new Set([...tags.offered, ...versions])].map((v) => <option key={v} value={v} />)}</datalist>
+          <UntaggedNote version={version} />
         </div>
       </div>
       <div className="form-row stack">

@@ -6,6 +6,7 @@ import type { TcFilter } from '@/lib/testcases/coverage'
 import type { PlannedCase } from '@/lib/testcases/importPlan'
 import { nextSdvId, sdvAfterCreate } from '@/lib/testcases/sdv'
 import { baselineRev, reviewMarks, specChangedSince, withReviewMark, type SpecChange } from '@/lib/testcases/review'
+import { flatSteps } from '@/lib/testcases/document'
 import { commentToRun, runToComment, type RunRecord } from '@/lib/testcases/run'
 import { htmlFromPlain, parseSteps, serializeSteps, textToSteps, type StepItem } from '@/lib/testcases/steps'
 import { isAppError, type TeamContext, type WorkItem } from '@/lib/types'
@@ -263,17 +264,23 @@ export const useTcStore = create<TcState>((set, get) => ({
     try { localStorage.setItem('tc.releases', JSON.stringify(releases)) } catch { /* ignore */ }
     set({ releases })
     // Test Plans is an extra copy: whatever happens there, the run above is already saved.
+    // Step outcomes go in as real step results, so the result view shows them per step.
+    const flat = flatSteps(test, new Map(get().shared.map((w) => [w.id, w])))
+    const stepResults = r.steps.flatMap((x) => {
+      const stepId = flat[x.index - 1]?.stepId
+      return stepId && x.outcome ? [{ stepId, outcome: x.outcome === 'pass' ? 'Passed' as const : 'Failed' as const }] : []
+    })
     if (point) {
       const outcome = r.outcome === 'pass' ? 'Passed' : 'Failed'
       const stepNote = r.steps.filter((x) => x.outcome).map((x) => `Step ${x.index}: ${x.outcome!.toUpperCase()}`).join(', ')
       return api()
-        .tpPublishRun(org, project, { planId: point.planId, name: `Manual run ${r.release} · ${r.by}`, automated: false, buildNumber: r.release, results: [{ pointId: point.pointId, outcome, comment: [r.note.trim(), stepNote].filter(Boolean).join('\n'), attachments: uploads }] })
+        .tpPublishRun(org, project, { planId: point.planId, name: `Manual run ${r.release} · ${r.by}`, automated: false, buildNumber: r.release, results: [{ pointId: point.pointId, outcome, comment: [r.note.trim(), stepNote].filter(Boolean).join('\n'), attachments: uploads, stepResults }] })
         .then(() => ({ mirrored: true }), (e) => ({ mirrored: false, note: `Saved on the test case, but not to the test point: ${errorText(e)}` }))
     }
     const plans = usePlanStore.getState()
     const plan = plans.scopeKey === `${org}/${project}` ? theProjectPlan(plans) : null
     const mirror = await api()
-      .tpMirrorResult(org, project, { planId: plan?.id, release: r.release, testCaseId: id, outcome: r.outcome === 'pass' ? 'Passed' : 'Failed', comment: r.note, attachments: uploads })
+      .tpMirrorResult(org, project, { planId: plan?.id, release: r.release, testCaseId: id, outcome: r.outcome === 'pass' ? 'Passed' : 'Failed', comment: r.note, attachments: uploads, stepResults })
       .catch((e) => ({ mirrored: false, reason: errorText(e) }))
     // No reason means there is no plan for the release, which is nothing to warn about.
     return mirror.mirrored ? { mirrored: true } : { mirrored: false, note: mirror.reason ? `Not copied to Test Plans: ${mirror.reason}` : undefined }

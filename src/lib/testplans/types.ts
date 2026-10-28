@@ -78,6 +78,64 @@ export interface TpResult {
   errorMessage?: string
 }
 
+/** One recorded test result, from any run (automated or manual), as Azure Test Plans keeps it. */
+export interface TestResultSummary {
+  runId: number
+  runName: string
+  resultId: number
+  testCaseId: number
+  testCaseTitle: string
+  pointId?: number
+  planId?: number
+  /** Lower camel case as recorded: "passed", "failed", "notExecuted"… */
+  outcome: string
+  completedDate?: string
+  durationMs?: number
+  configuration?: string
+  isAutomated: boolean
+  runBy?: string
+  errorMessage?: string
+}
+
+/** A step's result; `stepId` is the test case step's id ("2"), or "compref id;step id" inside shared steps. */
+export interface StepResult {
+  stepId: string
+  outcome: string
+  durationMs?: number
+  errorMessage?: string
+  comment?: string
+}
+
+export interface ResultAttachment {
+  id: number
+  fileName: string
+  size: number
+  comment?: string
+  /** How the app can show it, from the file name. */
+  kind: 'image' | 'text' | 'file'
+}
+
+export interface TestResultDetail extends TestResultSummary {
+  stackTrace?: string
+  comment?: string
+  automatedTestName?: string
+  startedDate?: string
+  /** Step results of the first iteration. */
+  steps: StepResult[]
+  iterations: number
+  attachments: ResultAttachment[]
+  attachmentsError?: string
+  runUrl?: string
+}
+
+export interface ResultQuery {
+  testCaseId?: number
+  planId?: number
+  runId?: number
+  outcome?: string
+  limit?: number
+}
+
 /** Outcomes a person can set on a point; "reset" makes it not run again. */
 export type Markable = 'passed' | 'failed' | 'blocked' | 'notApplicable' | 'reset'
 
@@ -94,6 +152,8 @@ export interface PointResultInput {
   automatedTestName?: string
   automatedTestStorage?: string
   attachments?: { name: string; dataBase64: string }[]
+  /** Each step's outcome by step id ("2", or "3;2" inside shared steps), recorded as step results. */
+  stepResults?: { stepId: string; outcome: 'Passed' | 'Failed' }[]
 }
 
 export interface RunInput {
