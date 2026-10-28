@@ -30,21 +30,18 @@ export const isFinished = (it: WorkItem, types: TypesByProject) => {
   return c === 'Completed' || c === 'Removed'
 }
 
-const isResolved = (it: WorkItem, types: TypesByProject) => {
+// A hand-off state some processes add for QA; its category varies by process, so it is matched by name.
+const READY_TO_TEST = 'ready to test'
+
+/**
+ * Done on my side but not closed: a Resolved state, or Ready to Test while a pipeline has not yet handed it to QA.
+ * These stay in My Work, in their own section, until someone else takes them or closes them.
+ */
+export const isResolved = (it: WorkItem, types: TypesByProject) => {
+  if (String(it.fields['System.State'] ?? '').toLowerCase() === READY_TO_TEST) return true
   const c = stateCategory(it, types)
   return c ? c === 'Resolved' : it.fields['System.State'] === 'Resolved'
 }
-
-/**
- * Resolved and reported by me (for a bug, its "Reported by" is its creator): it waits for my check before it closes.
- * Only processes with a Resolved state (Agile, CMMI) have these.
- */
-export const isToVerify = (it: WorkItem, types: TypesByProject, me = useAppStore.getState().account()) =>
-  isResolved(it, types) && isMe(it.fields['System.CreatedBy'], me)
-
-/** Resolved, assigned to me, but reported by someone else: the next step is theirs, so it leaves my list. */
-export const isWaitingOnReporter = (it: WorkItem, types: TypesByProject, me = useAppStore.getState().account()) =>
-  isResolved(it, types) && !isMe(it.fields['System.CreatedBy'], me)
 
 /**
  * The people an item can be assigned to or @mentioned: the board's team when the item is in the selected project,
@@ -63,16 +60,13 @@ const PLANNING_NAMES = ['Epic', 'Feature', 'Requirement', 'User Story', 'Product
 export const isPlanning = (it: WorkItem, planning: PlanningByProject) =>
   (planning[projectOf(it)] ?? PLANNING_NAMES).includes(String(it.fields['System.WorkItemType'] ?? ''))
 
-/**
- * In My Work as the user has chosen to see it: planning items only when they are switched on. Pass types to keep
- * planning items waiting for my check, which are never hidden.
- */
-export const isShown = (it: WorkItem, planning: PlanningByProject, showPlanning: boolean, types?: TypesByProject) =>
-  showPlanning || !isPlanning(it, planning) || (types !== undefined && isToVerify(it, types))
+/** In My Work as the user has chosen to see it: planning items only when they are switched on. */
+export const isShown = (it: WorkItem, planning: PlanningByProject, showPlanning: boolean) =>
+  showPlanning || !isPlanning(it, planning)
 
 /** Open planning items, for the toggle's count: the ones My Work would list if they were switched on. */
 export const planningCount = (items: WorkItem[] | null, types: TypesByProject, planning: PlanningByProject) =>
-  (items ?? []).filter((it) => isPlanning(it, planning) && !isFinished(it, types) && !isWaitingOnReporter(it, types) && !isToVerify(it, types)).length
+  (items ?? []).filter((it) => isPlanning(it, planning) && !isFinished(it, types) && !isResolved(it, types)).length
 
 /** Changed by someone else after the given time. */
 export const isUnseen = (it: WorkItem, since: number | null, me = useAppStore.getState().account()) => {
@@ -81,10 +75,10 @@ export const isUnseen = (it: WorkItem, since: number | null, me = useAppStore.ge
   return changed > since && !isMe(it.fields['System.ChangedBy'], me)
 }
 
-/** What the sidebar badge counts: items to verify, plus items someone else changed since My Work was last opened. */
+/** What the sidebar badge counts: open items someone else changed since My Work was last opened. Resolved ones wait on others. */
 export function attentionCount(items: WorkItem[] | null, types: TypesByProject, seenAt: number | null, shown: (it: WorkItem) => boolean = () => true) {
   const me = useAppStore.getState().account()
-  return (items ?? []).filter((it) => shown(it) && !isFinished(it, types) && !isWaitingOnReporter(it, types, me) && (isToVerify(it, types, me) || isUnseen(it, seenAt, me))).length
+  return (items ?? []).filter((it) => shown(it) && !isFinished(it, types) && !isResolved(it, types) && isUnseen(it, seenAt, me)).length
 }
 
 /** Plain-text search over the columns shown, plus tags, project and assignee. */

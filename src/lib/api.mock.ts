@@ -89,6 +89,7 @@ const types: WorkItemType[] = [
       { name: 'New', color: 'b2b2b2', category: 'Proposed' },
       { name: 'Active', color: '007acc', category: 'InProgress' },
       { name: 'Resolved', color: 'ff9d00', category: 'Resolved' },
+      { name: 'Ready to Test', color: 'ff9d00', category: 'Resolved' },
       { name: 'Closed', color: '339933', category: 'Completed' },
     ],
   },
@@ -224,7 +225,9 @@ let items: WorkItem[] = [
   mk(1191, 'Feature', 'Offline capture', 'Active', people[0]),
   mk(1195, 'Task', 'Write upload resume unit tests', 'New', people[0], { 'System.Parent': 1164, 'Microsoft.VSTS.Scheduling.RemainingWork': 4 }),
   mk(1196, 'Task', 'Keychain storage for resume token', 'New', people[1], { 'System.Parent': 1164, 'Microsoft.VSTS.Scheduling.RemainingWork': 6 }),
-  mk(1197, 'Bug', 'Pose check accepts a photo with the patient partly out of frame', 'New', people[2], { 'System.State': 'Resolved', 'Microsoft.VSTS.Common.Priority': 2, 'System.Tags': 'capture' }),
+  mk(1197, 'Bug', 'Pose check accepts a photo with the patient partly out of frame', 'New', people[0], { 'System.State': 'Resolved', 'Microsoft.VSTS.Common.Priority': 2, 'System.Tags': 'capture' }),
+  // Fixed and built; the pipeline has not handed it to QA yet, so it is still mine.
+  mk(1198, 'Bug', 'Upload progress bar jumps back to zero after resuming', 'Review', people[0], { 'System.State': 'Ready to Test', 'Microsoft.VSTS.Common.Priority': 2, 'System.Tags': 'upload' }),
 ]
 items.find((i) => i.id === 1164)!.fields['System.Parent'] = 1191
 
@@ -456,10 +459,8 @@ export const mockApi: Api = {
   myWork: async () => {
     await delay(300)
     const hidden = (i: WorkItem) => ['Test Case', 'Shared Steps', 'Test Plan', 'Test Suite'].includes(String(i.fields['System.WorkItemType']))
-    const createdByMe = (i: WorkItem) => (i.fields['System.CreatedBy'] as { id?: string } | undefined)?.id === 'u1'
-    const mine = (i: WorkItem) => !hidden(i) && (i.fields['System.AssignedTo'] as { id?: string } | undefined)?.id === 'u1' && i.fields['System.State'] !== 'Closed' && (i.fields['System.State'] !== 'Resolved' || createdByMe(i))
-    const toVerify = (i: WorkItem) => (i.fields['System.CreatedBy'] as { id?: string } | undefined)?.id === 'u1' && i.fields['System.State'] === 'Resolved'
-    return structuredClone([...items, ...elsewhere].filter((i) => mine(i) || toVerify(i)))
+    const mine = (i: WorkItem) => !hidden(i) && (i.fields['System.AssignedTo'] as { id?: string } | undefined)?.id === 'u1' && i.fields['System.State'] !== 'Closed'
+    return structuredClone([...items, ...elsewhere].filter(mine))
   },
   workItemTypes: async () => { await delay(150); return structuredClone(types) },
   // Demo projects use the Agile process: User Story is the requirement level, Feature and Epic the portfolio.

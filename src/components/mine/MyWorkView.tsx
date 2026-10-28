@@ -8,7 +8,7 @@ import { errorMessage } from '@/lib/types'
 import { Empty } from '@/components/ui/Empty'
 import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
-import { isFinished, isShown, isToVerify, isUnseen, isWaitingOnReporter, matchesSearch, planningCount, typeOf, useMyWorkStore, type TypesByProject } from '@/store/useMyWorkStore'
+import { isFinished, isResolved, isShown, isUnseen, matchesSearch, planningCount, typeOf, useMyWorkStore, type TypesByProject } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
 import { useUiStore } from '@/store/useUiStore'
 import { WikiUpdatesStrip } from '@/components/wiki/WikiUpdates'
@@ -16,12 +16,12 @@ import { useWikiStore } from '@/store/useWikiStore'
 
 const COLS = 8
 
-type Section = { key: 'active' | 'verify'; title: string; hint: string; projects: [string, WorkItem[]][] }
+type Section = { key: 'active' | 'resolved'; title: string; hint: string; projects: [string, WorkItem[]][] }
 
 const priorityOf = (it: WorkItem) => { const p = it.fields['Microsoft.VSTS.Common.Priority']; return typeof p === 'number' ? p : 9 }
 const changedOf = (it: WorkItem) => String(it.fields['System.ChangedDate'] ?? '')
 
-/** Everything assigned to the signed-in user across the organization, plus resolved items waiting to be verified. */
+/** Everything assigned to the signed-in user across the organization; resolved items in a section of their own. */
 export function MyWorkView() {
   const org = useAppStore((s) => s.activeOrg)
   const projects = useAppStore((s) => s.projects)
@@ -69,14 +69,13 @@ export function MyWorkView() {
       }
       return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
     }
-    // Resolved work reported by someone else waits on them, not me: it shows in their To verify instead.
-    const all = (items ?? []).filter((it) => isShown(it, planning, showPlanning, types) && !isFinished(it, types) && !isWaitingOnReporter(it, types) && matchesSearch(it, search))
-    // Active work: most urgent first, then most recently touched. To verify: oldest first so nothing waits forever.
-    const active = all.filter((it) => !isToVerify(it, types)).sort((a, b) => priorityOf(a) - priorityOf(b) || changedOf(b).localeCompare(changedOf(a)))
-    const verify = all.filter((it) => isToVerify(it, types)).sort((a, b) => changedOf(a).localeCompare(changedOf(b)))
+    const all = (items ?? []).filter((it) => isShown(it, planning, showPlanning) && !isFinished(it, types) && matchesSearch(it, search))
+    // Active work: most urgent first, then most recently touched. Resolved: most recently resolved first.
+    const active = all.filter((it) => !isResolved(it, types)).sort((a, b) => priorityOf(a) - priorityOf(b) || changedOf(b).localeCompare(changedOf(a)))
+    const resolved = all.filter((it) => isResolved(it, types)).sort((a, b) => changedOf(b).localeCompare(changedOf(a)))
     return [
       { key: 'active', title: 'Assigned to me', hint: 'Open work assigned to you', projects: byProject(active) },
-      { key: 'verify', title: 'To verify', hint: 'Resolved items you reported, waiting for your check before they are closed (processes with a Resolved state, such as Agile and CMMI)', projects: byProject(verify) },
+      { key: 'resolved', title: 'Resolved', hint: 'Resolved or Ready to Test, still assigned to you. They leave My Work once someone else takes them or closes them.', projects: byProject(resolved) },
     ]
   }, [items, types, search, planning, showPlanning])
 
@@ -132,18 +131,8 @@ export function MyWorkView() {
     const project = String(it.fields['System.TeamProject'] ?? '')
     const type = typeOf(it, types)
     const states = (type?.states ?? []).filter((s) => s.category !== 'Removed' && s.name !== it.fields['System.State'])
-    const verify = isToVerify(it, types)
     const linked = prsByItem.get(it.id) ?? []
-    const assignedToMe = (it.fields['System.AssignedTo'] as { id?: string } | undefined)?.id === account?.userId
-    const closeState = type?.states.find((s) => s.category === 'Completed')?.name ?? 'Closed'
-    const reopenState = type?.states.find((s) => s.category === 'InProgress')?.name ?? 'Active'
     void api().showContextMenu([
-      ...(verify ? [
-        { label: `Verified · ${closeState}`, action: () => void patch(it, { 'System.State': closeState }, `#${it.id} → ${closeState}`).then((ok) => { if (ok) remove(it.id) }) },
-        // Back to whoever owns it; it only stays here when that is me.
-        { label: `Not fixed · ${reopenState}`, action: () => void patch(it, { 'System.State': reopenState }, `#${it.id} → ${reopenState}`).then((ok) => { if (ok && !assignedToMe) remove(it.id) }) },
-        { separator: true },
-      ] : []),
       { label: 'Show Details', action: () => void openItem(it) },
       // The sheet works on the item the details panel holds, so open it there first.
       { label: 'Start Work…', action: () => void openItem(it).then(() => useUiStore.getState().openSheet('start-work', { id: it.id })) },
@@ -154,7 +143,7 @@ export function MyWorkView() {
       { separator: true },
       ...(states.length ? [{ label: 'Set State', submenu: states.map((s) => ({ label: s.name, action: () => void patch(it, { 'System.State': s.name }, `#${it.id} → ${s.name}`) })) }] : []),
       { label: 'Set Priority', submenu: [1, 2, 3, 4].map((p) => ({ label: `P${p}`, action: () => void patch(it, { 'Microsoft.VSTS.Common.Priority': p }, `#${it.id} priority P${p}`) })) },
-      { label: 'Unassign Me', action: () => void patch(it, { 'System.AssignedTo': null }, `#${it.id} unassigned`).then((ok) => { if (ok && !verify) remove(it.id) }) },
+      { label: 'Unassign Me', action: () => void patch(it, { 'System.AssignedTo': null }, `#${it.id} unassigned`).then((ok) => { if (ok) remove(it.id) }) },
     ])
   }
 
@@ -167,7 +156,7 @@ export function MyWorkView() {
   if (items && items.length > 0 && shown === 0 && search.trim()) return <Empty icon={<SearchX size={40} strokeWidth={1.2} />} title="No matching work" action={<button type="button" className="btn" onClick={() => useMyWorkStore.getState().setSearch('')}>Clear search</button>}>Nothing in My Work matches “{search.trim()}”.</Empty>
   const hiddenPlanning = showPlanning ? 0 : planningCount(items, types, planning)
   if (shown === 0 && hiddenPlanning > 0) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title="No tasks or bugs assigned to you" action={<button type="button" className="btn" onClick={() => useMyWorkStore.getState().setShowPlanning(true)}>Show planning items</button>}>{hiddenPlanning} planning item{hiddenPlanning === 1 ? ' is' : 's are'} hidden: requirements, features and epics assigned to you.</Empty>
-  if (!items || items.length === 0) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title={`Nothing assigned to ${account?.userName ?? 'you'}`}>When work items are assigned to you in any project, or resolved and waiting for your check, they will appear here.</Empty>
+  if (!items || items.length === 0) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title={`Nothing assigned to ${account?.userName ?? 'you'}`}>When work items are assigned to you in any project, they will appear here.</Empty>
 
   return (
     <div className="list">
@@ -179,10 +168,12 @@ export function MyWorkView() {
         <tbody>
           {sections.map((sec) => {
             const n = sec.projects.reduce((a, [, l]) => a + l.length, 0)
-            if (n === 0 && (sec.key === 'verify' || search.trim())) return null
-            const secCollapsed = collapsed.has(`§${sec.key}`)
+            if (n === 0 && (sec.key === 'resolved' || search.trim())) return null
+            // Resolved starts collapsed, so its remembered key marks it open rather than closed.
+            const secKey = sec.key === 'resolved' ? '§resolved:open' : `§${sec.key}`
+            const secCollapsed = sec.key === 'resolved' ? !collapsed.has(secKey) : collapsed.has(secKey)
             return (
-              <SectionRows key={sec.key} section={sec} count={n} collapsed={secCollapsed} onToggle={() => toggle(`§${sec.key}`)}>
+              <SectionRows key={sec.key} section={sec} count={n} collapsed={secCollapsed} onToggle={() => toggle(secKey)}>
                 {(!secCollapsed || search.trim()) && sec.projects.map(([project, list]) => (
                   <GroupRows key={project} project={project} list={list} types={types} collapsed={!search.trim() && collapsed.has(`${sec.key}/${project}`)} onToggle={() => toggle(`${sec.key}/${project}`)} onOpen={(it) => void openItem(it)} onMenu={contextMenu} selectedId={selectedId} unseen={(it) => isUnseen(it, highlightSince)} prs={(it) => prsByItem.get(it.id) ?? []} onOpenPr={openPr} />
                 ))}
@@ -202,10 +193,9 @@ function SectionRows({ section, count, collapsed, onToggle, children }: { sectio
         <td colSpan={COLS}>
           <button type="button" title={section.hint}>
             <ChevronDown size={14} />
-            {section.key === 'verify' && <CheckCircle2 size={14} className="sec-ico" />}
+            {section.key === 'resolved' && <CheckCircle2 size={14} className="sec-ico" />}
             {section.title} <span className="faint">· {count}</span>
           </button>
-          {section.key === 'verify' && !collapsed && <span className="sec-hint">Right-click a row to close it as verified or send it back.</span>}
         </td>
       </tr>
       {count === 0 && !collapsed && <tr><td colSpan={COLS} className="faint" style={{ paddingLeft: 28 }}>Nothing open.</td></tr>}

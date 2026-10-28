@@ -520,15 +520,13 @@ pub async fn get_items_with_relations(client: &AdoClient, scope: &str, ids: &[i6
 }
 
 pub async fn my_work(client: &AdoClient, available_fields: &FieldMap) -> AppResult<Vec<Value>> {
-    // Open work assigned to me, plus Resolved items I reported: those wait for my check before they close.
-    // A Resolved item assigned to me but reported by someone else is theirs to check, so it is left out.
+    // Work assigned to me that is not finished. Resolved (or Ready to Test) items stay until someone else
+    // takes them or closes them; the app lists them in a section of their own.
     // WIQL has no state category, so the usual finished states are excluded here and the app drops any
-    // other Completed, Removed or Resolved state using each project's own type definitions.
+    // other Completed or Removed state using each project's own type definitions.
     let query = "SELECT [System.Id] FROM WorkItems WHERE \
-                 ([System.AssignedTo] = @Me AND [System.State] NOT IN ('Closed', 'Done', 'Removed', 'Completed', 'Cut') \
-                 AND ([System.State] <> 'Resolved' OR [System.CreatedBy] = @Me) \
-                 AND [System.WorkItemType] NOT IN ('Test Case', 'Shared Steps', 'Test Plan', 'Test Suite')) \
-                 OR ([System.CreatedBy] = @Me AND [System.State] = 'Resolved') \
+                 [System.AssignedTo] = @Me AND [System.State] NOT IN ('Closed', 'Done', 'Removed', 'Completed', 'Cut') \
+                 AND [System.WorkItemType] NOT IN ('Test Case', 'Shared Steps', 'Test Plan', 'Test Suite') \
                  ORDER BY [System.ChangedDate] DESC";
     let ids = run_wiql(client, "", query, 500).await?;
     let fields = select_fields(available_fields, &[]);

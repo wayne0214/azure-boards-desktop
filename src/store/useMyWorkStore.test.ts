@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { loadApi } from '@/lib/api'
 import type { Identity, WorkItem, WorkItemType } from '@/lib/types'
 import { useAppStore } from './useAppStore'
-import { attentionCount, isPlanning, peopleFor, isShown, isToVerify, isWaitingOnReporter, planningCount, useMyWorkStore, type PlanningByProject, type TypesByProject } from './useMyWorkStore'
+import { attentionCount, isPlanning, isResolved, isShown, peopleFor, planningCount, useMyWorkStore, type PlanningByProject, type TypesByProject } from './useMyWorkStore'
 
 const me = { org: 'o', userId: 'u1', userName: 'Wayne Lai' }
 const bug: WorkItemType = { name: 'Bug', referenceName: 'Bug', color: '000', states: [
@@ -16,27 +16,32 @@ const item = (state: string, assignedTo: string, createdBy: string): WorkItem =>
   'System.AssignedTo': { id: assignedTo, displayName: assignedTo }, 'System.CreatedBy': { id: createdBy, displayName: createdBy },
 } })
 
-describe('resolved items belong to their reporter', () => {
-  it('goes to the reporter\'s To verify', () => {
-    expect(isToVerify(item('Resolved', 'u2', 'u1'), types, me)).toBe(true)
+describe('resolved items stay with their owner', () => {
+  it('counts Resolved as resolved, whoever reported it', () => {
+    expect(isResolved(item('Resolved', 'u1', 'u2'), types)).toBe(true)
+    expect(isResolved(item('Resolved', 'u1', 'u1'), types)).toBe(true)
   })
 
-  it('leaves the assignee\'s list once resolved', () => {
-    expect(isWaitingOnReporter(item('Resolved', 'u1', 'u2'), types, me)).toBe(true)
-    expect(isToVerify(item('Resolved', 'u1', 'u2'), types, me)).toBe(false)
+  it('keeps active work active', () => {
+    expect(isResolved(item('Active', 'u1', 'u2'), types)).toBe(false)
   })
 
-  it('stays with me when I am both assignee and reporter', () => {
-    expect(isWaitingOnReporter(item('Resolved', 'u1', 'u1'), types, me)).toBe(false)
-    expect(isToVerify(item('Resolved', 'u1', 'u1'), types, me)).toBe(true)
+  it('treats Ready to Test as resolved, whatever its category', () => {
+    const inProgress: TypesByProject = { P: [{ ...bug, states: [...bug.states, { name: 'Ready to Test', color: '0', category: 'InProgress' }] }] }
+    expect(isResolved(item('Ready to Test', 'u1', 'u2'), inProgress)).toBe(true)
+    expect(isResolved(item('Ready to Test', 'u1', 'u2'), {})).toBe(true)
   })
 
-  it('keeps active work with the assignee', () => {
-    expect(isWaitingOnReporter(item('Active', 'u1', 'u2'), types, me)).toBe(false)
+  it('falls back to the state name until types are known', () => {
+    expect(isResolved(item('Resolved', 'u1', 'u2'), {})).toBe(true)
+    expect(isResolved(item('Active', 'u1', 'u2'), {})).toBe(false)
   })
 
-  it('does not count waiting items in the sidebar badge', () => {
-    expect(attentionCount([item('Resolved', 'u1', 'u2')], types, Date.now() + 1000)).toBe(0)
+  it('does not count resolved items in the sidebar badge', () => {
+    useAppStore.setState((st) => ({ activeOrg: 'o', settings: { ...st.settings, accounts: [me] } }))
+    const changed = (state: string): WorkItem => ({ ...item(state, 'u1', 'u2'), fields: { ...item(state, 'u1', 'u2').fields, 'System.ChangedDate': new Date().toISOString(), 'System.ChangedBy': { id: 'u2', displayName: 'u2' } } })
+    expect(attentionCount([changed('Resolved')], types, 0)).toBe(0)
+    expect(attentionCount([changed('Active')], types, 0)).toBe(1)
   })
 })
 
@@ -83,13 +88,10 @@ describe('planning items in My Work', () => {
     expect(isPlanning(of('Task', 'Broken'), { Broken: null })).toBe(false)
   })
 
-  it('keeps planning items I reported in To verify, and out of the toggle count', () => {
-    useAppStore.setState((st) => ({ activeOrg: 'o', settings: { ...st.settings, accounts: [me] } }))
+  it('leaves resolved planning items out of the toggle count', () => {
     const withReq: TypesByProject = { P: [bug, { ...bug, name: 'Requirement', referenceName: 'Requirement' }] }
-    const resolved = { ...of('Requirement', 'P', 'Resolved'), fields: { ...of('Requirement', 'P', 'Resolved').fields, 'System.CreatedBy': { id: 'u1', displayName: 'u1' } } }
-    expect(isShown(resolved, planning, false, withReq)).toBe(true)
-    expect(isShown(of('Requirement'), planning, false, withReq)).toBe(false)
-    expect(planningCount([resolved, of('Requirement')], withReq, planning)).toBe(1)
+    expect(isShown(of('Requirement', 'P', 'Resolved'), planning, false)).toBe(false)
+    expect(planningCount([of('Requirement', 'P', 'Resolved'), of('Requirement')], withReq, planning)).toBe(1)
   })
 
   it('remembers the choice', () => {

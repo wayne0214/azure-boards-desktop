@@ -22,7 +22,7 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
             "project": { "type": "string", "description": "Project name; omit for the current project" },
             "allProjects": { "type": "boolean", "description": "Search every project in the organization" },
         }), &["text"], true),
-        tool("list_my_work", "Open work assigned to the user, plus Resolved items they reported (waiting for their check).", json!({}), &[], true),
+        tool("list_my_work", "Work assigned to the user that is not finished, including Resolved and Ready to Test items still assigned to them.", json!({}), &[], true),
         tool("list_children", "Child work items of a work item.", json!({ "id": id }), &["id"], true),
         tool("list_comments", "Discussion comments on a work item, oldest first.", json!({ "id": id }), &["id"], true),
         tool("list_work_item_types", "Work item types of a project with their states and fields (reference names), to know what can be set.", json!({
