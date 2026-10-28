@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, GitPullRequest, Inbox, MessageSquare, SearchX } from 'lucide-react'
+import { CheckCircle2, ChevronDown, FlaskConical, GitPullRequest, Inbox, MessageSquare, SearchX } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { itemUrl, relativeTime, typeColor } from '@/lib/format'
@@ -8,7 +8,7 @@ import { errorMessage } from '@/lib/types'
 import { Empty } from '@/components/ui/Empty'
 import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
-import { isFinished, isResolved, isShown, isUnseen, matchesSearch, planningCount, typeOf, useMyWorkStore, type TypesByProject } from '@/store/useMyWorkStore'
+import { isFinished, isReadyToTest, isResolved, isShown, isUnseen, matchesSearch, planningCount, typeOf, useMyWorkStore, type TypesByProject } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
 import { useUiStore } from '@/store/useUiStore'
 import { WikiUpdatesStrip } from '@/components/wiki/WikiUpdates'
@@ -16,12 +16,12 @@ import { useWikiStore } from '@/store/useWikiStore'
 
 const COLS = 8
 
-type Section = { key: 'active' | 'resolved'; title: string; hint: string; projects: [string, WorkItem[]][] }
+type Section = { key: 'active' | 'test' | 'resolved'; title: string; hint: string; projects: [string, WorkItem[]][] }
 
 const priorityOf = (it: WorkItem) => { const p = it.fields['Microsoft.VSTS.Common.Priority']; return typeof p === 'number' ? p : 9 }
 const changedOf = (it: WorkItem) => String(it.fields['System.ChangedDate'] ?? '')
 
-/** Everything assigned to the signed-in user across the organization; resolved items in a section of their own. */
+/** Everything assigned to the signed-in user across the organization; items to test and resolved items in sections of their own. */
 export function MyWorkView() {
   const org = useAppStore((s) => s.activeOrg)
   const projects = useAppStore((s) => s.projects)
@@ -70,12 +70,15 @@ export function MyWorkView() {
       return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
     }
     const all = (items ?? []).filter((it) => isShown(it, planning, showPlanning) && !isFinished(it, types) && matchesSearch(it, search))
-    // Active work: most urgent first, then most recently touched. Resolved: most recently resolved first.
-    const active = all.filter((it) => !isResolved(it, types)).sort((a, b) => priorityOf(a) - priorityOf(b) || changedOf(b).localeCompare(changedOf(a)))
+    // Active work: most urgent first, then most recently touched. To test: oldest first so nothing waits forever.
+    // Resolved: most recently resolved first.
+    const active = all.filter((it) => !isReadyToTest(it) && !isResolved(it, types)).sort((a, b) => priorityOf(a) - priorityOf(b) || changedOf(b).localeCompare(changedOf(a)))
+    const test = all.filter(isReadyToTest).sort((a, b) => changedOf(a).localeCompare(changedOf(b)))
     const resolved = all.filter((it) => isResolved(it, types)).sort((a, b) => changedOf(b).localeCompare(changedOf(a)))
     return [
       { key: 'active', title: 'Assigned to me', hint: 'Open work assigned to you', projects: byProject(active) },
-      { key: 'resolved', title: 'Resolved', hint: 'Resolved or Ready to Test, still assigned to you. They leave My Work once someone else takes them or closes them.', projects: byProject(resolved) },
+      { key: 'test', title: 'Ready to test', hint: 'On the test server and assigned to you for testing', projects: byProject(test) },
+      { key: 'resolved', title: 'Resolved', hint: 'Resolved and still assigned to you, waiting for review. They leave My Work once someone else takes them or closes them.', projects: byProject(resolved) },
     ]
   }, [items, types, search, planning, showPlanning])
 
@@ -168,7 +171,7 @@ export function MyWorkView() {
         <tbody>
           {sections.map((sec) => {
             const n = sec.projects.reduce((a, [, l]) => a + l.length, 0)
-            if (n === 0 && (sec.key === 'resolved' || search.trim())) return null
+            if (n === 0 && (sec.key !== 'active' || search.trim())) return null
             // Resolved starts collapsed, so its remembered key marks it open rather than closed.
             const secKey = sec.key === 'resolved' ? '§resolved:open' : `§${sec.key}`
             const secCollapsed = sec.key === 'resolved' ? !collapsed.has(secKey) : collapsed.has(secKey)
@@ -193,6 +196,7 @@ function SectionRows({ section, count, collapsed, onToggle, children }: { sectio
         <td colSpan={COLS}>
           <button type="button" title={section.hint}>
             <ChevronDown size={14} />
+            {section.key === 'test' && <FlaskConical size={14} className="sec-ico test" />}
             {section.key === 'resolved' && <CheckCircle2 size={14} className="sec-ico" />}
             {section.title} <span className="faint">· {count}</span>
           </button>

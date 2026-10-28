@@ -30,15 +30,18 @@ export const isFinished = (it: WorkItem, types: TypesByProject) => {
   return c === 'Completed' || c === 'Removed'
 }
 
-// A hand-off state some processes add for QA; its category varies by process, so it is matched by name.
-const READY_TO_TEST = 'ready to test'
+/**
+ * On the test server, waiting for QA: a pipeline assigns these to the tester, so for them it is open work.
+ * A custom state whose category varies by process, so it is matched by name.
+ */
+export const isReadyToTest = (it: WorkItem) => String(it.fields['System.State'] ?? '').toLowerCase() === 'ready to test'
 
 /**
- * Done on my side but not closed: a Resolved state, or Ready to Test while a pipeline has not yet handed it to QA.
- * These stay in My Work, in their own section, until someone else takes them or closes them.
+ * Done on my side and waiting for the lead (its pull request into develop): a Resolved state, not Ready to Test.
+ * These stay in My Work, in a collapsed section, until someone else takes them or closes them.
  */
 export const isResolved = (it: WorkItem, types: TypesByProject) => {
-  if (String(it.fields['System.State'] ?? '').toLowerCase() === READY_TO_TEST) return true
+  if (isReadyToTest(it)) return false
   const c = stateCategory(it, types)
   return c ? c === 'Resolved' : it.fields['System.State'] === 'Resolved'
 }

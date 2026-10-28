@@ -520,8 +520,8 @@ pub async fn get_items_with_relations(client: &AdoClient, scope: &str, ids: &[i6
 }
 
 pub async fn my_work(client: &AdoClient, available_fields: &FieldMap) -> AppResult<Vec<Value>> {
-    // Work assigned to me that is not finished. Resolved (or Ready to Test) items stay until someone else
-    // takes them or closes them; the app lists them in a section of their own.
+    // Work assigned to me that is not finished. The app lists Ready to Test and Resolved items in sections
+    // of their own; they stay until someone else takes them or closes them.
     // WIQL has no state category, so the usual finished states are excluded here and the app drops any
     // other Completed or Removed state using each project's own type definitions.
     let query = "SELECT [System.Id] FROM WorkItems WHERE \
