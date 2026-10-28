@@ -2,7 +2,7 @@ import type { PullRequest } from './pr/types'
 import type { Booking } from './rooms/types'
 import type { WorkItem } from './types'
 import { waitingForReview } from './notify/watch'
-import { isFinished, stateCategory, type TypesByProject } from '@/store/useMyWorkStore'
+import { isFinished, isResolved, stateCategory, type TypesByProject } from '@/store/useMyWorkStore'
 import { clock } from '@/store/useRoomStore'
 
 const changed = (it: WorkItem) => Date.parse(String(it.fields['System.ChangedDate'] ?? '')) || 0
@@ -10,7 +10,7 @@ const changed = (it: WorkItem) => Date.parse(String(it.fields['System.ChangedDat
 /** What I am working on now: my items in an In Progress state, most recently changed first. */
 export function activeWork(items: WorkItem[] | null, types: TypesByProject, max = 5): WorkItem[] {
   return (items ?? [])
-    .filter((it) => !isFinished(it, types) && stateCategory(it, types) === 'InProgress')
+    .filter((it) => !isFinished(it, types) && !isResolved(it, types) && stateCategory(it, types) === 'InProgress')
     .sort((a, b) => changed(b) - changed(a))
     .slice(0, max)
 }

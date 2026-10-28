@@ -30,7 +30,7 @@ export function Sidebar() {
   const setView = useUiStore((s) => s.setView)
   const openSheet = useUiStore((s) => s.openSheet)
   const toast = useUiStore((s) => s.toast)
-  const myCount = useMyWorkStore((s) => attentionCount(s.items, s.types, s.seenAt, (it) => isShown(it, s.planning, s.showPlanning, s.types)))
+  const myCount = useMyWorkStore((s) => attentionCount(s.items, s.types, s.seenAt, (it) => isShown(it, s.planning, s.showPlanning)))
   const imports = useImportStore((s) => s.list)
   const importCount = pendingImports(imports)
   useEffect(() => { void useImportStore.getState().load() }, [])
@@ -165,7 +165,7 @@ export function Sidebar() {
           <button type="button" className={`nav-item ${view === 'mine' ? 'active' : ''}`} onClick={() => setView('mine')}>
             <span className="ico"><Inbox size={16} /></span>
             <span className="label">My Work</span>
-            {myCount > 0 && <span className="count attn" title="To verify, or changed by someone else since you last looked">{myCount}</span>}
+            {myCount > 0 && <span className="count attn" title="Changed by someone else since you last looked">{myCount}</span>}
           </button>
           <button type="button" className={`nav-item ${view === 'prs' ? 'active' : ''}`} onClick={() => setView('prs')}>
             <span className="ico"><GitPullRequest size={16} /></span>

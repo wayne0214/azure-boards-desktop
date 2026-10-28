@@ -616,7 +616,6 @@ kbd {
 .section-row td button svg { transition: transform 120ms; }
 .section-row.collapsed td button svg:first-child { transform: rotate(-90deg); }
 .section-row .sec-ico { color: var(--success); }
-.section-row .sec-hint { margin-left: 12px; font-size: var(--fs-xs); color: var(--text-3); }
 .list th.pri, .list td.pri { width: 44px; }
 .list td.pri .pri { font-size: var(--fs-xs); font-weight: 600; border-radius: 4px; padding: 1px 5px; }
 .list td.pri .pri.p1 { color: var(--danger); background: var(--danger-soft); }
