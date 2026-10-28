@@ -23,6 +23,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     ],
     more: [
       'Your AI tool can list test results, read a result with its steps, and save a failure screenshot or log to look at.',
+      'My Work keeps your Resolved and Ready to Test items in a collapsed Resolved section at the bottom, instead of dropping them. The To verify section is gone.',
     ],
   },
   {
