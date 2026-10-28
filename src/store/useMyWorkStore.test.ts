@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { loadApi } from '@/lib/api'
 import type { Identity, WorkItem, WorkItemType } from '@/lib/types'
 import { useAppStore } from './useAppStore'
-import { attentionCount, isPlanning, isResolved, isShown, peopleFor, planningCount, useMyWorkStore, type PlanningByProject, type TypesByProject } from './useMyWorkStore'
+import { attentionCount, isPlanning, isReadyToTest, isResolved, isShown, peopleFor, planningCount, useMyWorkStore, type PlanningByProject, type TypesByProject } from './useMyWorkStore'
 
 const me = { org: 'o', userId: 'u1', userName: 'Wayne Lai' }
 const bug: WorkItemType = { name: 'Bug', referenceName: 'Bug', color: '000', states: [
@@ -26,10 +26,18 @@ describe('resolved items stay with their owner', () => {
     expect(isResolved(item('Active', 'u1', 'u2'), types)).toBe(false)
   })
 
-  it('treats Ready to Test as resolved, whatever its category', () => {
-    const inProgress: TypesByProject = { P: [{ ...bug, states: [...bug.states, { name: 'Ready to Test', color: '0', category: 'InProgress' }] }] }
-    expect(isResolved(item('Ready to Test', 'u1', 'u2'), inProgress)).toBe(true)
-    expect(isResolved(item('Ready to Test', 'u1', 'u2'), {})).toBe(true)
+  it('keeps Ready to Test apart from Resolved, whatever its category', () => {
+    const asResolved: TypesByProject = { P: [{ ...bug, states: [...bug.states, { name: 'Ready to Test', color: '0', category: 'Resolved' }] }] }
+    expect(isReadyToTest(item('Ready to Test', 'u1', 'u2'))).toBe(true)
+    expect(isReadyToTest(item('ready to test', 'u1', 'u2'))).toBe(true)
+    expect(isResolved(item('Ready to Test', 'u1', 'u2'), asResolved)).toBe(false)
+    expect(isReadyToTest(item('Resolved', 'u1', 'u2'))).toBe(false)
+  })
+
+  it('counts changes to Ready to Test items in the sidebar badge, as open work', () => {
+    useAppStore.setState((st) => ({ activeOrg: 'o', settings: { ...st.settings, accounts: [me] } }))
+    const changed: WorkItem = { ...item('Ready to Test', 'u1', 'u2'), fields: { ...item('Ready to Test', 'u1', 'u2').fields, 'System.ChangedDate': new Date().toISOString(), 'System.ChangedBy': { id: 'u2', displayName: 'u2' } } }
+    expect(attentionCount([changed], types, 0)).toBe(1)
   })
 
   it('falls back to the state name until types are known', () => {

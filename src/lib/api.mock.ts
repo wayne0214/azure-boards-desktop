@@ -226,7 +226,7 @@ let items: WorkItem[] = [
   mk(1195, 'Task', 'Write upload resume unit tests', 'New', people[0], { 'System.Parent': 1164, 'Microsoft.VSTS.Scheduling.RemainingWork': 4 }),
   mk(1196, 'Task', 'Keychain storage for resume token', 'New', people[1], { 'System.Parent': 1164, 'Microsoft.VSTS.Scheduling.RemainingWork': 6 }),
   mk(1197, 'Bug', 'Pose check accepts a photo with the patient partly out of frame', 'New', people[0], { 'System.State': 'Resolved', 'Microsoft.VSTS.Common.Priority': 2, 'System.Tags': 'capture' }),
-  // Fixed and built; the pipeline has not handed it to QA yet, so it is still mine.
+  // On the test server and assigned to me to test.
   mk(1198, 'Bug', 'Upload progress bar jumps back to zero after resuming', 'Review', people[0], { 'System.State': 'Ready to Test', 'Microsoft.VSTS.Common.Priority': 2, 'System.Tags': 'upload' }),
 ]
 items.find((i) => i.id === 1164)!.fields['System.Parent'] = 1191
