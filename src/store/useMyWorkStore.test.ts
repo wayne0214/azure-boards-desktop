@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { WorkItem, WorkItemType } from '@/lib/types'
+import { loadApi } from '@/lib/api'
+import type { Identity, WorkItem, WorkItemType } from '@/lib/types'
 import { useAppStore } from './useAppStore'
-import { attentionCount, isPlanning, isShown, isToVerify, isWaitingOnReporter, planningCount, useMyWorkStore, type PlanningByProject, type TypesByProject } from './useMyWorkStore'
+import { attentionCount, isPlanning, peopleFor, isShown, isToVerify, isWaitingOnReporter, planningCount, useMyWorkStore, type PlanningByProject, type TypesByProject } from './useMyWorkStore'
 
 const me = { org: 'o', userId: 'u1', userName: 'Wayne Lai' }
 const bug: WorkItemType = { name: 'Bug', referenceName: 'Bug', color: '000', states: [
@@ -97,5 +98,36 @@ describe('planning items in My Work', () => {
     useMyWorkStore.getState().setShowPlanning(false)
     expect(localStorage.getItem('mine.showPlanning')).toBe('0')
     expect(useMyWorkStore.getState().showPlanning).toBe(false)
+  })
+})
+
+describe('people for an item in the details panel', () => {
+  const board: Identity[] = [{ id: 'u1', displayName: 'Wayne Lai' }, { id: 'u2', displayName: 'Priya Natarajan' }]
+  const fabrikam: Identity[] = [{ id: 'u1', displayName: 'Wayne Lai' }, { id: 'u6', displayName: 'Sofia Lindqvist' }]
+
+  it('uses the board team for an item in the selected project', () => {
+    expect(peopleFor('Contoso Mobile', 'Contoso Mobile', board, { 'Contoso Mobile': fabrikam })).toBe(board)
+  })
+
+  it('uses the item\'s own project for an item from another project', () => {
+    expect(peopleFor('Fabrikam Web', 'Contoso Mobile', board, { 'Fabrikam Web': fabrikam })).toBe(fabrikam)
+  })
+
+  it('offers nobody rather than the wrong project while that project\'s people load', () => {
+    expect(peopleFor('Fabrikam Web', 'Contoso Mobile', board, {})).toEqual([])
+  })
+
+  it('falls back to the loaded project members before the board team arrives', () => {
+    expect(peopleFor('Contoso Mobile', 'Contoso Mobile', undefined, { 'Contoso Mobile': board })).toBe(board)
+  })
+
+  it('loads members by project name', async () => {
+    await loadApi()
+    useAppStore.setState({ activeOrg: 'demo-org' })
+    useMyWorkStore.setState({ members: {} })
+    await useMyWorkStore.getState().loadMembers('Fabrikam Web')
+    const names = useMyWorkStore.getState().members['Fabrikam Web'].map((m) => m.displayName)
+    expect(names).toContain('Sofia Lindqvist')
+    expect(names).not.toContain('Priya Natarajan')
   })
 })
