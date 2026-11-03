@@ -4,6 +4,7 @@ import type { ChangeEntry, CompletionOptions, PrDetail, PullRequest, Repo, Threa
 import { errorMessage, isAppError } from '@/lib/types'
 import { useAppStore } from './useAppStore'
 import { useUiStore } from './useUiStore'
+import { buildFileTree, fileOrder } from '@/lib/pr/fileTree'
 
 export type PrTab = 'review' | 'mine' | 'active' | 'closed'
 export type DetailTab = 'overview' | 'files' | 'discussion'
@@ -385,7 +386,8 @@ export const usePrStore = create<PrState>((set, get) => ({
       const entries = (res.changeEntries ?? []).filter((c) => c.item?.gitObjectType !== 'tree' && !c.item?.isFolder && c.item?.path)
       entries.sort((a, b) => (a.item.path ?? '').localeCompare(b.item.path ?? ''))
       set({ changes: entries, changesLoading: false })
-      const first = entries[0]?.item.path
+      // The first file as the Files tab lists it: folders before files.
+      const first = fileOrder(buildFileTree(entries.map((c) => ({ path: c.item.path!, value: null }))))[0]
       if (first && !get().activeFile) void get().openFile(first)
     } catch (e) {
       if (!sameSelection(get().selected, selected)) return
