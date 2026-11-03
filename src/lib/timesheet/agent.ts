@@ -48,6 +48,10 @@ const __ts = {
   isLogin() {
     return /\\/account\\/login/i.test(location.pathname) || !!Array.from(document.querySelectorAll('button, a')).find((b) => /login with/i.test(__ts.text(b)));
   },
+  // The site's button for a new row read "Add project" and now reads "Add hours".
+  addButton() {
+    return __ts.buttonByText(/add (hours|project)/i);
+  },
   buttonByText(re, root = document) {
     return Array.from(root.querySelectorAll('button, a, [role=button]')).find((b) => re.test(__ts.text(b)) || re.test(b.getAttribute('aria-label') || '')) || null;
   },
@@ -197,8 +201,8 @@ export const listProjectsBody = `
   const existing = document.querySelector('[aria-label="Project for this week"]');
   let addInfo = 'existing';
   if (!existing) {
-    const add = __ts.buttonByText(/add project/i);
-    if (!add) throw new Error('Could not find the Add project button');
+    const add = __ts.addButton();
+    if (!add) throw new Error('Could not find the Add hours button');
     addInfo = add.tagName + ':' + __ts.text(add);
     add.click();
   }
@@ -250,8 +254,8 @@ export function saveRowBody(project: string, hours: number[], note: string): str
     edit.click();
     isNew = false;
   } else {
-    const add = __ts.buttonByText(/add project/i);
-    if (!add) throw new Error('Could not find the Add project button');
+    const add = __ts.addButton();
+    if (!add) throw new Error('Could not find the Add hours button');
     add.click();
   }
   const editRow = await __ts.waitFor(() => {

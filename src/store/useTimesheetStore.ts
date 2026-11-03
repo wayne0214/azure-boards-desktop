@@ -52,7 +52,8 @@ interface TimesheetState {
   log: string[]
 
   setBaseUrl(url: string): void
-  connect(): Promise<void>
+  /** `fresh`: start at the site's home page, as after clearing cookies, rather than deep in the week page. */
+  connect(opts?: { fresh?: boolean }): Promise<void>
   openWindow(): Promise<void>
   reloadWindow(): Promise<void>
   /** Clear the timesheet site's cookies and storage, then connect again (signed out). */
@@ -119,7 +120,7 @@ export const useTimesheetStore = create<TimesheetState>((set, get) => ({
 
   setBaseUrl: (url) => { writeLS('ts.baseUrl', url); set({ baseUrl: url.replace(/\/+$/, '') }) },
 
-  connect: async () => {
+  connect: async (opts) => {
     if (!isTauri) {
       set({ phase: 'error', message: 'The timesheet needs the desktop app (it is not available in browser demo mode).' })
       return
@@ -131,8 +132,11 @@ export const useTimesheetStore = create<TimesheetState>((set, get) => ({
     set({ phase: 'connecting', message: null })
     trace('connect start')
     try {
-      let probe = await goto(`${get().baseUrl}/timsheetentrybydate/${get().weekStart}`)
+      const weekUrl = `${get().baseUrl}/timsheetentrybydate/${get().weekStart}`
+      let probe = await goto(opts?.fresh ? get().baseUrl : weekUrl)
       trace(`probe ${JSON.stringify(probe)}`)
+      // Signed in after all: move on to the week, which the steps below expect the window to show.
+      if (opts?.fresh && !probe.login) probe = await goto(weekUrl)
       if (probe.login) {
         // Often the Entra session is still alive and the button signs in without asking.
         const silent = await tryAutoLogin(get().baseUrl)
@@ -142,7 +146,7 @@ export const useTimesheetStore = create<TimesheetState>((set, get) => ({
           await show()
           return
         }
-        probe = await goto(`${get().baseUrl}/timsheetentrybydate/${get().weekStart}`)
+        probe = await goto(weekUrl)
         if (probe.login) { set({ phase: 'login', message: 'Sign in in the timesheet window.' }); await show(); return }
       }
       if (get().projects.length === 0) {
@@ -173,7 +177,7 @@ export const useTimesheetStore = create<TimesheetState>((set, get) => ({
       return
     }
     useUiStore.getState().toast({ kind: 'success', title: 'Timesheet cookies cleared', detail: 'Sign in again in the timesheet window.' })
-    await get().connect()
+    await get().connect({ fresh: true })
   },
 
   finishLogin: async () => {
