@@ -71,6 +71,19 @@ export const isShown = (it: WorkItem, planning: PlanningByProject, showPlanning:
 export const planningCount = (items: WorkItem[] | null, types: TypesByProject, planning: PlanningByProject) =>
   (items ?? []).filter((it) => isPlanning(it, planning) && !isFinished(it, types) && !isResolved(it, types)).length
 
+/**
+ * Order for work handed to others: not started, then in progress, then waiting on review or test;
+ * within each, the longest untouched first so a stalled item stands out.
+ */
+export function handedOffOrder(types: TypesByProject) {
+  const rank = (it: WorkItem) => {
+    if (isReadyToTest(it)) return 2
+    const c = stateCategory(it, types)
+    return c === 'Proposed' ? 0 : c === 'InProgress' ? 1 : c === 'Resolved' ? 2 : 3
+  }
+  return (a: WorkItem, b: WorkItem) => rank(a) - rank(b) || String(a.fields['System.ChangedDate'] ?? '').localeCompare(String(b.fields['System.ChangedDate'] ?? ''))
+}
+
 /** Changed by someone else after the given time. */
 export const isUnseen = (it: WorkItem, since: number | null, me = useAppStore.getState().account()) => {
   if (since === null) return false
@@ -112,6 +125,8 @@ let loadingOrg: string | null = null
 interface MyWorkState {
   org: string | null
   items: WorkItem[] | null
+  /** Open work I created or was once assigned, now with someone else. Kept apart so it never counts toward the badge. */
+  others: WorkItem[] | null
   loading: boolean
   error: string | null
   lastLoaded: number | null
@@ -141,6 +156,7 @@ interface MyWorkState {
 export const useMyWorkStore = create<MyWorkState>((set, get) => ({
   org: null,
   items: null,
+  others: null,
   loading: false,
   error: null,
   lastLoaded: null,
@@ -154,7 +170,7 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
 
   load: async (opts) => {
     const org = useAppStore.getState().activeOrg
-    if (!org) { set({ org: null, items: null, error: null, types: {}, planning: {}, members: {} }); return }
+    if (!org) { set({ org: null, items: null, others: null, error: null, types: {}, planning: {}, members: {} }); return }
     if (loadingOrg === org) return
     const fresh = get().org !== org
     if (fresh) {
@@ -162,14 +178,25 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
       // Opening the view (markSeen) moves the clock on and keeps this value for the unseen dots.
       const seen = readSeen(org) ?? Date.now()
       writeSeen(org, seen)
-      set({ org, items: null, error: null, types: {}, planning: {}, members: {}, search: '', seenAt: seen, highlightSince: null })
+      set({ org, items: null, others: null, error: null, types: {}, planning: {}, members: {}, search: '', seenAt: seen, highlightSince: null })
     }
     loadingOrg = org
     set({ loading: true, ...(opts?.silent ? {} : { error: null }) })
     if (fresh || get().items === null) {
-      const cached = await api().cacheGet<WorkItem[]>(`${org}/mine`).catch(() => null)
+      const [cached, cachedOthers] = await Promise.all([
+        api().cacheGet<WorkItem[]>(`${org}/mine`).catch(() => null),
+        api().cacheGet<WorkItem[]>(`${org}/mine-others`).catch(() => null),
+      ])
       if (cached?.value && get().items === null) set({ items: cached.value })
+      if (cachedOthers?.value && get().others === null) set({ others: cachedOthers.value })
     }
+    // Work handed to others loads alongside; if it fails, My Work shows without that section.
+    const others = api().assignedToOthers(org).then((res) => {
+      if (useAppStore.getState().activeOrg !== org) return
+      set({ others: res })
+      void api().cacheSet(`${org}/mine-others`, res)
+      void get().loadTypes([...new Set(res.map(projectOf))])
+    }).catch(() => undefined)
     try {
       const res = await api().myWork(org)
       if (useAppStore.getState().activeOrg !== org) return
@@ -179,6 +206,7 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
     } catch (e) {
       if (!opts?.silent || get().items === null) set({ error: errorMessage(e) })
     } finally {
+      await others
       if (loadingOrg === org) { loadingOrg = null; set({ loading: false }) }
     }
   },
@@ -231,6 +259,9 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
     set(entering ? { seenAt: now, highlightSince: seenAt } : { seenAt: now })
   },
 
-  upsert: (it) => set((s) => ({ items: s.items ? s.items.map((x) => (x.id === it.id ? { ...x, ...it, fields: { ...x.fields, ...it.fields } } : x)) : s.items })),
-  remove: (id) => set((s) => ({ items: s.items ? s.items.filter((x) => x.id !== id) : s.items })),
+  upsert: (it) => {
+    const merge = (list: WorkItem[] | null) => (list ? list.map((x) => (x.id === it.id ? { ...x, ...it, fields: { ...x.fields, ...it.fields } } : x)) : list)
+    set((s) => ({ items: merge(s.items), others: merge(s.others) }))
+  },
+  remove: (id) => set((s) => ({ items: s.items ? s.items.filter((x) => x.id !== id) : s.items, others: s.others ? s.others.filter((x) => x.id !== id) : s.others })),
 }))
