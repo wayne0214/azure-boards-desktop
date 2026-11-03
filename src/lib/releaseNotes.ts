@@ -16,6 +16,10 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         title: 'Work you handed to someone else, in My Work',
         detail: 'A collapsed Assigned to others section lists open items you created or once held that are now assigned to someone else, such as a bug you filed for a developer or a failed test you sent back. Each row shows who has it, and the items that have waited longest come first.',
       },
+      {
+        title: 'Pull request files, by folder',
+        detail: 'The Files tab lists changed files under their folders, as on GitHub, so you always see which file you are reviewing. Close a folder you are done with, or drag the line beside the list to give the code more room.',
+      },
     ],
     more: [
       'The timesheet finds the site\'s new Add hours button, and after you clear its cookies it opens the site\'s home page to sign in.',
