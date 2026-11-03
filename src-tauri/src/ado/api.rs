@@ -533,6 +533,20 @@ pub async fn my_work(client: &AdoClient, available_fields: &FieldMap) -> AppResu
     get_items_batch(client, "", &ids, &fields).await
 }
 
+/// Open work I handed to someone else: items I created or that were once assigned to me, now with another person.
+/// Azure DevOps keeps no "assigned by", so this stands in for it without reading every item's history.
+pub async fn assigned_to_others(client: &AdoClient, available_fields: &FieldMap) -> AppResult<Vec<Value>> {
+    let query = "SELECT [System.Id] FROM WorkItems WHERE \
+                 ([System.CreatedBy] = @Me OR [System.AssignedTo] EVER @Me) \
+                 AND [System.AssignedTo] <> @Me AND [System.AssignedTo] <> '' \
+                 AND [System.State] NOT IN ('Closed', 'Done', 'Removed', 'Completed', 'Cut') \
+                 AND [System.WorkItemType] NOT IN ('Test Case', 'Shared Steps', 'Test Plan', 'Test Suite') \
+                 ORDER BY [System.ChangedDate] DESC";
+    let ids = run_wiql(client, "", query, 300).await?;
+    let fields = select_fields(available_fields, &[]);
+    get_items_batch(client, "", &ids, &fields).await
+}
+
 /// Work items that mentioned me in the last week, newest change first.
 pub async fn mentioned_items(client: &AdoClient, available_fields: &FieldMap) -> AppResult<Vec<Value>> {
     let query = "SELECT [System.Id] FROM WorkItems WHERE [System.Id] IN (@RecentMentions) \

@@ -237,6 +237,13 @@ pub async fn my_work(state: State<'_, AppState>, org: String) -> AppResult<Vec<V
 }
 
 #[tauri::command]
+pub async fn assigned_to_others(state: State<'_, AppState>, org: String) -> AppResult<Vec<Value>> {
+    let client = state.client(&org).await?;
+    let fields = state.fields(&client).await?;
+    api::assigned_to_others(&client, &fields).await
+}
+
+#[tauri::command]
 pub async fn planning_types(state: State<'_, AppState>, org: String, project: String) -> AppResult<Vec<String>> {
     let client = state.client(&org).await?;
     api::planning_types(&client, &project).await

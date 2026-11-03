@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, FlaskConical, GitPullRequest, Inbox, MessageSquare, SearchX } from 'lucide-react'
+import { CheckCircle2, ChevronDown, FlaskConical, Forward, GitPullRequest, Inbox, MessageSquare, SearchX } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { itemUrl, relativeTime, typeColor } from '@/lib/format'
@@ -8,7 +8,7 @@ import { errorMessage } from '@/lib/types'
 import { Empty } from '@/components/ui/Empty'
 import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
-import { isFinished, isReadyToTest, isResolved, isShown, isUnseen, matchesSearch, planningCount, typeOf, useMyWorkStore, type TypesByProject } from '@/store/useMyWorkStore'
+import { handedOffOrder, isFinished, isReadyToTest, isResolved, isShown, isUnseen, matchesSearch, planningCount, typeOf, useMyWorkStore, type TypesByProject } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
 import { useUiStore } from '@/store/useUiStore'
 import { WikiUpdatesStrip } from '@/components/wiki/WikiUpdates'
@@ -16,12 +16,15 @@ import { useWikiStore } from '@/store/useWikiStore'
 
 const COLS = 8
 
-type Section = { key: 'active' | 'test' | 'resolved'; title: string; hint: string; projects: [string, WorkItem[]][] }
+type Section = { key: 'active' | 'test' | 'others' | 'resolved'; title: string; hint: string; projects: [string, WorkItem[]][] }
 
 const priorityOf = (it: WorkItem) => { const p = it.fields['Microsoft.VSTS.Common.Priority']; return typeof p === 'number' ? p : 9 }
 const changedOf = (it: WorkItem) => String(it.fields['System.ChangedDate'] ?? '')
 
-/** Everything assigned to the signed-in user across the organization; items to test and resolved items in sections of their own. */
+/**
+ * Everything assigned to the signed-in user across the organization; items to test and resolved items in sections of their own,
+ * and, collapsed, the work they handed to someone else.
+ */
 export function MyWorkView() {
   const org = useAppStore((s) => s.activeOrg)
   const projects = useAppStore((s) => s.projects)
@@ -40,6 +43,7 @@ export function MyWorkView() {
   const openItem = useBoardStore((s) => s.openItem)
   const selectedId = useBoardStore((s) => s.selectedId)
   const items = useMyWorkStore((s) => s.items)
+  const others = useMyWorkStore((s) => s.others)
   const error = useMyWorkStore((s) => s.error)
   const loading = useMyWorkStore((s) => s.loading)
   const load = useMyWorkStore((s) => s.load)
@@ -75,12 +79,16 @@ export function MyWorkView() {
     const active = all.filter((it) => !isReadyToTest(it) && !isResolved(it, types)).sort((a, b) => priorityOf(a) - priorityOf(b) || changedOf(b).localeCompare(changedOf(a)))
     const test = all.filter(isReadyToTest).sort((a, b) => changedOf(a).localeCompare(changedOf(b)))
     const resolved = all.filter((it) => isResolved(it, types)).sort((a, b) => changedOf(b).localeCompare(changedOf(a)))
+    // Handed to others: an item reassigned to me since the last load is already listed above.
+    const mine = new Set((items ?? []).map((it) => it.id))
+    const handedOff = (others ?? []).filter((it) => !mine.has(it.id) && isShown(it, planning, showPlanning) && !isFinished(it, types) && matchesSearch(it, search)).sort(handedOffOrder(types))
     return [
       { key: 'active', title: 'Assigned to me', hint: 'Open work assigned to you', projects: byProject(active) },
       { key: 'test', title: 'Ready to test', hint: 'On the test server and assigned to you for testing', projects: byProject(test) },
+      { key: 'others', title: 'Assigned to others', hint: 'Open work you created or once held, now assigned to someone else', projects: byProject(handedOff) },
       { key: 'resolved', title: 'Resolved', hint: 'Resolved and still assigned to you, waiting for review. They leave My Work once someone else takes them or closes them.', projects: byProject(resolved) },
     ]
-  }, [items, types, search, planning, showPlanning])
+  }, [items, others, types, search, planning, showPlanning])
 
   // Active pull requests I wrote or review, by the work items they link to.
   const prsByItem = useMemo(() => {
@@ -135,10 +143,12 @@ export function MyWorkView() {
     const type = typeOf(it, types)
     const states = (type?.states ?? []).filter((s) => s.category !== 'Removed' && s.name !== it.fields['System.State'])
     const linked = prsByItem.get(it.id) ?? []
+    // Work handed to someone else is theirs to start or unassign.
+    const handedOff = (others ?? []).some((x) => x.id === it.id) && !(items ?? []).some((x) => x.id === it.id)
     void api().showContextMenu([
       { label: 'Show Details', action: () => void openItem(it) },
       // The sheet works on the item the details panel holds, so open it there first.
-      { label: 'Start Work…', action: () => void openItem(it).then(() => useUiStore.getState().openSheet('start-work', { id: it.id })) },
+      ...(handedOff ? [] : [{ label: 'Start Work…', action: () => void openItem(it).then(() => useUiStore.getState().openSheet('start-work', { id: it.id })) }]),
       ...linked.map((p) => ({ label: `Open Pull Request !${p.pullRequestId}`, action: () => openPr(p) })),
       { label: 'Open on Board', action: () => void openOnBoard(it) },
       { label: 'Open in Browser', action: () => org && void api().openUrl(itemUrl(org, project, it.id)) },
@@ -146,7 +156,7 @@ export function MyWorkView() {
       { separator: true },
       ...(states.length ? [{ label: 'Set State', submenu: states.map((s) => ({ label: s.name, action: () => void patch(it, { 'System.State': s.name }, `#${it.id} → ${s.name}`) })) }] : []),
       { label: 'Set Priority', submenu: [1, 2, 3, 4].map((p) => ({ label: `P${p}`, action: () => void patch(it, { 'Microsoft.VSTS.Common.Priority': p }, `#${it.id} priority P${p}`) })) },
-      { label: 'Unassign Me', action: () => void patch(it, { 'System.AssignedTo': null }, `#${it.id} unassigned`).then((ok) => { if (ok) remove(it.id) }) },
+      ...(handedOff ? [] : [{ label: 'Unassign Me', action: () => void patch(it, { 'System.AssignedTo': null }, `#${it.id} unassigned`).then((ok) => { if (ok) remove(it.id) }) }]),
     ])
   }
 
@@ -159,7 +169,7 @@ export function MyWorkView() {
   if (items && items.length > 0 && shown === 0 && search.trim()) return <Empty icon={<SearchX size={40} strokeWidth={1.2} />} title="No matching work" action={<button type="button" className="btn" onClick={() => useMyWorkStore.getState().setSearch('')}>Clear search</button>}>Nothing in My Work matches “{search.trim()}”.</Empty>
   const hiddenPlanning = showPlanning ? 0 : planningCount(items, types, planning)
   if (shown === 0 && hiddenPlanning > 0) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title="No tasks or bugs assigned to you" action={<button type="button" className="btn" onClick={() => useMyWorkStore.getState().setShowPlanning(true)}>Show planning items</button>}>{hiddenPlanning} planning item{hiddenPlanning === 1 ? ' is' : 's are'} hidden: requirements, features and epics assigned to you.</Empty>
-  if (!items || items.length === 0) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title={`Nothing assigned to ${account?.userName ?? 'you'}`}>When work items are assigned to you in any project, they will appear here.</Empty>
+  if ((!items || items.length === 0) && shown === 0) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title={`Nothing assigned to ${account?.userName ?? 'you'}`}>When work items are assigned to you in any project, they will appear here.</Empty>
 
   return (
     <div className="list">
@@ -172,13 +182,14 @@ export function MyWorkView() {
           {sections.map((sec) => {
             const n = sec.projects.reduce((a, [, l]) => a + l.length, 0)
             if (n === 0 && (sec.key !== 'active' || search.trim())) return null
-            // Resolved starts collapsed, so its remembered key marks it open rather than closed.
-            const secKey = sec.key === 'resolved' ? '§resolved:open' : `§${sec.key}`
-            const secCollapsed = sec.key === 'resolved' ? !collapsed.has(secKey) : collapsed.has(secKey)
+            // Resolved and Assigned to others start collapsed, so their remembered key marks them open rather than closed.
+            const startsClosed = sec.key === 'resolved' || sec.key === 'others'
+            const secKey = startsClosed ? `§${sec.key}:open` : `§${sec.key}`
+            const secCollapsed = startsClosed ? !collapsed.has(secKey) : collapsed.has(secKey)
             return (
               <SectionRows key={sec.key} section={sec} count={n} collapsed={secCollapsed} onToggle={() => toggle(secKey)}>
                 {(!secCollapsed || search.trim()) && sec.projects.map(([project, list]) => (
-                  <GroupRows key={project} project={project} list={list} types={types} collapsed={!search.trim() && collapsed.has(`${sec.key}/${project}`)} onToggle={() => toggle(`${sec.key}/${project}`)} onOpen={(it) => void openItem(it)} onMenu={contextMenu} selectedId={selectedId} unseen={(it) => isUnseen(it, highlightSince)} prs={(it) => prsByItem.get(it.id) ?? []} onOpenPr={openPr} />
+                  <GroupRows key={project} project={project} list={list} types={types} showAssignee={sec.key === 'others'} collapsed={!search.trim() && collapsed.has(`${sec.key}/${project}`)} onToggle={() => toggle(`${sec.key}/${project}`)} onOpen={(it) => void openItem(it)} onMenu={contextMenu} selectedId={selectedId} unseen={(it) => isUnseen(it, highlightSince)} prs={(it) => prsByItem.get(it.id) ?? []} onOpenPr={openPr} />
                 ))}
               </SectionRows>
             )
@@ -197,6 +208,7 @@ function SectionRows({ section, count, collapsed, onToggle, children }: { sectio
           <button type="button" title={section.hint}>
             <ChevronDown size={14} />
             {section.key === 'test' && <FlaskConical size={14} className="sec-ico test" />}
+            {section.key === 'others' && <Forward size={14} className="sec-ico others" />}
             {section.key === 'resolved' && <CheckCircle2 size={14} className="sec-ico" />}
             {section.title} <span className="faint">· {count}</span>
           </button>
@@ -208,8 +220,8 @@ function SectionRows({ section, count, collapsed, onToggle, children }: { sectio
   )
 }
 
-function GroupRows({ project, list, types, collapsed, onToggle, onOpen, onMenu, selectedId, unseen, prs, onOpenPr }: {
-  project: string; list: WorkItem[]; types: TypesByProject; collapsed: boolean; onToggle: () => void
+function GroupRows({ project, list, types, showAssignee = false, collapsed, onToggle, onOpen, onMenu, selectedId, unseen, prs, onOpenPr }: {
+  project: string; list: WorkItem[]; types: TypesByProject; showAssignee?: boolean; collapsed: boolean; onToggle: () => void
   onOpen: (it: WorkItem) => void; onMenu: (it: WorkItem) => void; selectedId: number | null
   unseen: (it: WorkItem) => boolean; prs: (it: WorkItem) => PullRequest[]; onOpenPr: (pr: PullRequest) => void
 }) {
@@ -229,6 +241,7 @@ function GroupRows({ project, list, types, collapsed, onToggle, onOpen, onMenu, 
             <td><span className="typebar" />{type}</td>
             <td className="title">
               {String(f['System.Title'] ?? '')}
+              {showAssignee && <span className="assignee faint" title="Assigned to">→ {(f['System.AssignedTo'] as { displayName?: string } | undefined)?.displayName ?? 'Unassigned'}</span>}
               {prs(it).map((p) => (
                 <button key={p.pullRequestId} type="button" className={`pr-link ${p.isDraft ? 'draft' : ''}`} title={`${p.isDraft ? 'Draft pull request' : 'Open pull request'}: ${p.title}`} onClick={(e) => { e.stopPropagation(); onOpenPr(p) }}>
                   <GitPullRequest size={11} />!{p.pullRequestId}

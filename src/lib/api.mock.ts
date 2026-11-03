@@ -463,6 +463,12 @@ export const mockApi: Api = {
     const mine = (i: WorkItem) => !hidden(i) && (i.fields['System.AssignedTo'] as { id?: string } | undefined)?.id === 'u1' && i.fields['System.State'] !== 'Closed'
     return structuredClone([...items, ...elsewhere].filter(mine))
   },
+  // Demo: bugs and QA tasks the user filed for others, as a tester would.
+  assignedToOthers: async () => {
+    await delay(300)
+    const handedOff = (i: WorkItem) => [1183, 1168, 1210, 1213].includes(i.id) && (i.fields['System.AssignedTo'] as { id?: string } | undefined)?.id !== 'u1' && i.fields['System.State'] !== 'Closed'
+    return structuredClone(items.filter(handedOff))
+  },
   workItemTypes: async () => { await delay(150); return structuredClone(types) },
   // Demo projects use the Agile process: User Story is the requirement level, Feature and Epic the portfolio.
   planningTypes: async () => { await delay(150); return ['User Story', 'Feature', 'Epic'] },
