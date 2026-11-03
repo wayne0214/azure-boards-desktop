@@ -1,10 +1,16 @@
-import { FileText, MessageSquarePlus } from 'lucide-react'
+import { ChevronDown, ChevronsDownUp, ChevronsUpDown, FileText, Folder, MessageSquarePlus } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useMemo, useState } from 'react'
 import { buildUnified, collapse, type DiffLine, type DiffStats } from '@/lib/pr/diff'
-import type { Thread } from '@/lib/pr/types'
+import { buildFileTree, fileOrder, foldersOf, type FileNode } from '@/lib/pr/fileTree'
+import type { ChangeEntry, Thread } from '@/lib/pr/types'
 import { usePrStore } from '@/store/usePrStore'
 import { ThreadCard } from './ThreadCard'
+
+const LIST_W = 300
+const MIN_LIST_W = 180
+const WIDTH_KEY = 'pr.fileListWidth'
+const readListWidth = () => { try { const v = Number(localStorage.getItem(WIDTH_KEY)); return v >= MIN_LIST_W ? v : LIST_W } catch { return LIST_W } }
 
 export function FilesTab() {
   const s = usePrStore(useShallow((st) => ({ activeFile: st.activeFile, changes: st.changes, changesLoading: st.changesLoading, detail: st.detail, openFile: st.openFile })))
@@ -13,6 +19,18 @@ export function FilesTab() {
   const key = `pr.reviewed.${d.pr.repository.id}.${d.pr.pullRequestId}`
   useEffect(() => { try { setReviewed(new Set(JSON.parse(localStorage.getItem(key) ?? '[]'))) } catch { /* ignore */ } }, [key])
   const toggleReviewed = (p: string) => setReviewed((r) => { const n = new Set(r); if (n.has(p)) n.delete(p); else n.add(p); try { localStorage.setItem(key, JSON.stringify([...n])) } catch { /* ignore */ } return n })
+
+  const [listW, setListW] = useState(readListWidth)
+  const saveListW = (w: number) => { setListW(w); try { localStorage.setItem(WIDTH_KEY, String(w)) } catch { /* this session only */ } }
+  // Folders the reviewer closed; everything starts open.
+  const [closed, setClosed] = useState<Set<string>>(new Set())
+  useEffect(() => setClosed(new Set()), [key])
+  const toggleFolder = (p: string) => setClosed((c) => { const n = new Set(c); if (n.has(p)) n.delete(p); else n.add(p); return n })
+  const tree = useMemo(() => buildFileTree(s.changes.map((c) => ({ path: c.item.path!, value: c }))), [s.changes])
+  const allFolders = useMemo(() => {
+    const walk = (nodes: FileNode<ChangeEntry>[]): string[] => nodes.flatMap((n) => (n.kind === 'dir' ? [n.path, ...walk(n.children)] : []))
+    return walk(tree)
+  }, [tree])
 
   const threadsByFile = useMemo(() => {
     const m = new Map<string, number>()
@@ -29,43 +47,107 @@ export function FilesTab() {
       const t = e.target as HTMLElement
       if (t.closest('input, textarea, [contenteditable="true"]')) return
       if (!['j', 'k', ']', '['].includes(e.key)) return
-      const paths = s.changes.map((c) => c.item.path!)
+      // In the order the tree shows them; a file in a closed folder opens that folder.
+      const paths = fileOrder(tree)
       const i = paths.indexOf(s.activeFile ?? '')
       const next = e.key === 'j' || e.key === ']' ? Math.min(paths.length - 1, i + 1) : Math.max(0, i - 1)
-      if (paths[next]) void s.openFile(paths[next])
+      if (!paths[next]) return
+      const folders = foldersOf(tree, paths[next])
+      setClosed((c) => (folders.some((f) => c.has(f)) ? new Set([...c].filter((f) => !folders.includes(f))) : c))
+      void s.openFile(paths[next])
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [s])
+  }, [s, tree])
 
   if (s.changesLoading && s.changes.length === 0) return <div className="empty-state"><span className="spinner" /></div>
   if (s.changes.length === 0) return <div className="empty-state"><h3>No file changes</h3></div>
 
   return (
-    <div className="pr-files">
+    <div className="pr-files" style={{ ['--pr-files-w' as string]: `${listW}px` }}>
       <aside className="pr-file-list">
-        <div className="pr-file-list-head"><span>{s.changes.length} files</span><span className="grow" /><span className="faint">{reviewed.size} reviewed</span></div>
-        {s.changes.map((c) => {
-          const p = c.item.path!
-          const type = c.changeType.toLowerCase()
-          const letter = type.includes('add') ? 'A' : type.includes('delete') ? 'D' : type.includes('rename') ? 'R' : 'M'
-          const dir = p.slice(0, p.lastIndexOf('/') + 1)
-          const name = p.slice(p.lastIndexOf('/') + 1)
-          return (
-            <button key={p} type="button" className={`pr-file ${s.activeFile === p ? 'on' : ''} ${reviewed.has(p) ? 'done' : ''}`} onClick={() => void s.openFile(p)} title={p}>
-              <input type="checkbox" checked={reviewed.has(p)} onClick={(e) => e.stopPropagation()} onChange={() => toggleReviewed(p)} title="Mark reviewed" />
-              <span className={`ct ${letter}`}>{letter}</span>
-              <span className="nm"><span className="faint">{dir}</span>{name}</span>
-              {threadsByFile.get(p) ? <span className="pr-chip warn">{threadsByFile.get(p)}</span> : null}
-            </button>
-          )
-        })}
+        <div className="pr-file-list-head">
+          <span>{s.changes.length} files</span><span className="grow" /><span className="faint">{reviewed.size} reviewed</span>
+          {allFolders.length > 0 && (closed.size < allFolders.length
+            ? <button type="button" className="icon-btn" title="Collapse all folders" onClick={() => setClosed(new Set(allFolders))}><ChevronsDownUp size={13} /></button>
+            : <button type="button" className="icon-btn" title="Expand all folders" onClick={() => setClosed(new Set())}><ChevronsUpDown size={13} /></button>)}
+        </div>
+        <FileRows nodes={tree} depth={0} closed={closed} onToggle={toggleFolder} active={s.activeFile} reviewed={reviewed} onReviewed={toggleReviewed} threads={threadsByFile} onOpen={(p) => void s.openFile(p)} />
       </aside>
+      <ListResizer width={listW} onWidth={saveListW} />
       <div className="pr-diff-wrap">
         {s.activeFile ? <DiffView path={s.activeFile} /> : <div className="empty-state"><FileText size={32} className="faint" /><p>Choose a file.</p></div>}
       </div>
     </div>
   )
+}
+
+/** One level of the file tree: folders that open and close, and the changed files in them. */
+function FileRows({ nodes, depth, closed, onToggle, active, reviewed, onReviewed, threads, onOpen }: {
+  nodes: FileNode<ChangeEntry>[]; depth: number; closed: Set<string>; onToggle: (path: string) => void
+  active: string | null; reviewed: Set<string>; onReviewed: (path: string) => void; threads: Map<string, number>; onOpen: (path: string) => void
+}) {
+  const indent = { paddingLeft: 10 + depth * 14 }
+  return (
+    <>
+      {nodes.map((n) => {
+        if (n.kind === 'dir') {
+          const isClosed = closed.has(n.path)
+          return (
+            <div key={n.path} role="group">
+              <button type="button" className={`pr-folder ${isClosed ? 'closed' : ''}`} style={indent} onClick={() => onToggle(n.path)} title={n.path.slice(1)} aria-expanded={!isClosed}>
+                <ChevronDown size={13} className="chev" /><Folder size={13} className="faint" /><span className="nm">{n.name}</span>
+              </button>
+              {!isClosed && <FileRows nodes={n.children} depth={depth + 1} closed={closed} onToggle={onToggle} active={active} reviewed={reviewed} onReviewed={onReviewed} threads={threads} onOpen={onOpen} />}
+            </div>
+          )
+        }
+        const p = n.path
+        const type = n.value.changeType.toLowerCase()
+        const letter = type.includes('add') ? 'A' : type.includes('delete') ? 'D' : type.includes('rename') ? 'R' : 'M'
+        return (
+          <button key={p} type="button" className={`pr-file ${active === p ? 'on' : ''} ${reviewed.has(p) ? 'done' : ''}`} style={indent} onClick={() => onOpen(p)} title={p}>
+            <input type="checkbox" checked={reviewed.has(p)} onClick={(e) => e.stopPropagation()} onChange={() => onReviewed(p)} title="Mark reviewed" />
+            <span className={`ct ${letter}`}>{letter}</span>
+            <span className="nm">{n.name}</span>
+            {threads.get(p) ? <span className="pr-chip warn">{threads.get(p)}</span> : null}
+          </button>
+        )
+      })}
+    </>
+  )
+}
+
+/** Drag the line between the file list and the diff to resize the list; double-click goes back to the usual width. */
+function ListResizer({ width, onWidth }: { width: number; onWidth: (w: number) => void }) {
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const handle = e.currentTarget
+    const box = handle.parentElement
+    if (!box) return
+    // The diff keeps at least 40% of the pane.
+    const max = Math.max(MIN_LIST_W, Math.round(box.getBoundingClientRect().width * 0.6))
+    const startX = e.clientX
+    let w = width
+    handle.setPointerCapture(e.pointerId)
+    document.body.classList.add('col-resizing')
+    const move = (ev: PointerEvent) => {
+      w = Math.min(max, Math.max(MIN_LIST_W, width + ev.clientX - startX))
+      box.style.setProperty('--pr-files-w', `${w}px`)
+    }
+    const up = () => {
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', up)
+      handle.removeEventListener('pointercancel', up)
+      document.body.classList.remove('col-resizing')
+      if (w !== width) onWidth(w)
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', up)
+    handle.addEventListener('pointercancel', up)
+  }
+  return <div className="pr-files-resize" role="separator" aria-orientation="vertical" title="Drag to resize · double-click to reset" onPointerDown={onPointerDown} onDoubleClick={() => onWidth(LIST_W)} />
 }
 
 const GENERATED = /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|composer\.lock|Gemfile\.lock|poetry\.lock|uv\.lock|go\.sum|.*\.min\.(js|css)|.*\.map|.*\.snap)$/i

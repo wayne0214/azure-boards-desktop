@@ -41,6 +41,8 @@ export interface Api {
   getTeamContext(org: string, projectId: string, project: string, team: string): Promise<TeamContext>
   queryBoardItems(org: string, query: BoardQuery): Promise<WorkItem[]>
   myWork(org: string): Promise<WorkItem[]>
+  /** Open items I created or was once assigned, now assigned to someone else. */
+  assignedToOthers(org: string): Promise<WorkItem[]>
   /** Types at the project's requirement and portfolio backlog levels (User Story, Requirement, Feature, Epic…). */
   planningTypes(org: string, project: string): Promise<string[]>
   /** Work items that mentioned the user in the last week. */
