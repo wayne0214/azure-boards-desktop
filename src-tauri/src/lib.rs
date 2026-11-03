@@ -62,6 +62,7 @@ pub fn run() {
             commands::get_team_context,
             commands::query_board_items,
             commands::my_work,
+            commands::assigned_to_others,
             commands::mentioned_items,
             commands::planning_types,
             commands::project_items,

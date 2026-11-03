@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { loadApi } from '@/lib/api'
 import type { Identity, WorkItem, WorkItemType } from '@/lib/types'
 import { useAppStore } from './useAppStore'
-import { attentionCount, isPlanning, isReadyToTest, isResolved, isShown, peopleFor, planningCount, useMyWorkStore, type PlanningByProject, type TypesByProject } from './useMyWorkStore'
+import { attentionCount, handedOffOrder, isPlanning, isReadyToTest, isResolved, isShown, peopleFor, planningCount, useMyWorkStore, type PlanningByProject, type TypesByProject } from './useMyWorkStore'
 
 const me = { org: 'o', userId: 'u1', userName: 'Wayne Lai' }
 const bug: WorkItemType = { name: 'Bug', referenceName: 'Bug', color: '000', states: [
@@ -139,5 +139,25 @@ describe('people for an item in the details panel', () => {
     const names = useMyWorkStore.getState().members['Fabrikam Web'].map((m) => m.displayName)
     expect(names).toContain('Sofia Lindqvist')
     expect(names).not.toContain('Priya Natarajan')
+  })
+})
+
+describe('work assigned to others', () => {
+  const at = (id: number, state: string, changed: string): WorkItem => ({ ...item(state, 'u2', 'u1'), id, fields: { ...item(state, 'u2', 'u1').fields, 'System.ChangedDate': changed } })
+
+  it('lists work not started first, then in progress, then waiting on test, each oldest first', () => {
+    const withNew: TypesByProject = { P: [{ ...bug, states: [{ name: 'New', color: '0', category: 'Proposed' }, ...bug.states] }] }
+    const list = [at(1, 'Ready to Test', '2026-10-01'), at(2, 'Active', '2026-10-05'), at(3, 'New', '2026-10-09'), at(4, 'Active', '2026-10-02')]
+    expect([...list].sort(handedOffOrder(withNew)).map((it) => it.id)).toEqual([3, 4, 2, 1])
+  })
+
+  it('loads apart from my own work, so it never counts toward the badge', async () => {
+    await loadApi()
+    useAppStore.setState((st) => ({ activeOrg: 'demo-org', settings: { ...st.settings, accounts: [{ org: 'demo-org', userId: 'u1', userName: 'Wayne Lai' }] } }))
+    await useMyWorkStore.getState().load()
+    const { items, others } = useMyWorkStore.getState()
+    expect(others?.length).toBeGreaterThan(0)
+    expect(others!.every((it) => (it.fields['System.AssignedTo'] as { id?: string }).id !== 'u1')).toBe(true)
+    expect(items!.some((it) => others!.some((o) => o.id === it.id))).toBe(false)
   })
 })
