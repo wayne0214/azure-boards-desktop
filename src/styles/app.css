@@ -1347,9 +1347,16 @@ select.input {
 .pr-system { font-size: var(--fs-xs); padding: 4px 0 4px 12px; border-left: 2px solid var(--border); margin: 6px 0; }
 .pr-discussion { padding: 16px 18px 24px; max-width: 900px; }
 .pr-thread-file { display: block; padding: 0; border: 0; background: transparent; text-align: left; font-family: var(--mono); font-size: var(--fs-xs); color: var(--accent); margin-top: 10px; cursor: default; } .pr-thread-file:hover { text-decoration: underline; }
-.pr-files { display: grid; grid-template-columns: 300px 1fr; height: 100%; min-height: 0; }
+.pr-files { display: grid; grid-template-columns: var(--pr-files-w, 300px) 1fr; height: 100%; min-height: 0; position: relative; }
+.pr-files-resize { position: absolute; top: 0; bottom: 0; left: calc(var(--pr-files-w, 300px) - 4px); width: 7px; cursor: col-resize; z-index: 2; touch-action: none; }
+.pr-files-resize::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background-color 0.12s; }
+.pr-files-resize:hover::after, .col-resizing .pr-files-resize::after { background: var(--accent); }
+.pr-folder { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; padding: 5px 10px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); }
+.pr-folder:hover { background: var(--bg-hover); }
+.pr-folder .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-folder .chev { flex: none; transition: transform 0.12s; } .pr-folder.closed .chev { transform: rotate(-90deg); }
 .pr-file-list { border-right: 1px solid var(--border); overflow-y: auto; }
-.pr-file-list-head { display: flex; gap: 8px; padding: 8px 12px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); } .pr-file-list-head .grow { flex: 1; }
+.pr-file-list-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; z-index: 1; font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); } .pr-file-list-head .grow { flex: 1; }
 .pr-file { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 6px 10px; font-size: var(--fs-xs); color: var(--text); border-bottom: 1px solid var(--border); }
 .pr-file:hover { background: var(--bg-hover); } .pr-file.on { background: var(--selection); } .pr-file.done .nm { color: var(--text-3); text-decoration: line-through; }
 .pr-file .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
