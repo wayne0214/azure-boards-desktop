@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { findSiteRow } from '@/store/useTimesheetStore'
-import { opScript, saveRowBody, submitWeekBody } from './agent'
+import { listProjectsBody, opScript, saveRowBody, submitWeekBody } from './agent'
 
 const LONG_A = 'PRJ-2026-014 Contoso Mobile App – Phase 2 Development and Integration'
 const LONG_B = 'PRJ-2026-014 Contoso Mobile App – Phase 2 Maintenance and Support'
@@ -63,5 +63,20 @@ describe('submitWeekBody', () => {
     document.body.innerHTML = `<main><div role="grid">${submitted}</div></main>`
     const r = await run(submitWeekBody)
     expect(r.data).toEqual({ submitted: 0 })
+  }, 20000)
+})
+
+describe('listProjectsBody', () => {
+  it('opens a new row with the Add hours button and reads the project picker', async () => {
+    document.body.innerHTML = '<main><div role="grid"></div><button type="button">add Add hours</button></main>'
+    document.querySelector('button')!.addEventListener('click', () => {
+      document.querySelector('[role=grid]')!.innerHTML = '<div role="row"><div aria-label="Project for this week"><div role="option">Internal</div><div role="option">Contoso</div></div><button>Cancel</button></div>'
+    })
+    const r = await new Promise<{ ok: boolean; data: unknown; error: string | null }>((resolve) => {
+      ;(window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = { invoke: (_cmd: string, { payload }: { payload: { ok: boolean; data: unknown; error: string | null } }) => resolve(payload) }
+      new Function(opScript('op1', listProjectsBody))()
+    })
+    expect(r.error).toBeNull()
+    expect(r.data).toEqual(['Internal', 'Contoso'])
   }, 20000)
 })
