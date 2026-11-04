@@ -26,6 +26,7 @@ import { NewPrSheet } from '../pr/NewPrSheet'
 import { WikiView } from '../wiki/WikiView'
 import { checkForUpdates, startUpdateChecks } from '@/lib/updater'
 import { startNotifications } from '@/lib/notify/poller'
+import { SendBackSheet } from '../sheets/SendBackSheet'
 import { StartWorkSheet } from '../sheets/StartWorkSheet'
 import { GitToolsPanel } from '../pr/GitToolsPanel'
 import { CommandPalette } from '../palette/CommandPalette'
@@ -255,6 +256,7 @@ export function AppShell() {
       {sheet === 'new-pr' && <NewPrSheet key={sheetKey} />}
       {sheet === 'complete-pr' && <CompletePrSheet />}
       {sheet === 'start-work' && <StartWorkSheet />}
+      {sheet === 'send-back' && <SendBackSheet />}
       {sheet === 'whats-new' && <WhatsNewSheet />}
       <GitToolsPanel />
       {paletteOpen && <CommandPalette onCommand={runCommand} />}

@@ -20,10 +20,15 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         title: 'Look back at the bugs you filed',
         detail: 'Assigned to others has an Open and a Closed view. Closed lists what you filed or handed off that closed in the last 30 days, newest first, with who closed it.',
       },
+      {
+        title: 'Send it back when the problem is still there',
+        detail: 'Press Send back on an item in Ready to test, or on a closed one, when testing finds the problem again. Boards finds who fixed it, from the linked pull request, who moved it to Active or who held it before you, and sends it back to them in its first state (Proposed) with your comment and screenshots. Pick someone else if it guessed wrong.',
+      },
     ],
     more: [
       'My Work opens on the tab and project you last used in each organization.',
       'A tab with changes by others since you last looked has a dot.',
+      'Your AI tool can send an item back too, and show who it would go to before it does.',
     ],
   },
   {

@@ -1,5 +1,6 @@
+import { canSendBack } from '@/lib/sendBack'
 import DOMPurify from 'dompurify'
-import { ArrowLeft, ChevronDown, ExternalLink, GitBranch, Link2, Plus, RefreshCw, X } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ExternalLink, GitBranch, Link2, Plus, RefreshCw, Undo2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { ACCEPTANCE_CRITERIA, REPRO_STEPS, acceptanceField, customFieldsFor, descriptionField, fieldKind, isIdLike, symptomField, usesReproSteps } from '@/lib/customFields'
@@ -226,6 +227,9 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
         {pending && <span className="spinner" style={{ width: 12, height: 12 }} />}
         <span className="grow" />
         <button type="button" className="icon-btn sm" title="Start work: create a branch" onClick={() => openSheet('start-work', { id: item.id })}><GitBranch size={15} /></button>
+        {canSendBack(String(f['System.State'] ?? ''), wit?.states.find((s) => s.name === f['System.State'])?.category) && (
+          <button type="button" className="icon-btn sm" title="Send back: the problem is still there" onClick={() => openSheet('send-back', { id: item.id })}><Undo2 size={15} /></button>
+        )}
         <button type="button" className="icon-btn sm" title="Copy link" onClick={() => { void navigator.clipboard.writeText(itemUrl(org, project, item.id)); toast({ kind: 'success', title: 'Link copied' }) }}><Link2 size={15} /></button>
         <button type="button" className="icon-btn sm" title="Open in Azure DevOps" onClick={() => void api().openUrl(itemUrl(org, project, item.id))}><ExternalLink size={15} /></button>
         <button type="button" className="icon-btn sm" title="Reload" onClick={() => void reloadItem(item.id)}><RefreshCw size={14} /></button>

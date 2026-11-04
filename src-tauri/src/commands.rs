@@ -250,6 +250,26 @@ pub async fn closed_by_others(state: State<'_, AppState>, org: String, days: u32
     api::closed_by_others(&client, &fields, days.clamp(1, 365)).await
 }
 
+/// Who fixed the item (see `ado::sendback`) and the state it goes back to, for the Send back sheet.
+#[tauri::command]
+pub async fn send_back_plan(state: State<'_, AppState>, org: String, project: String, id: i64) -> AppResult<crate::ado::sendback::SendBackPlan> {
+    let client = state.client(&org).await?;
+    let item = api::get_work_item(&client, &project, id).await?;
+    let me = state.settings.get()?.accounts.into_iter().find(|a| a.org == org);
+    let ex = crate::ado::sendback::Exclude {
+        ids: me.as_ref().map(|a| vec![a.user_id.as_str()]).unwrap_or_default(),
+        names: me.as_ref().map(|a| vec![a.user_name.as_str()]).unwrap_or_default(),
+    };
+    crate::ado::sendback::plan(&client, &item, &ex).await
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn send_back(state: State<'_, AppState>, org: String, project: String, id: i64, rev: Option<i64>, assign_to: String, to_state: String, comment: String) -> AppResult<Value> {
+    let client = state.client(&org).await?;
+    crate::ado::sendback::send_back(&client, &project, id, rev, &assign_to, &to_state, &comment).await
+}
+
 #[tauri::command]
 pub async fn planning_types(state: State<'_, AppState>, org: String, project: String) -> AppResult<Vec<String>> {
     let client = state.client(&org).await?;
