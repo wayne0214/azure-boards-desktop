@@ -1,3 +1,4 @@
+import type { BranchInfo } from '@/lib/pr/branchChoices'
 import type {
   Board,
   BoardQuery,
@@ -167,7 +168,8 @@ export interface Api {
   prRemoveReviewer(org: string, repoId: string, prId: number, reviewerId: string): Promise<void>
   prUpdate(org: string, repoId: string, prId: number, body: unknown): Promise<PullRequest>
   prCreate(org: string, repoId: string, body: unknown): Promise<PullRequest>
-  prBranches(org: string, repoId: string): Promise<{ name: string; objectId: string }[]>
+  /** Branches with, when Azure DevOps reports them, how far each is ahead of the default branch and its last commit date. */
+  prBranches(org: string, repoId: string): Promise<BranchInfo[]>
   prGet(org: string, repoId: string, prId: number): Promise<PullRequest>
   prChecks(org: string, projectId: string, repoId: string, prId: number): Promise<Pick<PrDetail, 'statuses' | 'policies'>>
   /** Create a branch from `base` and link it to the work item; `linked` is false when only the link failed. */

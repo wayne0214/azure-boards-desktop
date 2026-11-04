@@ -22,6 +22,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       },
     ],
     more: [
+      'Branch lists in New pull request and Start work put the newest branches first and hide those already merged into the default branch; show them with one click.',
       'My Work opens on the tab and project you last used in each organization.',
       'A tab with changes by others since you last looked has a dot.',
     ],

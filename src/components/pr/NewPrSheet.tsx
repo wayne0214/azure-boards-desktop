@@ -1,3 +1,5 @@
+import { branchChoices, type BranchInfo } from '@/lib/pr/branchChoices'
+import { MergedToggle } from '@/components/pr/MergedToggle'
 import { Sparkles, SquareTerminal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useRef, useState } from 'react'
@@ -41,7 +43,8 @@ export function NewPrSheet() {
     if (wantedRepo.current && repos.length === 0) return
     setRepoId(repos[0]?.id ?? '')
   }, [repos, repoId])
-  const [branches, setBranches] = useState<string[]>([])
+  const [branches, setBranches] = useState<BranchInfo[]>([])
+  const [showMerged, setShowMerged] = useState(false)
   const [source, setSource] = useState(payload?.source ?? '')
   const [target, setTarget] = useState(payload?.target ?? '')
   const [title, setTitle] = useState(payload?.title ?? (payload?.workItem ? String(payload.workItem.fields['System.Title'] ?? '') : ''))
@@ -100,12 +103,14 @@ export function NewPrSheet() {
     toast({ kind: 'success', title: 'Generated with git-tools', detail: 'Review and edit before creating.' })
   }, [genRun?.status, projectId, repoId, source, target, toast])
 
+  const choices = branchChoices(branches, { showMerged, keep: [source, target] })
+
   useEffect(() => {
     if (!repoId) { setBranches([]); return }
     const repo = s.repos.find((r) => r.id === repoId)
     api().prBranches(org, repoId).then((b) => {
       const names = b.map((x) => x.name)
-      setBranches(names)
+      setBranches(b)
       setTarget((t) => t || repo?.defaultBranch || names.find((n) => /main|master/.test(n)) || names[0] || '')
     }).catch(() => setBranches([]))
   }, [repoId, org, s.repos])
@@ -129,9 +134,10 @@ export function NewPrSheet() {
       <div className="form-row"><label>Repository</label>
         <select className="input" style={{ width: 300 }} value={repoId} onChange={(e) => { setRepoId(e.target.value); setSource(''); setTarget('') }}>{repos.length === 0 && <option value="">{reposLoading ? 'Loading repositories…' : 'No repositories in this project'}</option>}{repos.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></div>
       <div className="form-row"><label>From</label>
-        <select className="input" style={{ width: 300 }} value={source} onChange={(e) => setSource(e.target.value)}><option value="">Choose a branch…</option>{branches.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}</select></div>
+        <div><select className="input" style={{ width: 300 }} value={source} onChange={(e) => setSource(e.target.value)}><option value="">Choose a branch…</option>{choices.names.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}</select>
+          <MergedToggle count={choices.mergedCount} shown={showMerged} onToggle={() => setShowMerged((v) => !v)} /></div></div>
       <div className="form-row"><label>Into</label>
-        <select className="input" style={{ width: 300 }} value={target} onChange={(e) => setTarget(e.target.value)}>{branches.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}</select></div>
+        <select className="input" style={{ width: 300 }} value={target} onChange={(e) => setTarget(e.target.value)}>{choices.names.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}</select></div>
       <div className="form-row"><label htmlFor="pr-title">Title</label>
         <div className="form-inline" style={{ flexWrap: 'nowrap' }}>
           <input id="pr-title" className="input lg" value={title} onChange={(e) => setTitle(e.target.value)} />

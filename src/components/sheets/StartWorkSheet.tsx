@@ -1,3 +1,5 @@
+import { branchChoices, type BranchInfo } from '@/lib/pr/branchChoices'
+import { MergedToggle } from '@/components/pr/MergedToggle'
 import { FolderOpen } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
@@ -43,6 +45,8 @@ export function StartWorkSheet() {
   const [reposLoading, setReposLoading] = useState(true)
   const [repoId, setRepoId] = useState('')
   const [branches, setBranches] = useState<string[]>([])
+  const [branchInfo, setBranchInfo] = useState<BranchInfo[]>([])
+  const [showMerged, setShowMerged] = useState(false)
   const [base, setBase] = useState('')
   const [name, setName] = useState(() => (item ? suggestBranchName(item.id, type, String(item.fields['System.Title'] ?? '')) : ''))
   const [setActive, setSetActive] = useState(true)
@@ -66,6 +70,7 @@ export function StartWorkSheet() {
 
   useEffect(() => {
     setBranches([])
+    setBranchInfo([])
     setBase('')
     setLocalPath(repoId ? getRepoPath(repoId) : null)
     if (!repoId) return
@@ -75,6 +80,7 @@ export function StartWorkSheet() {
       if (!live) return
       const names = b.map((x) => x.name)
       setBranches(names)
+      setBranchInfo(b)
       setBase(repo?.defaultBranch && names.includes(repo.defaultBranch) ? repo.defaultBranch : names.find((n) => /\/(main|master)$/.test(n)) ?? names[0] ?? '')
     }).catch(() => live && setBranches([]))
     return () => { live = false }
@@ -83,6 +89,7 @@ export function StartWorkSheet() {
 
   if (!item) return null
 
+  const baseChoices = branchChoices(branchInfo, { showMerged, keep: [base] })
   const problem = branchNameProblem(name.trim())
   const taken = branches.includes(`refs/heads/${name.trim()}`)
   const error = name.trim() ? (problem ?? (taken ? 'A branch with this name already exists.' : null)) : null
@@ -151,10 +158,13 @@ export function StartWorkSheet() {
           {repos.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select></div>
       <div className="form-row"><label>Based on</label>
-        <select className="input" style={{ width: 320 }} value={base} onChange={(e) => setBase(e.target.value)} disabled={branches.length === 0}>
-          {branches.length === 0 && <option value="">{repoId ? 'Loading branches…' : '—'}</option>}
-          {branches.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}
-        </select></div>
+        <div>
+          <select className="input" style={{ width: 320 }} value={base} onChange={(e) => setBase(e.target.value)} disabled={branches.length === 0}>
+            {branches.length === 0 && <option value="">{repoId ? 'Loading branches…' : '—'}</option>}
+            {baseChoices.names.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}
+          </select>
+          <MergedToggle count={baseChoices.mergedCount} shown={showMerged} onToggle={() => setShowMerged((v) => !v)} />
+        </div></div>
       <div className="form-row"><label htmlFor="sw-name">Branch name</label>
         <div>
           <input id="sw-name" className="input lg" value={name} spellCheck={false} autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void submit() }} />
