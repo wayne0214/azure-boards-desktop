@@ -1,4 +1,5 @@
 import type {
+  SendBackPlan,
   Board,
   BoardQuery,
   BoardRef,
@@ -105,6 +106,10 @@ export interface Api {
   setParent(org: string, project: string, id: number, parentId: number | null): Promise<WorkItem>
   deleteWorkItem(org: string, project: string, id: number): Promise<void>
   addComment(org: string, project: string, id: number, text: string): Promise<Comment>
+  /** Who fixed the item, and the state it would go back to. */
+  sendBackPlan(org: string, project: string, id: number): Promise<SendBackPlan>
+  /** Back to `toState`, assigned to `assignTo`, with a comment (HTML) saying what is wrong. */
+  sendBack(org: string, project: string, id: number, rev: number | null, assignTo: string, toState: string, comment: string): Promise<WorkItem>
 
   /** Returns a data: URL for an Azure DevOps attachment, fetched with the user's token. */
   fetchAttachment(org: string, url: string): Promise<string>

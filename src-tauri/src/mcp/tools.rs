@@ -10,7 +10,7 @@ use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// Tools that change Azure DevOps; refused while the server is read-only.
-const WRITE_TOOLS: &[&str] = &["create_work_item", "update_work_item", "add_comment", "apply_work_item_sync", "append_to_wiki"];
+const WRITE_TOOLS: &[&str] = &["create_work_item", "update_work_item", "add_comment", "send_back_work_item", "apply_work_item_sync", "append_to_wiki"];
 
 pub fn definitions(read_only: bool) -> Vec<Value> {
     let id = json!({ "type": "integer", "description": "Work item ID, e.g. 1182" });
@@ -88,6 +88,13 @@ pub fn definitions(read_only: bool) -> Vec<Value> {
                 "imageField": image_field_schema(),
             }), &["id"], false),
             tool("add_comment", "Add a discussion comment to a work item. Plain text; line breaks are kept.", json!({ "id": id, "text": { "type": "string" } }), &["id", "text"], false),
+            tool("send_back_work_item", "Testing found the problem again (an item in Ready to Test, or a closed one): move it back to its first state (e.g. Proposed), assign it to the developer who fixed it, and add a comment saying what is wrong. The developer is found from the linked pull request's author, else who moved it to Active, else who held it before testing; pipelines, the current assignee and the user are never picked. Call with `preview: true` first and tell the user who it will go to and why, then send it.", json!({
+                "id": id,
+                "comment": { "type": "string", "description": "What failed: steps, what was expected, what happened. Plain text; line breaks are kept." },
+                "images": images_schema(),
+                "assignTo": { "type": "string", "description": "Send it to this person (email or display name) instead of the one found" },
+                "preview": { "type": "boolean", "description": "Only say who it would go to and the state, without changing anything" },
+            }), &["id"], false),
             tool("apply_work_item_sync", "Carry out a plan from plan_work_item_sync, exactly as shown. Call only after the user has seen the plan and agreed. If Boards changed meanwhile, nothing is written and a new plan is returned.", json!({
                 "planId": { "type": "string" },
             }), &["planId"], false),
@@ -287,6 +294,29 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
             let comment = api::add_comment(&client, &project_of(&item), id, &text_to_html(&text)).await?;
             changed(app, &item);
             Ok(json!({ "id": comment.get("id"), "workItemId": id, "url": item_url(&org, &item) }))
+        }
+        "send_back_work_item" => {
+            let id = int(args, "id")?;
+            let item = fetch(&client, id).await?;
+            let project = project_of(&item);
+            let me = my_name(app, &org);
+            let ex = crate::ado::sendback::Exclude { ids: vec![], names: me.as_deref().into_iter().collect() };
+            let plan = crate::ado::sendback::plan(&client, &item, &ex).await?;
+            let to = str_arg(args, "assignTo").filter(|s| !s.trim().is_empty()).or_else(|| plan.fixer.as_ref().map(|f| if f.unique_name.is_empty() { f.display_name.clone() } else { f.unique_name.clone() }));
+            if args.get("preview").and_then(Value::as_bool).unwrap_or(false) {
+                return Ok(json!({ "id": id, "assignTo": to, "found": plan.fixer, "state": plan.state, "url": item_url(&org, &item) }));
+            }
+            let to = to.ok_or_else(|| AppError::validation("No developer could be found from the pull request, \"Activated by\" or the history; pass assignTo."))?;
+            let text = str_arg(args, "comment").filter(|t| !t.trim().is_empty()).ok_or_else(|| AppError::validation("Say what is wrong in `comment`, so the developer knows what to fix."))?;
+            let mut html = text_to_html(&text);
+            let specs = images::specs(args)?;
+            if !specs.is_empty() {
+                html.push_str(&images::upload_html(&client, &project, images::read_all(specs).await?).await?);
+            }
+            crate::ado::sendback::send_back(&client, &project, id, None, &to, &plan.state, &html).await?;
+            let item = fetch(&client, id).await?;
+            changed(app, &item);
+            Ok(json!({ "id": id, "assignedTo": to, "found": plan.fixer, "state": plan.state, "url": item_url(&org, &item) }))
         }
         "find_work_items" => find(&client, &state, &ctx, args).await,
         "export_work_items" => export::export(&org, &client, &state, &ctx, args).await,

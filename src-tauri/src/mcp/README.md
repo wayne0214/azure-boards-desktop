@@ -28,6 +28,7 @@ Off by default. Turn it on in **Settings → AI tools (MCP)**.
 | `list_test_results`, `get_test_result`: Azure Test Plans results by test case, plan or run, with step results and attachments (`results.rs`) | no |
 | `get_test_attachment`: saves a result's screenshot or log to a temp folder and returns the path | no (writes only a local file) |
 | `create_work_item`, `update_work_item`, `add_comment`, `apply_work_item_sync` | yes |
+| `send_back_work_item`: testing failed again; back to its first state, assigned to the developer who fixed it (`ado/sendback.rs`), with a comment and screenshots. `preview: true` only says who | yes |
 | `append_to_wiki`: adds markdown to the end of a page, or creates it with `create: true` (`wiki.rs`) | yes |
 | `open_pull_request_form`: opens the New pull request form filled in, for the user to create | no (the user creates it in the app) |
 

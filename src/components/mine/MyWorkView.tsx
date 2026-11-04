@@ -1,3 +1,4 @@
+import { canSendBack } from '@/lib/sendBack'
 import { CheckCircle2, FlaskConical, Forward, GitPullRequest, Inbox, MessageSquare, SearchX, UserRound } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import { api } from '@/lib/api'
@@ -8,7 +9,7 @@ import { errorMessage } from '@/lib/types'
 import { Empty } from '@/components/ui/Empty'
 import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
-import { CLOSED_DAYS, isUnseen, matchesSearch, myWorkProjects, myWorkTabs, planningCount, typeOf, useMyWorkStore, type MineTab, type TypesByProject } from '@/store/useMyWorkStore'
+import { CLOSED_DAYS, isUnseen, matchesSearch, myWorkProjects, myWorkTabs, planningCount, stateCategory, typeOf, useMyWorkStore, type MineTab, type TypesByProject } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
 import { useUiStore } from '@/store/useUiStore'
 import { WikiUpdatesStrip } from '@/components/wiki/WikiUpdates'
@@ -142,6 +143,9 @@ export function MyWorkView() {
       { label: 'Show Details', action: () => void openItem(it) },
       // The sheet works on the item the details panel holds, so open it there first.
       ...(handedOff ? [] : [{ label: 'Start Work…', action: () => void openItem(it).then(() => useUiStore.getState().openSheet('start-work', { id: it.id })) }]),
+      ...(canSendBack(String(it.fields['System.State'] ?? ''), stateCategory(it, types))
+        ? [{ label: 'Send Back…', action: () => void openItem(it).then(() => useUiStore.getState().openSheet('send-back', { id: it.id })) }]
+        : []),
       ...linked.map((p) => ({ label: `Open Pull Request !${p.pullRequestId}`, action: () => openPr(p) })),
       { label: 'Open on Board', action: () => void openOnBoard(it) },
       { label: 'Open in Browser', action: () => org && void api().openUrl(itemUrl(org, project, it.id)) },

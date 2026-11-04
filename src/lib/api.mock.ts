@@ -588,6 +588,32 @@ export const mockApi: Api = {
     return c
   },
 
+  // Demo: #1198 was fixed in pull request !412 by Priya; other items go to the first teammate who is neither the user nor the holder.
+  sendBackPlan: async (_o, _p, id) => {
+    await delay(250)
+    const it = findItem(id)
+    const holder = (it?.fields['System.AssignedTo'] as Identity | undefined)?.id
+    const state = types.find((t) => t.name === it?.fields['System.WorkItemType'])?.states.find((s) => s.category === 'Proposed')?.name ?? 'Proposed'
+    const who = id === 1198 ? people[1] : people.find((p) => p.id !== 'u1' && p.id !== holder)
+    if (!who) return { fixer: null, state }
+    const [reason, detail] = id === 1198 ? ['pullRequest', 'wrote pull request !412'] as const : ['activated', 'moved it to Active'] as const
+    return { fixer: { displayName: who.displayName, uniqueName: who.uniqueName ?? '', id: who.id, reason, detail }, state }
+  },
+  sendBack: async (_o, _p, id, rev, assignTo, toState, comment) => {
+    await delay(300)
+    const it = findItem(id)
+    if (!it) throw { kind: 'not_found', message: `Work item ${id} was not found.` }
+    if (rev != null && rev !== it.rev) throw { kind: 'conflict', status: 412, message: `Work item ${id} was changed (revision ${it.rev}, not ${rev}).` }
+    const p = everyone.find((x) => x.uniqueName === assignTo || x.displayName === assignTo)
+    it.fields['System.AssignedTo'] = p ? { id: p.id, displayName: p.displayName, uniqueName: p.uniqueName ?? '' } : { displayName: assignTo }
+    it.fields['System.State'] = toState
+    it.fields['System.ChangedDate'] = new Date().toISOString()
+    it.fields['System.ChangedBy'] = { id: 'u1', displayName: 'Wayne Lai', uniqueName: 'wayne@example.com' }
+    comments[id] = [...(comments[id] ?? []), { id: Date.now(), text: comment, createdBy: { displayName: 'Wayne Lai', uniqueName: 'wayne@example.com' }, createdDate: new Date().toISOString() }]
+    it.rev = (it.rev ?? 1) + 2
+    return structuredClone(it)
+  },
+
   fetchAttachment: async (_o, url) => url,
   uploadAttachment: async (_o, _p, _name, data) => { await delay(300); return { id: `att${Date.now()}`, url: `data:image/png;base64,${data}` } },
   cacheGet: async (key) => (cache.get(key) as never) ?? null,

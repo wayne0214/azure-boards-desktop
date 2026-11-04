@@ -64,6 +64,8 @@ pub fn run() {
             commands::my_work,
             commands::assigned_to_others,
             commands::closed_by_others,
+            commands::send_back_plan,
+            commands::send_back,
             commands::mentioned_items,
             commands::planning_types,
             commands::project_items,
