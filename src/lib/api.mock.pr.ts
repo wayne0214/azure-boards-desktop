@@ -16,7 +16,7 @@ const repos = [
   { id: 'r3', name: 'fabrikam-web', defaultBranch: 'refs/heads/main', project: { id: 'p2', name: 'Fabrikam Web' } },
 ]
 
-const branches = [{ name: 'refs/heads/main', objectId: 'def456' }, { name: 'refs/heads/develop', objectId: 'dev1' }, { name: 'refs/heads/feature/upload-resume', objectId: 'abc123' }, { name: 'refs/heads/fix/cobb-rounding', objectId: 'c0b123' }]
+const branches = [{ name: 'refs/heads/main', objectId: 'def456' }, { name: 'refs/heads/develop', objectId: 'dev1' }, { name: 'refs/heads/feature/upload-resume', objectId: 'abc123' }, { name: 'refs/heads/fix/distance-rounding', objectId: 'c0b123' }]
 
 /** Demo branch creation; throws like Azure DevOps when the name is taken. */
 export function addMockBranch(name: string): string {
@@ -36,8 +36,8 @@ let prs: PullRequest[] = [
     workItemRefs: [{ id: '1164', url: '' }],
   },
   {
-    pullRequestId: 410, title: 'Fix Cobb angle rounding mismatch between app and report', status: 'active', createdBy: me, creationDate: daysAgo(4),
-    sourceRefName: 'refs/heads/fix/cobb-rounding', targetRefName: 'refs/heads/main', mergeStatus: 'conflicts', repository: repos[1],
+    pullRequestId: 410, title: 'Fix delivery distance rounding mismatch between app and report', status: 'active', createdBy: me, creationDate: daysAgo(4),
+    sourceRefName: 'refs/heads/fix/distance-rounding', targetRefName: 'refs/heads/main', mergeStatus: 'conflicts', repository: repos[1],
     reviewers: [{ ...hana, vote: -5 }, { ...priya, vote: 0 }],
     lastMergeSourceCommit: { commitId: 'c0b123' }, lastMergeTargetCommit: { commitId: 'def456' },
     description: 'Both sides now round half away from zero to one decimal.',
@@ -55,7 +55,7 @@ let prs: PullRequest[] = [
     lastMergeSourceCommit: { commitId: 'pdf001' }, lastMergeTargetCommit: { commitId: 'def456' },
   },
   {
-    pullRequestId: 398, title: 'Clinic admin invites', status: 'completed', createdBy: me, creationDate: daysAgo(12), closedDate: daysAgo(9),
+    pullRequestId: 398, title: 'Depot admin invites', status: 'completed', createdBy: me, creationDate: daysAgo(12), closedDate: daysAgo(9),
     sourceRefName: 'refs/heads/feature/invites', targetRefName: 'refs/heads/main', mergeStatus: 'succeeded', repository: repos[1],
     reviewers: [{ ...priya, vote: 10 }],
   },

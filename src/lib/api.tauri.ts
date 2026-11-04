@@ -51,6 +51,7 @@ export const tauriApi: Api = {
   queryBoardItems: (org, query) => invoke('query_board_items', { org, query }),
   myWork: (org) => invoke('my_work', { org }),
   assignedToOthers: (org) => invoke('assigned_to_others', { org }),
+  closedByOthers: (org, days) => invoke('closed_by_others', { org, days }),
   planningTypes: (org, project) => invoke('planning_types', { org, project }),
   mentionedItems: (org) => invoke('mentioned_items', { org }),
   projectItems: (org, project, types, excludeStates, extraFields, withRelations) => invoke('project_items', { org, project, types, excludeStates, extraFields, withRelations: withRelations ?? false }),

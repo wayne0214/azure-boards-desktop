@@ -22,13 +22,13 @@ const step = (id: number, a: string, e: string) => `<step id="${id}" type="Valid
 const rc = reqConfig(ctx)!
 const cfg = tcConfig(ctx)!
 const tree = buildTree(rc, types, [
-  wi(10, 'Epic', { 'System.Title': 'Screening' }),
+  wi(10, 'Epic', { 'System.Title': 'Delivery' }),
   wi(11, 'Feature', { 'System.Title': 'Offline capture', 'System.Parent': 10, [diId.referenceName]: 'DI-01' }),
   wi(1, 'Requirement', { 'System.Title': 'Resume upload', 'System.Parent': 11, [srsId.referenceName]: 'SRS-041', [method.referenceName]: 'Test' }),
   wi(2, 'Requirement', { 'System.Title': 'Retake photo', 'System.Parent': 11, [srsId.referenceName]: 'SRS-052', [method.referenceName]: 'Test' }),
   wi(3, 'Requirement', { 'System.Title': 'Letterhead', 'System.Parent': 11, [srsId.referenceName]: 'SRS-060', [method.referenceName]: 'Inspection' }),
 ], [])
-const shared = wi(500, 'Shared Steps', { 'System.Title': 'Login as Clinician', [STEPS]: `<steps id="0" last="2">${step(2, 'Sign in as clinician', 'Home shown')}</steps>` })
+const shared = wi(500, 'Shared Steps', { 'System.Title': 'Login as Dispatcher', [STEPS]: `<steps id="0" last="2">${step(2, 'Sign in as dispatcher', 'Home shown')}</steps>` })
 const t1 = wi(101, 'Test Case', {
   'System.Title': 'Upload survives a retake', [sdv.referenceName]: 'SDV-0001',
   [ac.referenceName]: '<ul><li>[SRS-041] Upload resumes</li><li>Retake kept</li></ul>',
@@ -40,7 +40,7 @@ const opts = { projectName: 'Contoso Mobile' }
 describe('buildTestDocument', () => {
   const html = buildTestDocument(cfg, rc, tree, cov, new Map([[500, shared]]), opts)
   it('keeps the UN and DI headings of the SRS document', () => {
-    expect(html).toContain('1&ensp;Screening')
+    expect(html).toContain('1&ensp;Delivery')
     expect(html).toContain('1.1&ensp;DI-01 Offline capture')
   })
   it('puts the test cases in a table with the team\'s columns', () => {
@@ -51,7 +51,7 @@ describe('buildTestDocument', () => {
     expect(html).toContain('SRS-041, SRS-052')
   })
   it('numbers the actions in Test Steps, with shared steps written out', () => {
-    expect(html).toMatch(/<td class="c-steps"><ol><li value="1">Sign in as clinician.*<\/li><li value="2">Toggle airplane mode<\/li><\/ol><\/td>/)
+    expect(html).toMatch(/<td class="c-steps"><ol><li value="1">Sign in as dispatcher.*<\/li><li value="2">Toggle airplane mode<\/li><\/ol><\/td>/)
     expect(html).not.toContain('Expected:')
   })
   it('puts the expected results in Acceptance Criteria, numbered to match the steps', () => {
@@ -79,7 +79,7 @@ describe('buildTestCsv', () => {
     expect(csv.split('\r\n')[0]).toBe('SDV ID,SRS ID,Test Steps,Acceptance Criteria,Test Outcome')
   })
   it('puts actions in Test Steps and expected results in Acceptance Criteria, numbered alike', () => {
-    expect(csv.split('\r\n')[1]).toBe('SDV-0001,"SRS-041, SRS-052","1. Sign in as clinician\n2. Toggle airplane mode","1. Home shown\n2. Upload resumes",')
+    expect(csv.split('\r\n')[1]).toBe('SDV-0001,"SRS-041, SRS-052","1. Sign in as dispatcher\n2. Toggle airplane mode","1. Home shown\n2. Upload resumes",')
   })
   it('joins several SRS IDs in one cell', () => {
     expect(csv).toContain('"SRS-041, SRS-052"')

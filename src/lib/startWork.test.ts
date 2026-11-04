@@ -5,11 +5,11 @@ import type { WorkItem, WorkItemType } from './types'
 describe('suggestBranchName', () => {
   it('uses feature/ for stories and bugfix/ for bugs', () => {
     expect(suggestBranchName(1164, 'User Story', 'Secure upload resumes after network drop')).toBe('feature/1164-secure-upload-resumes-after-network-drop')
-    expect(suggestBranchName(1183, 'Bug', 'Angle overlay drifts after device rotation on Android 14')).toBe('bugfix/1183-angle-overlay-drifts-after-device')
+    expect(suggestBranchName(1183, 'Bug', 'Route overlay drifts after device rotation on Android 14')).toBe('bugfix/1183-route-overlay-drifts-after-device')
   })
 
   it('does not end on a filler word', () => {
-    expect(suggestBranchName(1192, 'Feature', 'Camera guides the patient into the correct pose')).toBe('feature/1192-camera-guides-the-patient')
+    expect(suggestBranchName(1192, 'Feature', 'Camera guides the courier into the correct spot')).toBe('feature/1192-camera-guides-the-courier')
   })
 
   it('strips accents and punctuation', () => {

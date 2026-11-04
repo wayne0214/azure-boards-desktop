@@ -66,7 +66,7 @@ describe('templates', () => {
 describe('page facts', () => {
   it('reads status, who and when', () => {
     expect(pageMeta('# 0001\n\n**Status:** Accepted · **Decided by:** Wayne · 2026-09-02\n\nText')).toEqual({ status: 'Accepted', by: 'Wayne', from: null, date: '2026-09-02' })
-    expect(pageMeta('# F\n\n**From:** Dr. Lee · **Date:** 2026-10-03 · **Status:** New').from).toBe('Dr. Lee')
+    expect(pageMeta('# F\n\n**From:** Sam Lee · **Date:** 2026-10-03 · **Status:** New').from).toBe('Sam Lee')
   })
 
   it('adds a line to a section, replacing its placeholder', () => {

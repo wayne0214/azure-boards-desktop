@@ -30,8 +30,8 @@ export function mockPlans(lookup: MockLookup): Pick<Api, 'tpPlans' | 'tpCreatePl
     [10, [
       { id: 100, name: 'Release 2.1.0', suiteType: 'staticTestSuite' },
       { id: 101, name: '1164 : Resume interrupted uploads', parentId: 100, suiteType: 'requirementTestSuite', requirementId: 1164 },
-      { id: 102, name: '1182 : Pose check retake', parentId: 100, suiteType: 'requirementTestSuite', requirementId: 1182 },
-      { id: 103, name: '1171 : Clinic dashboard', parentId: 100, suiteType: 'requirementTestSuite', requirementId: 1171 },
+      { id: 102, name: '1182 : Photo check retake', parentId: 100, suiteType: 'requirementTestSuite', requirementId: 1182 },
+      { id: 103, name: '1171 : Depot dashboard', parentId: 100, suiteType: 'requirementTestSuite', requirementId: 1171 },
       { id: 104, name: 'Smoke', parentId: 100, suiteType: 'staticTestSuite' },
     ]],
     [9, [{ id: 90, name: 'Release 2.0.0', suiteType: 'staticTestSuite' }]],
@@ -116,7 +116,7 @@ export function mockPlans(lookup: MockLookup): Pick<Api, 'tpPlans' | 'tpCreatePl
   const files = (runId: number, resultId: number): (ResultAttachment & { body: () => string })[] => failure.has(`${runId}:${resultId}`) ? [
     { id: 1, fileName: '1-screenshot.png', size: 234900, kind: 'image', body: screenshot },
     { id: 2, fileName: '2-app-log.txt', size: logText(runId).length, kind: 'text', body: () => btoa(logText(runId)) },
-    { id: 3, fileName: '3-inference-20261028.log', size: 96, kind: 'text', body: () => btoa('model=pose-v4 frames=1 verdict=fail reason=partial_frame\n') },
+    { id: 3, fileName: '3-inference-20261028.log', size: 96, kind: 'text', body: () => btoa('model=photo-v4 frames=1 verdict=fail reason=partial_frame\n') },
     { id: 4, fileName: 'trace.zip', size: 4, kind: 'file', body: () => btoa('PK..') },
   ] : []
   const summaryOf = (r: TpResult, run: TpRun & { planId: number }): TestResultSummary | null => {

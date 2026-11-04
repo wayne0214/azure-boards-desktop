@@ -1088,11 +1088,11 @@ mod tests {
         assert_eq!(describe("Feature", Some(3700), Some("DI-12"), "Export reports"), "Feature #3700: DI-12 Export reports");
         assert_eq!(describe("Epic", Some(3600), None, ""), "Epic #3600");
         let req: SyncRequest = serde_json::from_value(json!({ "items": [
-            { "key": "UN-3", "title": "Clinicians share reports", "type": "Epic" },
+            { "key": "UN-3", "title": "Dispatchers share reports", "type": "Epic" },
             { "title": "Export reports", "type": "Feature", "parentKey": "UN-3" },
         ] }))
         .unwrap();
-        assert_eq!(row_label(&req, "Requirement", "row 1").as_deref(), Some("New Epic: UN-3 Clinicians share reports"));
+        assert_eq!(row_label(&req, "Requirement", "row 1").as_deref(), Some("New Epic: UN-3 Dispatchers share reports"));
         assert_eq!(row_label(&req, "Requirement", "row 3"), None);
         assert_eq!(row_label(&req, "Requirement", "#3700"), None);
     }

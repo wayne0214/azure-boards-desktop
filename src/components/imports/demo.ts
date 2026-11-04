@@ -7,8 +7,8 @@ const ROWS: ReviewRow[] = [
     changes: [
       { field: 'System.Title', name: 'Title', kind: 'set', before: '', after: 'Export scan report as PDF', write: true },
       { field: 'Custom.SRSID', name: 'SRS ID', kind: 'set', before: '', after: 'SRS-0040', write: true },
-      { field: 'Custom.SoftwareRequirementSpecification', name: 'Software Requirement Specification', kind: 'set', before: '', after: 'The system shall export the scan report, including the Cobb angle measurements and images, as a PDF file.', write: true },
-      { field: 'Microsoft.VSTS.Common.AcceptanceCriteria', name: 'Acceptance Criteria', kind: 'set', before: '', after: 'Given a completed scan\nWhen the clinician selects Export → PDF\nThen a PDF with the report and images is saved\nAnd the file name contains the patient ID and scan date', write: true },
+      { field: 'Custom.SoftwareRequirementSpecification', name: 'Software Requirement Specification', kind: 'set', before: '', after: 'The system shall export the delivery report, including the route distances and photos, as a PDF file.', write: true },
+      { field: 'Microsoft.VSTS.Common.AcceptanceCriteria', name: 'Acceptance Criteria', kind: 'set', before: '', after: 'Given a completed delivery\nWhen the dispatcher selects Export → PDF\nThen a PDF with the report and photos is saved\nAnd the file name contains the customer ID and delivery date', write: true },
       { field: 'System.Parent', name: 'Parent', kind: 'set', before: '', after: 'Feature #3700: DI-12 Export and share reports', write: true },
     ],
   },
@@ -29,10 +29,10 @@ const ROWS: ReviewRow[] = [
     ],
   },
   {
-    rowKey: 'r3', fp: '3741:8', category: 'conflict', type: 'Requirement', key: 'SRS-0012', title: 'Measure Cobb angle automatically', workItemId: 3741, matchedBy: 'key', parent: null, parentRow: null, error: null, note: null,
+    rowKey: 'r3', fp: '3741:8', category: 'conflict', type: 'Requirement', key: 'SRS-0012', title: 'Measure route distance automatically', workItemId: 3741, matchedBy: 'key', parent: null, parentRow: null, error: null, note: null,
     changes: [
-      { field: 'Custom.SoftwareRequirementSpecification', name: 'Software Requirement Specification', kind: 'conflict', before: 'The system shall measure the Cobb angle from the X-ray image.', after: 'The system shall measure the Cobb angle from the X-ray image within ±2° of a clinician\'s manual measurement.', write: false },
-      { field: 'Microsoft.VSTS.Common.AcceptanceCriteria', name: 'Acceptance Criteria', kind: 'fill', before: '', after: 'Measured on the validation set, 95% of angles are within ±2° of the reference.', write: true },
+      { field: 'Custom.SoftwareRequirementSpecification', name: 'Software Requirement Specification', kind: 'conflict', before: 'The system shall measure the route distance from the GPS track.', after: 'The system shall measure the route distance from the GPS track within 2% of a dispatcher\'s manual measurement.', write: false },
+      { field: 'Microsoft.VSTS.Common.AcceptanceCriteria', name: 'Acceptance Criteria', kind: 'fill', before: '', after: 'Measured on the validation set, 95% of distances are within 2% of the reference.', write: true },
     ],
   },
   {
@@ -57,7 +57,7 @@ const ROWS: ReviewRow[] = [
     ],
   },
   {
-    rowKey: 'w3690', fp: 'rm:3690:6', category: 'missing', type: 'Requirement', key: 'SRS-0002', title: 'Print report on hospital printer', workItemId: 3690, matchedBy: null, parent: null, parentRow: null, error: null, note: null,
+    rowKey: 'w3690', fp: 'rm:3690:6', category: 'missing', type: 'Requirement', key: 'SRS-0002', title: 'Print report on depot printer', workItemId: 3690, matchedBy: null, parent: null, parentRow: null, error: null, note: null,
     changes: [
       { field: 'System.State', name: 'State', kind: 'set', before: 'Active', after: 'Removed', write: true },
       { field: 'System.Tags', name: 'Tags', kind: 'set', before: 'Reporting', after: 'Reporting; Removed by import', write: true },

@@ -244,6 +244,13 @@ pub async fn assigned_to_others(state: State<'_, AppState>, org: String) -> AppR
 }
 
 #[tauri::command]
+pub async fn closed_by_others(state: State<'_, AppState>, org: String, days: u32) -> AppResult<Vec<Value>> {
+    let client = state.client(&org).await?;
+    let fields = state.fields(&client).await?;
+    api::closed_by_others(&client, &fields, days.clamp(1, 365)).await
+}
+
+#[tauri::command]
 pub async fn planning_types(state: State<'_, AppState>, org: String, project: String) -> AppResult<Vec<String>> {
     let client = state.client(&org).await?;
     api::planning_types(&client, &project).await
