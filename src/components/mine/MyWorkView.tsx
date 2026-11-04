@@ -1,5 +1,5 @@
-import { CheckCircle2, ChevronDown, FlaskConical, Forward, GitPullRequest, Inbox, MessageSquare, SearchX } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { CheckCircle2, FlaskConical, Forward, GitPullRequest, Inbox, MessageSquare, SearchX, UserRound } from 'lucide-react'
+import { useEffect, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { itemUrl, relativeTime, typeColor } from '@/lib/format'
 import type { PullRequest } from '@/lib/pr/types'
@@ -8,22 +8,22 @@ import { errorMessage } from '@/lib/types'
 import { Empty } from '@/components/ui/Empty'
 import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
-import { handedOffOrder, isFinished, isReadyToTest, isResolved, isShown, isUnseen, matchesSearch, planningCount, typeOf, useMyWorkStore, type TypesByProject } from '@/store/useMyWorkStore'
+import { CLOSED_DAYS, isUnseen, matchesSearch, myWorkProjects, myWorkTabs, planningCount, typeOf, useMyWorkStore, type MineTab, type TypesByProject } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
 import { useUiStore } from '@/store/useUiStore'
 import { WikiUpdatesStrip } from '@/components/wiki/WikiUpdates'
 import { useWikiStore } from '@/store/useWikiStore'
 
-const COLS = 8
-
-type Section = { key: 'active' | 'test' | 'others' | 'resolved'; title: string; hint: string; projects: [string, WorkItem[]][] }
-
-const priorityOf = (it: WorkItem) => { const p = it.fields['Microsoft.VSTS.Common.Priority']; return typeof p === 'number' ? p : 9 }
-const changedOf = (it: WorkItem) => String(it.fields['System.ChangedDate'] ?? '')
+const TABS: { key: MineTab; title: string; hint: string; icon: React.ReactNode }[] = [
+  { key: 'active', title: 'Assigned to me', hint: 'Open work assigned to you', icon: <UserRound size={14} /> },
+  { key: 'test', title: 'Ready to test', hint: 'On the test server and assigned to you for testing', icon: <FlaskConical size={14} className="tab-ico test" /> },
+  { key: 'others', title: 'Assigned to others', hint: 'Work you created or once held, now with someone else', icon: <Forward size={14} /> },
+  { key: 'resolved', title: 'Resolved', hint: 'Resolved and still assigned to you, waiting for review. They leave My Work once someone else takes them or closes them.', icon: <CheckCircle2 size={14} className="tab-ico done" /> },
+]
 
 /**
- * Everything assigned to the signed-in user across the organization; items to test and resolved items in sections of their own,
- * and, collapsed, the work they handed to someone else.
+ * Everything assigned to the signed-in user across the organization, one tab at a time: my open work, items to test,
+ * work handed to someone else (open or recently closed) and resolved items. Projects are a column and a filter.
  */
 export function MyWorkView() {
   const org = useAppStore((s) => s.activeOrg)
@@ -44,15 +44,17 @@ export function MyWorkView() {
   const selectedId = useBoardStore((s) => s.selectedId)
   const items = useMyWorkStore((s) => s.items)
   const others = useMyWorkStore((s) => s.others)
+  const closed = useMyWorkStore((s) => s.closed)
+  const closedLoading = useMyWorkStore((s) => s.closedLoading)
+  const closedError = useMyWorkStore((s) => s.closedError)
+  const tab = useMyWorkStore((s) => s.tab)
+  const project = useMyWorkStore((s) => s.project)
+  const othersMode = useMyWorkStore((s) => s.othersMode)
   const error = useMyWorkStore((s) => s.error)
   const loading = useMyWorkStore((s) => s.loading)
   const load = useMyWorkStore((s) => s.load)
   const upsert = useMyWorkStore((s) => s.upsert)
   const remove = useMyWorkStore((s) => s.remove)
-  const collapseKey = `mine.collapsed.${org ?? ''}`
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
-    try { return new Set<string>(JSON.parse(localStorage.getItem(collapseKey) ?? '[]')) } catch { return new Set() }
-  })
 
   useEffect(() => { if (items === null) void load() }, [items, load])
   useEffect(() => { if (selectedProject) void useWikiStore.getState().refreshFor(selectedProject) }, [selectedProject])
@@ -63,32 +65,30 @@ export function MyWorkView() {
     return () => window.removeEventListener('app:item-updated', onUpdated)
   }, [upsert])
 
-  const sections = useMemo<Section[]>(() => {
-    const byProject = (list: WorkItem[]) => {
-      const map = new Map<string, WorkItem[]>()
-      for (const it of list) {
-        const p = String(it.fields['System.TeamProject'] ?? 'Other')
-        if (!map.has(p)) map.set(p, [])
-        map.get(p)!.push(it)
-      }
-      return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  const allProjects = useMemo(() => myWorkProjects(items, others, closed), [items, others, closed])
+  // A remembered project with nothing left in My Work falls back to all projects.
+  const shownProject = project && (items === null || allProjects.includes(project)) ? project : null
+  const lists = useMemo(() => myWorkTabs({ items, others, closed, types, planning, showPlanning, search, project: shownProject }), [items, others, closed, types, planning, showPlanning, search, shownProject])
+
+  // Tabs other than my own work appear when they hold something; while searching, all of them show their matches.
+  // Assigned to others also stays for its Closed view, which loads only when asked for.
+  const searching = !!search.trim()
+  const visible = TABS.filter((t) => t.key === 'active' || searching || lists[t.key].length > 0 || t.key === tab || (t.key === 'others' && (closed?.length ?? 0) > 0))
+  const current = visible.some((t) => t.key === tab) ? tab : 'active'
+  const showClosed = current === 'others' && othersMode === 'closed'
+  const rows = showClosed ? lists.closed : lists[current]
+  const showProjectCol = !shownProject && allProjects.length > 1
+
+  // Keys 1–4 pick a tab, as listed.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return
+      const t = visible[Number(e.key) - 1]
+      if (t) { e.preventDefault(); useMyWorkStore.getState().setTab(t.key) }
     }
-    const all = (items ?? []).filter((it) => isShown(it, planning, showPlanning) && !isFinished(it, types) && matchesSearch(it, search))
-    // Active work: most urgent first, then most recently touched. To test: oldest first so nothing waits forever.
-    // Resolved: most recently resolved first.
-    const active = all.filter((it) => !isReadyToTest(it) && !isResolved(it, types)).sort((a, b) => priorityOf(a) - priorityOf(b) || changedOf(b).localeCompare(changedOf(a)))
-    const test = all.filter(isReadyToTest).sort((a, b) => changedOf(a).localeCompare(changedOf(b)))
-    const resolved = all.filter((it) => isResolved(it, types)).sort((a, b) => changedOf(b).localeCompare(changedOf(a)))
-    // Handed to others: an item reassigned to me since the last load is already listed above.
-    const mine = new Set((items ?? []).map((it) => it.id))
-    const handedOff = (others ?? []).filter((it) => !mine.has(it.id) && isShown(it, planning, showPlanning) && !isFinished(it, types) && matchesSearch(it, search)).sort(handedOffOrder(types))
-    return [
-      { key: 'active', title: 'Assigned to me', hint: 'Open work assigned to you', projects: byProject(active) },
-      { key: 'test', title: 'Ready to test', hint: 'On the test server and assigned to you for testing', projects: byProject(test) },
-      { key: 'others', title: 'Assigned to others', hint: 'Open work you created or once held, now assigned to someone else', projects: byProject(handedOff) },
-      { key: 'resolved', title: 'Resolved', hint: 'Resolved and still assigned to you, waiting for review. They leave My Work once someone else takes them or closes them.', projects: byProject(resolved) },
-    ]
-  }, [items, others, types, search, planning, showPlanning])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [visible])
 
   // Active pull requests I wrote or review, by the work items they link to.
   const prsByItem = useMemo(() => {
@@ -103,13 +103,6 @@ export function MyWorkView() {
     setView('prs')
     void usePrStore.getState().open(pr)
   }
-
-  const toggle = (k: string) => setCollapsed((c) => {
-    const n = new Set(c)
-    if (n.has(k)) n.delete(k); else n.add(k)
-    try { localStorage.setItem(collapseKey, JSON.stringify([...n])) } catch { /* ignore */ }
-    return n
-  })
 
   const openOnBoard = async (it: WorkItem) => {
     const name = String(it.fields['System.TeamProject'] ?? '')
@@ -144,7 +137,7 @@ export function MyWorkView() {
     const states = (type?.states ?? []).filter((s) => s.category !== 'Removed' && s.name !== it.fields['System.State'])
     const linked = prsByItem.get(it.id) ?? []
     // Work handed to someone else is theirs to start or unassign.
-    const handedOff = (others ?? []).some((x) => x.id === it.id) && !(items ?? []).some((x) => x.id === it.id)
+    const handedOff = current === 'others'
     void api().showContextMenu([
       { label: 'Show Details', action: () => void openItem(it) },
       // The sheet works on the item the details panel holds, so open it there first.
@@ -162,100 +155,103 @@ export function MyWorkView() {
 
   if (items === null && loading) return <div className="empty-state"><span className="spinner lg" /></div>
   if (error && !items) return <Empty title="Could not load your work" action={<button type="button" className="btn" onClick={() => void load()}>Try again</button>}>{error}</Empty>
-  const shown = sections.reduce((a, sec) => a + sec.projects.reduce((b, [, l]) => b + l.length, 0), 0)
+  const shown = lists.active.length + lists.test.length + lists.others.length + lists.resolved.length + lists.closed.length
   // A search that only matches hidden planning items offers to show them rather than saying nothing matched.
-  const hiddenMatches = showPlanning || !search.trim() ? 0 : planningCount((items ?? []).filter((it) => matchesSearch(it, search)), types, planning)
+  const hiddenMatches = showPlanning || !searching ? 0 : planningCount((items ?? []).filter((it) => matchesSearch(it, search)), types, planning)
   if (shown === 0 && hiddenMatches > 0) return <Empty icon={<SearchX size={40} strokeWidth={1.2} />} title="Only planning items match" action={<button type="button" className="btn" onClick={() => useMyWorkStore.getState().setShowPlanning(true)}>Show planning items</button>}>{hiddenMatches} hidden requirement, feature or epic{hiddenMatches === 1 ? '' : 's'} match{hiddenMatches === 1 ? 'es' : ''} “{search.trim()}”.</Empty>
-  if (items && items.length > 0 && shown === 0 && search.trim()) return <Empty icon={<SearchX size={40} strokeWidth={1.2} />} title="No matching work" action={<button type="button" className="btn" onClick={() => useMyWorkStore.getState().setSearch('')}>Clear search</button>}>Nothing in My Work matches “{search.trim()}”.</Empty>
+  if (items && items.length > 0 && shown === 0 && searching) return <Empty icon={<SearchX size={40} strokeWidth={1.2} />} title="No matching work" action={<button type="button" className="btn" onClick={() => useMyWorkStore.getState().setSearch('')}>Clear search</button>}>Nothing in My Work{shownProject ? ` for ${shownProject}` : ''} matches “{search.trim()}”.</Empty>
   const hiddenPlanning = showPlanning ? 0 : planningCount(items, types, planning)
-  if (shown === 0 && hiddenPlanning > 0) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title="No tasks or bugs assigned to you" action={<button type="button" className="btn" onClick={() => useMyWorkStore.getState().setShowPlanning(true)}>Show planning items</button>}>{hiddenPlanning} planning item{hiddenPlanning === 1 ? ' is' : 's are'} hidden: requirements, features and epics assigned to you.</Empty>
-  if ((!items || items.length === 0) && shown === 0) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title={`Nothing assigned to ${account?.userName ?? 'you'}`}>When work items are assigned to you in any project, they will appear here.</Empty>
+  if (shown === 0 && hiddenPlanning > 0 && !shownProject) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title="No tasks or bugs assigned to you" action={<button type="button" className="btn" onClick={() => useMyWorkStore.getState().setShowPlanning(true)}>Show planning items</button>}>{hiddenPlanning} planning item{hiddenPlanning === 1 ? ' is' : 's are'} hidden: requirements, features and epics assigned to you.</Empty>
+  if ((!items || items.length === 0) && shown === 0 && !shownProject) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title={`Nothing assigned to ${account?.userName ?? 'you'}`}>When work items are assigned to you in any project, they will appear here.</Empty>
 
-  return (
-    <div className="list">
-      {selectedProject && <WikiUpdatesStrip project={selectedProject.name} />}
-      <table>
-        <thead>
-          <tr><th className="num">ID</th><th>Type</th><th>Title</th><th className="disc" title="Comments in the discussion"><MessageSquare size={13} /></th><th className="pri">Pri</th><th>State</th><th>Iteration</th><th>Changed</th></tr>
-        </thead>
-        <tbody>
-          {sections.map((sec) => {
-            const n = sec.projects.reduce((a, [, l]) => a + l.length, 0)
-            if (n === 0 && (sec.key !== 'active' || search.trim())) return null
-            // Resolved and Assigned to others start collapsed, so their remembered key marks them open rather than closed.
-            const startsClosed = sec.key === 'resolved' || sec.key === 'others'
-            const secKey = startsClosed ? `§${sec.key}:open` : `§${sec.key}`
-            const secCollapsed = startsClosed ? !collapsed.has(secKey) : collapsed.has(secKey)
-            return (
-              <SectionRows key={sec.key} section={sec} count={n} collapsed={secCollapsed} onToggle={() => toggle(secKey)}>
-                {(!secCollapsed || search.trim()) && sec.projects.map(([project, list]) => (
-                  <GroupRows key={project} project={project} list={list} types={types} showAssignee={sec.key === 'others'} collapsed={!search.trim() && collapsed.has(`${sec.key}/${project}`)} onToggle={() => toggle(`${sec.key}/${project}`)} onOpen={(it) => void openItem(it)} onMenu={contextMenu} selectedId={selectedId} unseen={(it) => isUnseen(it, highlightSince)} prs={(it) => prsByItem.get(it.id) ?? []} onOpenPr={openPr} />
-                ))}
-              </SectionRows>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
+  const unseenIn = (k: MineTab) => lists[k].some((it) => isUnseen(it, highlightSince))
+  const emptyText = showClosed ? `Nothing you handed off has closed in the last ${CLOSED_DAYS} days.` : current === 'others' ? 'Nothing you handed off is open.' : current === 'test' ? 'Nothing to test.' : current === 'resolved' ? 'Nothing resolved.' : 'Nothing open.'
+  const cols = 8 + (showProjectCol ? 1 : 0)
 
-function SectionRows({ section, count, collapsed, onToggle, children }: { section: Section; count: number; collapsed: boolean; onToggle: () => void; children: React.ReactNode }) {
   return (
     <>
-      <tr className={`section-row ${collapsed ? 'collapsed' : ''}`} onClick={onToggle}>
-        <td colSpan={COLS}>
-          <button type="button" title={section.hint}>
-            <ChevronDown size={14} />
-            {section.key === 'test' && <FlaskConical size={14} className="sec-ico test" />}
-            {section.key === 'others' && <Forward size={14} className="sec-ico others" />}
-            {section.key === 'resolved' && <CheckCircle2 size={14} className="sec-ico" />}
-            {section.title} <span className="faint">· {count}</span>
-          </button>
-        </td>
-      </tr>
-      {count === 0 && !collapsed && <tr><td colSpan={COLS} className="faint" style={{ paddingLeft: 28 }}>Nothing open.</td></tr>}
-      {children}
+      <div className="mine-bar">
+        <div className="mine-tabs" role="tablist" aria-label="My Work">
+          {visible.map((t, i) => (
+            <button key={t.key} type="button" role="tab" aria-selected={current === t.key} className={`mine-tab ${current === t.key ? 'on' : ''}`} title={`${t.hint} · ${i + 1}`} onClick={() => useMyWorkStore.getState().setTab(t.key)}>
+              {t.icon}{t.title}
+              <span className={`count ${lists[t.key].length === 0 ? 'zero' : ''}`}>{lists[t.key].length}</span>
+              {unseenIn(t.key) && <span className="unseen-dot" title="Changed by someone else since you last looked" />}
+            </button>
+          ))}
+        </div>
+        <span className="grow" />
+        {current === 'others' && (
+          <div className="segmented" role="group" aria-label="Open or closed">
+            <button type="button" className={othersMode === 'open' ? 'on' : ''} onClick={() => useMyWorkStore.getState().setOthersMode('open')}>Open</button>
+            <button type="button" className={othersMode === 'closed' ? 'on' : ''} onClick={() => useMyWorkStore.getState().setOthersMode('closed')} title={`Closed in the last ${CLOSED_DAYS} days`}>Closed{closed ? ` · ${lists.closed.length}` : ''}</button>
+          </div>
+        )}
+        {(allProjects.length > 1 || shownProject) && (
+          <select className="input tp-filter" aria-label="Project" value={shownProject ?? ''} onChange={(e) => useMyWorkStore.getState().setProject(e.target.value || null)}>
+            <option value="">All projects</option>
+            {allProjects.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        )}
+      </div>
+      <div className="list">
+        {selectedProject && <WikiUpdatesStrip project={selectedProject.name} />}
+        <table>
+          <thead>
+            <tr>
+              <th className="num">ID</th><th>Type</th><th>Title</th><th className="disc" title="Comments in the discussion"><MessageSquare size={13} /></th>
+              {showProjectCol && <th>Project</th>}<th className="pri">Pri</th><th>State</th><th>Iteration</th><th>{showClosed ? 'Closed' : 'Changed'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {showClosed && closedLoading && closed === null && <tr><td colSpan={cols} className="faint"><span className="spinner" /> Loading closed work…</td></tr>}
+            {showClosed && closedError && closed === null && (
+              <tr><td colSpan={cols} className="faint">Could not load closed work: {closedError} <button type="button" className="btn sm" onClick={() => void useMyWorkStore.getState().loadClosed()}>Try again</button></td></tr>
+            )}
+            {rows.length === 0 && !(showClosed && closed === null) && <tr><td colSpan={cols} className="faint">{emptyText}</td></tr>}
+            {rows.map((it) => (
+              <ItemRow key={it.id} it={it} types={types} who={current === 'others' ? (showClosed ? 'closedBy' : 'assignee') : null} showProject={showProjectCol} closedView={showClosed}
+                selected={selectedId === it.id} unseen={isUnseen(it, highlightSince)} prs={prsByItem.get(it.id) ?? []} onOpen={() => void openItem(it)} onMenu={() => contextMenu(it)} onOpenPr={openPr} />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   )
 }
 
-function GroupRows({ project, list, types, showAssignee = false, collapsed, onToggle, onOpen, onMenu, selectedId, unseen, prs, onOpenPr }: {
-  project: string; list: WorkItem[]; types: TypesByProject; showAssignee?: boolean; collapsed: boolean; onToggle: () => void
-  onOpen: (it: WorkItem) => void; onMenu: (it: WorkItem) => void; selectedId: number | null
-  unseen: (it: WorkItem) => boolean; prs: (it: WorkItem) => PullRequest[]; onOpenPr: (pr: PullRequest) => void
+type Person = { displayName?: string } | undefined
+
+function ItemRow({ it, types, who, showProject, closedView, selected, unseen, prs, onOpen, onMenu, onOpenPr }: {
+  it: WorkItem; types: TypesByProject; who: 'assignee' | 'closedBy' | null; showProject: boolean; closedView: boolean
+  selected: boolean; unseen: boolean; prs: PullRequest[]; onOpen: () => void; onMenu: () => void; onOpenPr: (pr: PullRequest) => void
 }) {
+  const f = it.fields
+  const project = String(f['System.TeamProject'] ?? '')
+  const type = String(f['System.WorkItemType'] ?? '')
+  const comments = f['System.CommentCount']
+  const pri = f['Microsoft.VSTS.Common.Priority']
+  const closedBy = (f['Microsoft.VSTS.Common.ClosedBy'] as Person)?.displayName
   return (
-    <>
-      <tr className={`group-row ${collapsed ? 'collapsed' : ''}`} onClick={onToggle}>
-        <td colSpan={COLS}><button type="button"><ChevronDown size={14} />{project} · {list.length}</button></td>
-      </tr>
-      {!collapsed && list.map((it) => {
-        const f = it.fields
-        const type = String(f['System.WorkItemType'] ?? '')
-        const comments = f['System.CommentCount']
-        const pri = f['Microsoft.VSTS.Common.Priority']
-        return (
-          <tr key={it.id} className={selectedId === it.id ? 'selected' : ''} onClick={() => onOpen(it)} onContextMenu={(e) => { e.preventDefault(); onMenu(it) }} style={{ ['--type-color' as string]: typeColor(types[project] ?? [], type) }} title="Click for details · right-click for more">
-            <td className="num faint">{unseen(it) && <span className="unseen-dot" title="Changed by someone else since you last looked" />}{it.id}</td>
-            <td><span className="typebar" />{type}</td>
-            <td className="title">
-              {String(f['System.Title'] ?? '')}
-              {showAssignee && <span className="assignee faint" title="Assigned to">→ {(f['System.AssignedTo'] as { displayName?: string } | undefined)?.displayName ?? 'Unassigned'}</span>}
-              {prs(it).map((p) => (
-                <button key={p.pullRequestId} type="button" className={`pr-link ${p.isDraft ? 'draft' : ''}`} title={`${p.isDraft ? 'Draft pull request' : 'Open pull request'}: ${p.title}`} onClick={(e) => { e.stopPropagation(); onOpenPr(p) }}>
-                  <GitPullRequest size={11} />!{p.pullRequestId}
-                </button>
-              ))}
-            </td>
-            <td className="disc">{typeof comments === 'number' && comments > 0 && <span className="meta" title={`${comments} comment${comments > 1 ? 's' : ''} in the discussion`}><MessageSquare size={13} />{comments}</span>}</td>
-            <td className="pri">{typeof pri === 'number' && <span className={`pri p${pri}`}>P{pri}</span>}</td>
-            <td>{String(f['System.State'] ?? '')}</td>
-            <td className="muted">{String(f['System.IterationPath'] ?? '').split('\\').pop()}</td>
-            <td className="muted">{relativeTime(f['System.ChangedDate'])}</td>
-          </tr>
-        )
-      })}
-    </>
+    <tr className={selected ? 'selected' : ''} onClick={onOpen} onContextMenu={(e) => { e.preventDefault(); onMenu() }} style={{ ['--type-color' as string]: typeColor(types[project] ?? [], type) }} title="Click for details · right-click for more">
+      <td className="num faint">{unseen && <span className="unseen-dot" title="Changed by someone else since you last looked" />}{it.id}</td>
+      <td><span className="typebar" />{type}</td>
+      <td className="title">
+        {String(f['System.Title'] ?? '')}
+        {who === 'assignee' && <span className="assignee faint" title="Assigned to">→ {(f['System.AssignedTo'] as Person)?.displayName ?? 'Unassigned'}</span>}
+        {who === 'closedBy' && closedBy && <span className="assignee faint">closed by {closedBy}</span>}
+        {prs.map((p) => (
+          <button key={p.pullRequestId} type="button" className={`pr-link ${p.isDraft ? 'draft' : ''}`} title={`${p.isDraft ? 'Draft pull request' : 'Open pull request'}: ${p.title}`} onClick={(e) => { e.stopPropagation(); onOpenPr(p) }}>
+            <GitPullRequest size={11} />!{p.pullRequestId}
+          </button>
+        ))}
+      </td>
+      <td className="disc">{typeof comments === 'number' && comments > 0 && <span className="meta" title={`${comments} comment${comments > 1 ? 's' : ''} in the discussion`}><MessageSquare size={13} />{comments}</span>}</td>
+      {showProject && <td className="muted project">{project}</td>}
+      <td className="pri">{typeof pri === 'number' && <span className={`pri p${pri}`}>P{pri}</span>}</td>
+      <td>{String(f['System.State'] ?? '')}</td>
+      <td className="muted">{String(f['System.IterationPath'] ?? '').split('\\').pop()}</td>
+      <td className="muted">{relativeTime(String((closedView && f['Microsoft.VSTS.Common.ClosedDate']) || f['System.ChangedDate'] || ''))}</td>
+    </tr>
   )
 }

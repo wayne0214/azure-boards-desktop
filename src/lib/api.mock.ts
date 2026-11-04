@@ -30,7 +30,7 @@ const projectPeople: Record<string, Identity[]> = {
 const everyone = [...new Map(Object.values(projectPeople).flat().map((p) => [p.id, p])).values()]
 
 const projects: Project[] = [
-  { id: 'p1', name: 'Contoso Mobile', description: 'Mobile and web apps for the Contoso health service.' },
+  { id: 'p1', name: 'Contoso Mobile', description: 'Mobile and web apps for Contoso parcel delivery.' },
   { id: 'p2', name: 'Fabrikam Web', description: 'Customer web portal.' },
   { id: 'p3', name: 'Internal Tools', description: 'Shared tooling and infrastructure.' },
 ]
@@ -202,7 +202,7 @@ function mk(
       'WEF_demo_Kanban.Column.Done': false,
       'Microsoft.VSTS.Common.Priority': 2,
       ...(type === 'User Story' ? { 'Custom.SRSID': `SRS-${id - 1000}`, 'Custom.RiskLevel': 'Medium' } : type === 'Feature' ? { 'Custom.DIID': `DI-${id - 1100}` } : {}),
-      'System.Description': `<p>${title}.</p><p>Covers the happy path and the main failure cases. See the design notes linked from the parent feature.</p><ul><li>Acceptance criteria agreed with clinical team</li><li>Telemetry events added</li></ul>`,
+      'System.Description': `<p>${title}.</p><p>Covers the happy path and the main failure cases. See the design notes linked from the parent feature.</p><ul><li>Acceptance criteria agreed with operations team</li><li>Telemetry events added</li></ul>`,
       ...extra,
     },
     relations: [],
@@ -210,22 +210,22 @@ function mk(
 }
 
 let items: WorkItem[] = [
-  mk(1182, 'User Story', 'Patient can retake a photo when the pose check fails', 'New', null, { 'Microsoft.VSTS.Scheduling.StoryPoints': 3, 'System.Tags': 'capture; ux' }),
-  mk(1183, 'Bug', 'Angle overlay drifts after device rotation on Android 14', 'New', people[2], { 'Microsoft.VSTS.Common.Priority': 1, 'System.Tags': 'android' }),
-  mk(1171, 'User Story', 'Clinician dashboard shows pending reviews grouped by clinic', 'Ready', people[1], { 'Microsoft.VSTS.Scheduling.StoryPoints': 5, 'System.Tags': 'dashboard' }),
-  mk(1176, 'User Story', 'Export screening report as PDF with clinic letterhead', 'Ready', people[3], { 'Microsoft.VSTS.Scheduling.StoryPoints': 8 }),
+  mk(1182, 'User Story', 'Driver can retake a photo when the photo check fails', 'New', null, { 'Microsoft.VSTS.Scheduling.StoryPoints': 3, 'System.Tags': 'capture; ux' }),
+  mk(1183, 'Bug', 'Route overlay drifts after device rotation on Android 14', 'New', people[2], { 'Microsoft.VSTS.Common.Priority': 1, 'System.Tags': 'android' }),
+  mk(1171, 'User Story', 'Dispatcher dashboard shows pending reviews grouped by depot', 'Ready', people[1], { 'Microsoft.VSTS.Scheduling.StoryPoints': 5, 'System.Tags': 'dashboard' }),
+  mk(1176, 'User Story', 'Export delivery report as PDF with depot letterhead', 'Ready', people[3], { 'Microsoft.VSTS.Scheduling.StoryPoints': 8 }),
   mk(1164, 'User Story', 'Secure upload resumes after network drop', 'In Progress', people[0], { 'Microsoft.VSTS.Scheduling.StoryPoints': 5, 'System.Tags': 'reliability; upload' }),
-  mk(1168, 'Bug', 'Cobb angle rounding differs between app and report', 'In Progress', people[4], { 'Microsoft.VSTS.Common.Priority': 1, 'WEF_demo_Kanban.Column.Done': true, 'System.Tags': 'clinical' }),
-  mk(1159, 'User Story', 'Parents receive a follow-up reminder 6 months after screening', 'In Progress', people[1], { 'Microsoft.VSTS.Scheduling.StoryPoints': 3 }),
+  mk(1168, 'Bug', 'Delivery distance rounding differs between app and report', 'In Progress', people[4], { 'Microsoft.VSTS.Common.Priority': 1, 'WEF_demo_Kanban.Column.Done': true, 'System.Tags': 'operations' }),
+  mk(1159, 'User Story', 'Customers receive a reminder the day before delivery', 'In Progress', people[1], { 'Microsoft.VSTS.Scheduling.StoryPoints': 3 }),
   mk(1150, 'User Story', 'Onboarding explains what the camera needs to see', 'Review', people[3], { 'Microsoft.VSTS.Scheduling.StoryPoints': 2, 'System.Tags': 'ux' }),
   mk(1141, 'Bug', 'Crash when opening a report with no images attached', 'Done', people[2], { 'Microsoft.VSTS.Common.Priority': 1 }),
-  mk(1138, 'User Story', 'Clinic admins can invite staff by email', 'Done', people[0], { 'Microsoft.VSTS.Scheduling.StoryPoints': 3 }),
-  mk(1133, 'User Story', 'Screening history list supports search by patient ID', 'Done', people[4], { 'Microsoft.VSTS.Scheduling.StoryPoints': 2 }),
-  mk(1190, 'Feature', 'Clinic reporting', 'New', people[1]),
+  mk(1138, 'User Story', 'Depot admins can invite staff by email', 'Done', people[0], { 'Microsoft.VSTS.Scheduling.StoryPoints': 3 }),
+  mk(1133, 'User Story', 'Delivery history list supports search by customer ID', 'Done', people[4], { 'Microsoft.VSTS.Scheduling.StoryPoints': 2 }),
+  mk(1190, 'Feature', 'Depot reporting', 'New', people[1]),
   mk(1191, 'Feature', 'Offline capture', 'Active', people[0]),
   mk(1195, 'Task', 'Write upload resume unit tests', 'New', people[0], { 'System.Parent': 1164, 'Microsoft.VSTS.Scheduling.RemainingWork': 4 }),
   mk(1196, 'Task', 'Keychain storage for resume token', 'New', people[1], { 'System.Parent': 1164, 'Microsoft.VSTS.Scheduling.RemainingWork': 6 }),
-  mk(1197, 'Bug', 'Pose check accepts a photo with the patient partly out of frame', 'New', people[0], { 'System.State': 'Resolved', 'Microsoft.VSTS.Common.Priority': 2, 'System.Tags': 'capture' }),
+  mk(1197, 'Bug', 'Photo check accepts a photo with the parcel partly out of frame', 'New', people[0], { 'System.State': 'Resolved', 'Microsoft.VSTS.Common.Priority': 2, 'System.Tags': 'capture' }),
   // On the test server and assigned to me to test.
   mk(1198, 'Bug', 'Upload progress bar jumps back to zero after resuming', 'Review', people[0], { 'System.State': 'Ready to Test', 'Microsoft.VSTS.Common.Priority': 2, 'System.Tags': 'upload' }),
 ]
@@ -233,10 +233,10 @@ items.find((i) => i.id === 1164)!.fields['System.Parent'] = 1191
 
 // A small UN > DI > SRS tree for the Requirements view.
 items.push(
-  mk(1101, 'Epic', 'Patient can complete a check-up at home', 'Active', people[1], { 'Custom.UNID': 'UN-001' }),
-  mk(1102, 'Epic', 'Clinicians can review screenings remotely', 'New', people[3], { 'Custom.UNID': 'UN-002' }),
-  mk(1192, 'Feature', 'Camera guides the patient into the correct pose', 'Active', people[0], { 'Custom.DIID': 'DI-092', 'System.Parent': 1101 }),
-  mk(1193, 'Feature', 'Screening results are sent securely', 'New', people[4], { 'Custom.DIID': 'DI-093', 'System.Parent': 1102 }),
+  mk(1101, 'Epic', 'Customer can track a parcel to the door', 'Active', people[1], { 'Custom.UNID': 'UN-001' }),
+  mk(1102, 'Epic', 'Dispatchers can review deliveries remotely', 'New', people[3], { 'Custom.UNID': 'UN-002' }),
+  mk(1192, 'Feature', 'Camera guides the courier into the correct spot', 'Active', people[0], { 'Custom.DIID': 'DI-092', 'System.Parent': 1101 }),
+  mk(1193, 'Feature', 'Delivery results are sent securely', 'New', people[4], { 'Custom.DIID': 'DI-093', 'System.Parent': 1102 }),
 )
 const spec = (id: number, text: string, ac: string) => Object.assign(items.find((i) => i.id === id)!.fields, {
   'Custom.SRSSpec': `<p>The application shall ${text}.</p>`,
@@ -246,27 +246,27 @@ Object.assign(items.find((i) => i.id === 1191)!.fields, { 'System.Parent': 1101 
 Object.assign(items.find((i) => i.id === 1190)!.fields, { 'System.Parent': 1102 })
 for (const [id, parent] of [[1164, 1191], [1182, 1192], [1150, 1192], [1171, 1190], [1176, 1190], [1133, 1190]] as const) items.find((i) => i.id === id)!.fields['System.Parent'] = parent
 spec(1164, 'resume an interrupted upload from the last confirmed chunk', 'Upload continues after airplane mode is toggled|No duplicate images are stored')
-spec(1182, 'let the patient retake a photo when the pose check fails', 'Retake button shown on failure|Previous photo is discarded')
+spec(1182, 'let the driver retake a photo when the photo check fails', 'Retake button shown on failure|Previous photo is discarded')
 spec(1150, 'explain on first launch what the camera needs to see', '')
-spec(1171, 'group pending reviews by clinic on the clinician dashboard', 'Groups sorted by oldest pending review')
-spec(1176, 'export a screening report as PDF with the clinic letterhead', 'PDF/A output|Letterhead from clinic settings')
-spec(1133, 'search the screening history by patient ID', 'Partial IDs match')
+spec(1171, 'group pending reviews by depot on the dispatcher dashboard', 'Groups sorted by oldest pending review')
+spec(1176, 'export a delivery report as PDF with the depot letterhead', 'PDF/A output|Letterhead from depot settings')
+spec(1133, 'search the delivery history by customer ID', 'Partial IDs match')
 items.find((i) => i.id === 1197)!.fields['System.Parent'] = 1182
 items.find((i) => i.id === 1195)!.fields['System.Tags'] = 'BE'
 items.find((i) => i.id === 1196)!.fields['System.Title'] = '[FE] Keychain storage for resume token'
 items.push(
   mk(1210, 'Task', '[QA] Test resume after airplane mode', 'New', people[3], { 'System.Parent': 1164 }),
-  mk(1211, 'Task', 'Pose overlay warning when out of frame', 'Active', people[3], { 'System.Parent': 1182, 'System.Tags': 'FE', 'System.State': 'Active', 'Microsoft.VSTS.Scheduling.RemainingWork': 4 }),
-  mk(1212, 'Task', 'Validate keypoints server-side', 'Done', people[2], { 'System.Parent': 1182, 'System.Tags': 'BE', 'System.State': 'Closed' }),
+  mk(1211, 'Task', 'Photo warning when the parcel is out of frame', 'Active', people[3], { 'System.Parent': 1182, 'System.Tags': 'FE', 'System.State': 'Active', 'Microsoft.VSTS.Scheduling.RemainingWork': 4 }),
+  mk(1212, 'Task', 'Validate photo metadata server-side', 'Done', people[2], { 'System.Parent': 1182, 'System.Tags': 'BE', 'System.State': 'Closed' }),
   mk(1213, 'Task', 'Test with partial-body photos', 'New', people[1], { 'System.Parent': 1182, 'System.Tags': 'QA' }),
-  mk(1214, 'Task', 'Clinic grouping query', 'Done', people[4], { 'System.Parent': 1171, 'System.Tags': 'BE', 'System.State': 'Closed' }),
+  mk(1214, 'Task', 'Depot grouping query', 'Done', people[4], { 'System.Parent': 1171, 'System.Tags': 'BE', 'System.State': 'Closed' }),
   mk(1215, 'Task', 'Dashboard grouping UI', 'Done', people[0], { 'System.Parent': 1171, 'System.Tags': 'FE', 'System.State': 'Closed' }),
 )
 
 // Change requests and issues: real ones linked the right way, and a few that are really tasks.
 const link = (rel: string, id: number) => ({ rel, url: `https://dev.azure.com/demo-org/_apis/wit/workItems/${id}` })
 items.push(
-  mk(1220, 'Change Request', 'Allow two photo retakes instead of one (clinic request)', 'New', people[1], { 'System.State': 'Proposed' }),
+  mk(1220, 'Change Request', 'Allow two photo retakes instead of one (depot request)', 'New', people[1], { 'System.State': 'Proposed' }),
   mk(1221, 'Change Request', '[FE] Update retake button copy', 'New', people[3], { 'System.State': 'Active', 'System.Parent': 1182, 'Microsoft.VSTS.Scheduling.RemainingWork': 2 }),
   mk(1222, 'Issue', 'Android 14 test devices not delivered yet', 'New', people[1], { 'System.State': 'Active' }),
   mk(1223, 'Issue', '[BE] Fix flaky upload integration test', 'New', people[2], { 'System.State': 'Active', 'System.Parent': 1164, 'Microsoft.VSTS.Scheduling.RemainingWork': 3 }),
@@ -282,8 +282,8 @@ for (const [id, m] of [[1164, 'Test'], [1182, 'Test'], [1171, 'Test'], [1133, 'T
 // Test cases: SRS 1133 (Test) and 1150 (no method) have none; 1305 tests nothing; 1302 tests two SRS.
 const step = (n: number, action: string, expected: string): StepItem => ({ kind: 'step', id: n, action: `<P>${action}</P>`, expected: expected ? `<P>${expected}</P>` : '' })
 const loginSteps: StepItem[] = [
-  step(2, 'Open the clinician portal login page', 'Login form is shown'),
-  step(3, 'Enter a valid clinician email and password', ''),
+  step(2, 'Open the dispatcher portal login page', 'Login form is shown'),
+  step(3, 'Enter a valid dispatcher email and password', ''),
   step(4, 'Select Sign in', 'The dashboard opens'),
 ]
 const tcRel = (...srs: number[]) => srs.map((n) => link('Microsoft.VSTS.Common.TestedBy-Reverse', n))
@@ -295,18 +295,18 @@ const tc = (id: number, sdv: number, title: string, srs: number[], steps: StepIt
   it.relations = tcRel(...srs)
   return it
 }
-const shared = mk(1300, 'Shared Steps', 'Login as Clinician', 'New', null, { 'System.State': 'Ready', 'Microsoft.VSTS.TCM.Steps': serializeSteps(loginSteps) })
+const shared = mk(1300, 'Shared Steps', 'Login as Dispatcher', 'New', null, { 'System.State': 'Ready', 'Microsoft.VSTS.TCM.Steps': serializeSteps(loginSteps) })
 const useLogin: StepItem = { kind: 'shared', id: 2, ref: 1300 }
 items.push(
   shared,
-  tc(1301, 1, 'Upload resumes after airplane mode is toggled', [1164], [useLogin, step(3, 'Start uploading a 20 MB screening set', 'Progress bar advances'), step(4, 'Turn on airplane mode, wait 10 seconds, then turn it off', 'Upload continues from the last confirmed chunk')], { 'Custom.LastOutcome': 'Passed', 'Custom.LastTestedRelease': 'v2.0.0', 'System.Tags': 'Smoke' }),
-  tc(1302, 2, 'Interrupted upload does not lose the pose-check retake', [1164, 1182], [step(2, 'Take a photo that fails the pose check', 'Retake prompt is shown'), step(3, 'Lose the network connection and select Retake', 'A new photo is captured and queued'), step(4, 'Restore the connection', 'Only the new photo is uploaded')]),
-  tc(1303, 3, 'Retake button appears when the pose check fails', [1182], [useLogin, step(3, 'Capture a photo with the patient partly out of frame', 'Pose check fails'), step(4, 'Select Retake', 'The camera preview returns')], { 'Custom.LastOutcome': 'Passed', 'Custom.LastTestedRelease': 'v2.0.0', 'System.Tags': 'Smoke; Regression' }),
-  tc(1304, 4, 'Dashboard groups pending reviews by clinic', [1171], [useLogin, step(3, 'Open the pending reviews panel', 'Reviews are grouped by clinic'), step(4, 'Compare group order with the review dates', 'Groups are sorted by oldest pending review')]),
+  tc(1301, 1, 'Upload resumes after airplane mode is toggled', [1164], [useLogin, step(3, 'Start uploading a 20 MB photo set', 'Progress bar advances'), step(4, 'Turn on airplane mode, wait 10 seconds, then turn it off', 'Upload continues from the last confirmed chunk')], { 'Custom.LastOutcome': 'Passed', 'Custom.LastTestedRelease': 'v2.0.0', 'System.Tags': 'Smoke' }),
+  tc(1302, 2, 'Interrupted upload does not lose the photo-check retake', [1164, 1182], [step(2, 'Take a photo that fails the photo check', 'Retake prompt is shown'), step(3, 'Lose the network connection and select Retake', 'A new photo is captured and queued'), step(4, 'Restore the connection', 'Only the new photo is uploaded')]),
+  tc(1303, 3, 'Retake button appears when the photo check fails', [1182], [useLogin, step(3, 'Capture a photo with the parcel partly out of frame', 'Photo check fails'), step(4, 'Select Retake', 'The camera preview returns')], { 'Custom.LastOutcome': 'Passed', 'Custom.LastTestedRelease': 'v2.0.0', 'System.Tags': 'Smoke; Regression' }),
+  tc(1304, 4, 'Dashboard groups pending reviews by depot', [1171], [useLogin, step(3, 'Open the pending reviews panel', 'Reviews are grouped by depot'), step(4, 'Compare group order with the review dates', 'Groups are sorted by oldest pending review')]),
   tc(1305, 5, 'Exploratory check of the report footer', [], [step(2, 'Open any exported report', 'Footer shows the report version')]),
-  tc(1306, 6, 'Clinic grouping handles clinics with no pending reviews', [1171], [step(2, 'Open the dashboard for a clinic with no pending reviews', 'The clinic is hidden from the list'), step(3, 'Add a pending review to that clinic', 'The clinic appears with one review')], { 'Custom.LastOutcome': 'Failed', 'Custom.LastTestedRelease': 'v2.0.0' }),
-  tc(1307, 7, 'Report PDF carries the clinic letterhead', [1176], [step(2, 'Export a screening report as PDF', 'A PDF file is saved'), step(3, 'Open the PDF', 'Letterhead from clinic settings is on every page')]),
-  tc(1308, 8, 'Retake keeps the previous photo until the new one passes', [1182], [step(2, 'Select Retake and take a photo that also fails', 'Pose check fails again'), step(3, 'Review the capture history', 'No discarded photos are attached')]),
+  tc(1306, 6, 'Depot grouping handles depots with no pending reviews', [1171], [step(2, 'Open the dashboard for a depot with no pending reviews', 'The depot is hidden from the list'), step(3, 'Add a pending review to that depot', 'The depot appears with one review')], { 'Custom.LastOutcome': 'Failed', 'Custom.LastTestedRelease': 'v2.0.0' }),
+  tc(1307, 7, 'Report PDF carries the depot letterhead', [1176], [step(2, 'Export a delivery report as PDF', 'A PDF file is saved'), step(3, 'Open the PDF', 'Letterhead from depot settings is on every page')]),
+  tc(1308, 8, 'Retake keeps the previous photo until the new one passes', [1182], [step(2, 'Select Retake and take a photo that also fails', 'Photo check fails again'), step(3, 'Review the capture history', 'No discarded photos are attached')]),
 )
 // Items in the other demo projects: they show only in My Work, never on the Contoso Mobile board.
 const elsewhere: WorkItem[] = [
@@ -420,7 +420,7 @@ export const mockApi: Api = {
       settings: { defaultIteration: iterations[2] },
       workItemTypes: structuredClone(types),
       members: structuredClone(people),
-      tags: ['android', 'capture', 'clinical', 'dashboard', 'ios', 'reliability', 'upload', 'ux'],
+      tags: ['android', 'capture', 'dashboard', 'ios', 'operations', 'reliability', 'upload', 'ux'],
       fieldTypes: { 'Custom.UNID': 'string', 'Custom.DIID': 'string', 'Custom.SRSID': 'string', 'Custom.RiskLevel': 'string', 'Custom.SRSSpec': 'html', 'Custom.Rationale': 'html', 'Custom.VerificationMethod': 'string', 'Custom.SDVID': 'string', 'Custom.LastOutcome': 'string', 'Custom.LastTestedRelease': 'string' },
     }
   },
@@ -468,6 +468,15 @@ export const mockApi: Api = {
     await delay(300)
     const handedOff = (i: WorkItem) => [1183, 1168, 1210, 1213].includes(i.id) && (i.fields['System.AssignedTo'] as { id?: string } | undefined)?.id !== 'u1' && i.fields['System.State'] !== 'Closed'
     return structuredClone(items.filter(handedOff))
+  },
+  // Demo: what the user filed or handed off and is now closed; one went back to them when it closed.
+  closedByOthers: async () => {
+    await delay(300)
+    const closedBy = (i: WorkItem) => (i.fields['System.AssignedTo'] as Identity | undefined) ?? people[0]
+    return structuredClone(items.filter((i) => [1141, 1212, 1214, 1215].includes(i.id)).map((i, n) => ({
+      ...i,
+      fields: { ...i.fields, 'System.State': 'Closed', 'System.ChangedDate': daysAgo(n * 4 + 1), 'Microsoft.VSTS.Common.ClosedDate': daysAgo(n * 4 + 1), 'Microsoft.VSTS.Common.ClosedBy': closedBy(i) },
+    })))
   },
   workItemTypes: async () => { await delay(150); return structuredClone(types) },
   // Demo projects use the Agile process: User Story is the requirement level, Feature and Epic the portfolio.
@@ -560,7 +569,7 @@ export const mockApi: Api = {
     return structuredClone(it)
   },
   // Demo: SRS 1171 changed its specification after test case SDV-0004 was created.
-  getUpdates: async (_o, _p, id) => (id === 1171 ? [{ id: 2, rev: 4, revisedDate: daysAgo(3), fields: { 'Custom.SRSSpec': { oldValue: '<p>The application shall group pending reviews on the clinician dashboard.</p>', newValue: '<p>The application shall group pending reviews by clinic on the clinician dashboard.</p>' } } }] : [
+  getUpdates: async (_o, _p, id) => (id === 1171 ? [{ id: 2, rev: 4, revisedDate: daysAgo(3), fields: { 'Custom.SRSSpec': { oldValue: '<p>The application shall group pending reviews on the dispatcher dashboard.</p>', newValue: '<p>The application shall group pending reviews by depot on the dispatcher dashboard.</p>' } } }] : [
     { id: 1, rev: 1, revisedBy: people[1], revisedDate: daysAgo(12), fields: { 'System.State': { newValue: 'New' } } },
     { id: 2, rev: 2, revisedBy: people[1], revisedDate: daysAgo(9), fields: { 'System.AssignedTo': { newValue: people[0] }, 'System.IterationPath': { oldValue: 'Contoso Mobile', newValue: 'Contoso Mobile\\Sprint 14' } } },
     { id: 3, rev: 3, revisedBy: people[0], revisedDate: daysAgo(4), fields: { 'System.State': { oldValue: 'New', newValue: 'Active' }, 'System.Description': { oldValue: '<p>a</p>', newValue: '<p>b</p>' } }, relations: { added: [{ rel: 'ArtifactLink', url: `vstfs:///Git/Ref/p%2Fr%2FGBfeature%2F${id}-demo`, attributes: { name: 'Branch' } }] } },
@@ -593,8 +602,8 @@ export const mockApi: Api = {
     if (useUiStore.getState().view === 'tests') return {
       headers: ['SDV ID', 'SRS ID', 'Test Steps', 'Acceptance Criteria', 'Test Outcome'],
       rows: [
-        ['SDV-0003', 'SRS-182', '1. Fail the pose check => Retake button is shown\n2. Select Retake => Camera reopens', 'Retake button shown on failure', 'Pass'],
-        ['SDV-0010', 'SRS-133', '1. Open screening history => List is shown\n2. Search by patient ID - Expected: Only that patient is listed', 'Search matches the full patient ID', ''],
+        ['SDV-0003', 'SRS-182', '1. Fail the photo check => Retake button is shown\n2. Select Retake => Camera reopens', 'Retake button shown on failure', 'Pass'],
+        ['SDV-0010', 'SRS-133', '1. Open delivery history => List is shown\n2. Search by customer ID - Expected: Only that customer is listed', 'Search matches the full customer ID', ''],
         ['SDV-0010', 'SRS-133', '3. Clear the search => Full list returns', 'Clearing restores the list', ''],
         ['SDV-0011', 'SRS-150, SRS-999', '1. Install and open the app => Onboarding starts', 'Camera guidance is shown before the first photo', ''],
       ],
@@ -602,7 +611,7 @@ export const mockApi: Api = {
     return {
     headers: ['Title', 'Type', 'Assigned To', 'Priority', 'Tags'],
     rows: [
-      ['Add dark mode to clinician portal', 'User Story', 'priya@example.com', '2', 'ux'],
+      ['Add dark mode to dispatcher portal', 'User Story', 'priya@example.com', '2', 'ux'],
       ['Login button unresponsive on Safari 17', 'Bug', 'marcus@example.com', '1', 'web'],
       ['Write release notes for 2.4', 'Task', '', '3', ''],
     ],
@@ -680,8 +689,8 @@ const demoPlaywrightReport = {
   }, {
     title: 'e2e/dashboard.spec.ts', file: 'e2e/dashboard.spec.ts',
     specs: [
-      { title: 'groups pending reviews by clinic SDV-0004', file: 'e2e/dashboard.spec.ts', tags: [], tests: ['macOS', 'Windows 11'].map((projectName) => ({ projectName, status: 'flaky', annotations: [], results: [{ status: 'failed', duration: 2000 }, { status: 'passed', duration: 1800 }] })) },
-      { title: 'shows the clinic letterhead', file: 'e2e/dashboard.spec.ts', tags: [], tests: [{ projectName: 'macOS', status: 'expected', annotations: [{ type: 'TestCase', description: '1307' }], results: [{ status: 'passed', duration: 900 }] }] },
+      { title: 'groups pending reviews by depot SDV-0004', file: 'e2e/dashboard.spec.ts', tags: [], tests: ['macOS', 'Windows 11'].map((projectName) => ({ projectName, status: 'flaky', annotations: [], results: [{ status: 'failed', duration: 2000 }, { status: 'passed', duration: 1800 }] })) },
+      { title: 'shows the depot letterhead', file: 'e2e/dashboard.spec.ts', tags: [], tests: [{ projectName: 'macOS', status: 'expected', annotations: [{ type: 'TestCase', description: '1307' }], results: [{ status: 'passed', duration: 900 }] }] },
       { title: 'renders the empty state', file: 'e2e/dashboard.spec.ts', tags: [], tests: [{ projectName: 'macOS', status: 'expected', annotations: [], results: [{ status: 'passed', duration: 700 }] }] },
     ],
   }],

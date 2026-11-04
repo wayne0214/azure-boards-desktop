@@ -429,7 +429,7 @@ mod tests {
     use super::*;
 
     fn run_203() -> Value {
-        json!({ "id": 203, "name": "Playwright · login", "state": "Completed", "isAutomated": true, "plan": { "id": "5383" }, "webAccessUrl": "https://dev.azure.com/dxdhub/AI%20Scoliosis/_TestManagement/Runs?runId=203" })
+        json!({ "id": 203, "name": "Playwright · login", "state": "Completed", "isAutomated": true, "plan": { "id": "5383" }, "webAccessUrl": "https://dev.azure.com/contoso/Contoso%20Mobile/_TestManagement/Runs?runId=203" })
     }
 
     fn failed_result() -> Value {

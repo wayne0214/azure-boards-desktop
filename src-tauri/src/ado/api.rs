@@ -547,6 +547,22 @@ pub async fn assigned_to_others(client: &AdoClient, available_fields: &FieldMap)
     get_items_batch(client, "", &ids, &fields).await
 }
 
+/// The same work once it is closed, from the last `days` days, newest first: the bugs a tester filed and can look back on.
+/// A closed bug often goes back to the person who filed it, so items I created count whoever holds them now.
+pub async fn closed_by_others(client: &AdoClient, available_fields: &FieldMap, days: u32) -> AppResult<Vec<Value>> {
+    let query = format!(
+        "SELECT [System.Id] FROM WorkItems WHERE \
+         ([System.CreatedBy] = @Me OR ([System.AssignedTo] EVER @Me AND [System.AssignedTo] <> @Me)) \
+         AND [System.State] IN ('Closed', 'Done', 'Completed') \
+         AND [System.ChangedDate] >= @Today - {days} \
+         AND [System.WorkItemType] NOT IN ('Test Case', 'Shared Steps', 'Test Plan', 'Test Suite') \
+         ORDER BY [System.ChangedDate] DESC"
+    );
+    let ids = run_wiql(client, "", &query, 300).await?;
+    let fields = select_fields(available_fields, &["Microsoft.VSTS.Common.ClosedBy".to_string()]);
+    get_items_batch(client, "", &ids, &fields).await
+}
+
 /// Work items that mentioned me in the last week, newest change first.
 pub async fn mentioned_items(client: &AdoClient, available_fields: &FieldMap) -> AppResult<Vec<Value>> {
     let query = "SELECT [System.Id] FROM WorkItems WHERE [System.Id] IN (@RecentMentions) \

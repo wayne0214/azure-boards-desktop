@@ -161,7 +161,7 @@ describe('useWikiStore', () => {
   })
 
   it('links the requirement a piece of feedback became', async () => {
-    await useWikiStore.getState().open('/Collaborator feedback/2026-10-22 Parent survey')
+    await useWikiStore.getState().open('/Collaborator feedback/2026-10-22 Customer survey')
     expect(await useWikiStore.getState().linkItem(1159)).toBe(true)
     expect(useWikiStore.getState().page!.content).toContain('## Became\n- #1159')
     expect(useWikiStore.getState().page!.content).not.toContain('Not linked yet')
@@ -186,10 +186,10 @@ describe('useWikiStore', () => {
     await useWikiStore.getState().loadChanges()
     const s = useWikiStore.getState()
     const unseen = unseenChanges(s).map((c) => c.path)
-    expect(unseen).toContain('/Collaborator feedback/2026-10 Clinic pilot')
+    expect(unseen).toContain('/Collaborator feedback/2026-10 Depot pilot')
     expect(unseen).not.toContain('/Home')
-    expect(s.mentionsOfMe.map((m) => m.path)).toEqual(['/Collaborator feedback/2026-10 Clinic pilot'])
-    await useWikiStore.getState().open('/Collaborator feedback/2026-10 Clinic pilot')
-    expect(unseenChanges(useWikiStore.getState()).map((c) => c.path)).not.toContain('/Collaborator feedback/2026-10 Clinic pilot')
+    expect(s.mentionsOfMe.map((m) => m.path)).toEqual(['/Collaborator feedback/2026-10 Depot pilot'])
+    await useWikiStore.getState().open('/Collaborator feedback/2026-10 Depot pilot')
+    expect(unseenChanges(useWikiStore.getState()).map((c) => c.path)).not.toContain('/Collaborator feedback/2026-10 Depot pilot')
   })
 })
