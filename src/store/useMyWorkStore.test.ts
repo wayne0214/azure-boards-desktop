@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { loadApi } from '@/lib/api'
 import type { Identity, WorkItem, WorkItemType } from '@/lib/types'
 import { useAppStore } from './useAppStore'
-import { attentionCount, handedOffOrder, isPlanning, isReadyToTest, isResolved, isShown, peopleFor, planningCount, useMyWorkStore, type PlanningByProject, type TypesByProject } from './useMyWorkStore'
+import { attentionCount, handedOffOrder, myWorkProjects, myWorkTabs, isPlanning, isReadyToTest, isResolved, isShown, peopleFor, planningCount, useMyWorkStore, type PlanningByProject, type TypesByProject } from './useMyWorkStore'
 
 const me = { org: 'o', userId: 'u1', userName: 'Wayne Lai' }
 const bug: WorkItemType = { name: 'Bug', referenceName: 'Bug', color: '000', states: [
@@ -159,5 +159,55 @@ describe('work assigned to others', () => {
     expect(others?.length).toBeGreaterThan(0)
     expect(others!.every((it) => (it.fields['System.AssignedTo'] as { id?: string }).id !== 'u1')).toBe(true)
     expect(items!.some((it) => others!.some((o) => o.id === it.id))).toBe(false)
+  })
+})
+
+describe('My Work tabs', () => {
+  const at = (id: number, project: string, state: string, assignedTo: string, changed: string): WorkItem => ({ id, rev: 1, fields: {
+    'System.TeamProject': project, 'System.WorkItemType': 'Bug', 'System.State': state, 'System.Title': `Item ${id}`,
+    'System.AssignedTo': { id: assignedTo, displayName: assignedTo }, 'System.ChangedDate': changed,
+  } })
+  const tabTypes: TypesByProject = { P: [bug], Q: [bug] }
+  const base = { types: tabTypes, planning: {}, showPlanning: true, search: '', project: null }
+  const items = [at(1, 'P', 'Active', 'u1', '2026-10-01'), at(2, 'Q', 'Resolved', 'u1', '2026-10-02'), at(3, 'Q', 'Active', 'u1', '2026-10-03')]
+  const others = [at(4, 'P', 'Active', 'u2', '2026-10-04'), at(3, 'Q', 'Active', 'u2', '2026-09-01')]
+  const closed = [at(5, 'P', 'Closed', 'u1', '2026-10-01'), at(6, 'Q', 'Closed', 'u2', '2026-10-05')]
+
+  it('splits my work by tab and keeps an item reassigned to me out of Assigned to others', () => {
+    const t = myWorkTabs({ ...base, items, others, closed })
+    expect(t.active.map((it) => it.id)).toEqual([3, 1])
+    expect(t.resolved.map((it) => it.id)).toEqual([2])
+    expect(t.others.map((it) => it.id)).toEqual([4])
+  })
+
+  it('lists closed work newest first', () => {
+    expect(myWorkTabs({ ...base, items, others, closed }).closed.map((it) => it.id)).toEqual([6, 5])
+  })
+
+  it('narrows every tab, closed work included, to one project', () => {
+    const t = myWorkTabs({ ...base, items, others, closed, project: 'Q' })
+    expect([...t.active, ...t.resolved, ...t.others, ...t.closed].every((it) => it.fields['System.TeamProject'] === 'Q')).toBe(true)
+    expect(t.closed.map((it) => it.id)).toEqual([6])
+  })
+
+  it('offers each project once, by name', () => {
+    expect(myWorkProjects(items, others, null, closed)).toEqual(['P', 'Q'])
+  })
+
+  it('remembers the tab and project per organization, and loads closed work when asked', async () => {
+    await loadApi()
+    useAppStore.setState((st) => ({ activeOrg: 'demo-org', settings: { ...st.settings, accounts: [{ org: 'demo-org', userId: 'u1', userName: 'Wayne Lai' }] } }))
+    useMyWorkStore.setState({ org: null })
+    await useMyWorkStore.getState().load()
+    useMyWorkStore.getState().setTab('others')
+    useMyWorkStore.getState().setProject('Contoso Mobile')
+    expect(useMyWorkStore.getState().closed).toBeNull()
+    useMyWorkStore.getState().setOthersMode('closed')
+    await new Promise((r) => setTimeout(r, 500))
+    expect(useMyWorkStore.getState().closed?.length).toBeGreaterThan(0)
+    // Coming back to the organization brings the same tab and project.
+    useMyWorkStore.setState({ org: null })
+    await useMyWorkStore.getState().load()
+    expect(useMyWorkStore.getState()).toMatchObject({ tab: 'others', project: 'Contoso Mobile', othersMode: 'open', closed: null })
   })
 })

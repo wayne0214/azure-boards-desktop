@@ -173,10 +173,37 @@ pub async fn policy_evaluations(client: &AdoClient, project_id: &str, pr_id: i64
     Ok(res.value)
 }
 
+/// A repository's branches. Each also carries, when Azure DevOps reports it, how far it is ahead of and behind the
+/// default branch, whether it is the default branch, and its last commit date, so pickers can hide merged branches
+/// and list recent ones first. Without those figures the branches are returned as they are.
 pub async fn list_branches(client: &AdoClient, repo_id: &str) -> AppResult<Vec<Value>> {
-    let url = client.url(&format!("{}/refs?filter=heads/&$top={BRANCH_CAP}", repo_base(repo_id)));
-    let res: ListResponse<Value> = client.get(&url).await?;
-    Ok(res.value)
+    let refs_url = client.url(&format!("{}/refs?filter=heads/&$top={BRANCH_CAP}", repo_base(repo_id)));
+    let stats_url = client.url(&format!("{}/stats/branches", repo_base(repo_id)));
+    let (refs, stats) = tokio::join!(client.get::<ListResponse<Value>>(&refs_url), client.get::<ListResponse<Value>>(&stats_url));
+    Ok(with_branch_stats(refs?.value, stats.map(|s| s.value).unwrap_or_default()))
+}
+
+/// Adds `aheadCount`, `behindCount`, `isBaseVersion` and `lastCommitDate` from the branch stats (named without
+/// "refs/heads/") to the matching refs.
+fn with_branch_stats(refs: Vec<Value>, stats: Vec<Value>) -> Vec<Value> {
+    let by_name: std::collections::HashMap<&str, &Value> = stats.iter().filter_map(|s| Some((s.get("name")?.as_str()?, s))).collect();
+    refs.into_iter()
+        .map(|mut r| {
+            let name = r.get("name").and_then(|n| n.as_str()).unwrap_or("").trim_start_matches("refs/heads/").to_string();
+            if let (Some(st), Some(obj)) = (by_name.get(name.as_str()), r.as_object_mut()) {
+                for k in ["aheadCount", "behindCount", "isBaseVersion"] {
+                    if let Some(v) = st.get(k) {
+                        obj.insert(k.to_string(), v.clone());
+                    }
+                }
+                let date = st.pointer("/commit/committer/date").or_else(|| st.pointer("/commit/author/date"));
+                if let Some(d) = date {
+                    obj.insert("lastCommitDate".to_string(), d.clone());
+                }
+            }
+            r
+        })
+        .collect()
 }
 
 /// Tag names in a repository ("v1.4.0"), without "refs/tags/". Reading them needs Code (Read) on the token.
@@ -350,6 +377,21 @@ pub async fn set_work_item_link(client: &AdoClient, project_id: &str, repo_id: &
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn branch_stats_are_added_to_matching_refs() {
+        let refs = vec![json!({ "name": "refs/heads/main", "objectId": "a" }), json!({ "name": "refs/heads/feature/x", "objectId": "b" }), json!({ "name": "refs/heads/new", "objectId": "c" })];
+        let stats = vec![
+            json!({ "name": "main", "aheadCount": 0, "behindCount": 0, "isBaseVersion": true, "commit": { "committer": { "date": "2026-11-01T00:00:00Z" } } }),
+            json!({ "name": "feature/x", "aheadCount": 0, "behindCount": 4, "isBaseVersion": false, "commit": { "author": { "date": "2026-10-01T00:00:00Z" } } }),
+        ];
+        let out = with_branch_stats(refs, stats);
+        assert_eq!(out[0]["isBaseVersion"], json!(true));
+        assert_eq!(out[0]["lastCommitDate"], json!("2026-11-01T00:00:00Z"));
+        assert_eq!(out[1]["aheadCount"], json!(0));
+        assert_eq!(out[1]["lastCommitDate"], json!("2026-10-01T00:00:00Z"));
+        assert!(out[2].get("aheadCount").is_none(), "a branch without stats is left as it is");
+    }
 
     #[test]
     fn mentioned_ids_reads_hash_and_ab_mentions() {

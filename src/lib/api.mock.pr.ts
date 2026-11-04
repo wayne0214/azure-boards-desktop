@@ -1,3 +1,4 @@
+import type { BranchInfo } from './pr/branchChoices'
 // Demo pull request data for browser mode.
 import type { Api } from './api'
 import type { BranchWorkItem, Comment, PrDetail, PullRequest, Thread } from './pr/types'
@@ -16,13 +17,22 @@ const repos = [
   { id: 'r3', name: 'fabrikam-web', defaultBranch: 'refs/heads/main', project: { id: 'p2', name: 'Fabrikam Web' } },
 ]
 
-const branches = [{ name: 'refs/heads/main', objectId: 'def456' }, { name: 'refs/heads/develop', objectId: 'dev1' }, { name: 'refs/heads/feature/upload-resume', objectId: 'abc123' }, { name: 'refs/heads/fix/cobb-rounding', objectId: 'c0b123' }]
+// Ahead counts and dates as Azure DevOps's branch stats give them; the merged ones are hidden in pickers by default.
+const branches: BranchInfo[] = [
+  { name: 'refs/heads/main', objectId: 'def456', aheadCount: 0, behindCount: 0, isBaseVersion: true, lastCommitDate: daysAgo(6) },
+  { name: 'refs/heads/develop', objectId: 'dev1', aheadCount: 9, behindCount: 0, lastCommitDate: daysAgo(1) },
+  { name: 'refs/heads/feature/upload-resume', objectId: 'abc123', aheadCount: 4, behindCount: 2, lastCommitDate: daysAgo(0.2) },
+  { name: 'refs/heads/fix/distance-rounding', objectId: 'c0b123', aheadCount: 1, behindCount: 5, lastCommitDate: daysAgo(3) },
+  { name: 'refs/heads/feature/route-overlay', objectId: 'm1', aheadCount: 0, behindCount: 14, lastCommitDate: daysAgo(20) },
+  { name: 'refs/heads/bugfix/login-loop', objectId: 'm2', aheadCount: 0, behindCount: 22, lastCommitDate: daysAgo(34) },
+  { name: 'refs/heads/release/1.5.0', objectId: 'm3', aheadCount: 0, behindCount: 30, lastCommitDate: daysAgo(41) },
+]
 
 /** Demo branch creation; throws like Azure DevOps when the name is taken. */
 export function addMockBranch(name: string): string {
   const full = `refs/heads/${name.replace(/^refs\/heads\//, '')}`
   if (branches.some((b) => b.name === full)) throw { kind: 'validation', message: `A branch named ${name} already exists.` }
-  branches.push({ name: full, objectId: 'def456' })
+  branches.push({ name: full, objectId: 'def456', aheadCount: 0, behindCount: 0, lastCommitDate: new Date().toISOString() })
   return full
 }
 
@@ -36,8 +46,8 @@ let prs: PullRequest[] = [
     workItemRefs: [{ id: '1164', url: '' }],
   },
   {
-    pullRequestId: 410, title: 'Fix Cobb angle rounding mismatch between app and report', status: 'active', createdBy: me, creationDate: daysAgo(4),
-    sourceRefName: 'refs/heads/fix/cobb-rounding', targetRefName: 'refs/heads/main', mergeStatus: 'conflicts', repository: repos[1],
+    pullRequestId: 410, title: 'Fix delivery distance rounding mismatch between app and report', status: 'active', createdBy: me, creationDate: daysAgo(4),
+    sourceRefName: 'refs/heads/fix/distance-rounding', targetRefName: 'refs/heads/main', mergeStatus: 'conflicts', repository: repos[1],
     reviewers: [{ ...hana, vote: -5 }, { ...priya, vote: 0 }],
     lastMergeSourceCommit: { commitId: 'c0b123' }, lastMergeTargetCommit: { commitId: 'def456' },
     description: 'Both sides now round half away from zero to one decimal.',
@@ -55,7 +65,7 @@ let prs: PullRequest[] = [
     lastMergeSourceCommit: { commitId: 'pdf001' }, lastMergeTargetCommit: { commitId: 'def456' },
   },
   {
-    pullRequestId: 398, title: 'Clinic admin invites', status: 'completed', createdBy: me, creationDate: daysAgo(12), closedDate: daysAgo(9),
+    pullRequestId: 398, title: 'Depot admin invites', status: 'completed', createdBy: me, creationDate: daysAgo(12), closedDate: daysAgo(9),
     sourceRefName: 'refs/heads/feature/invites', targetRefName: 'refs/heads/main', mergeStatus: 'succeeded', repository: repos[1],
     reviewers: [{ ...priya, vote: 10 }],
   },

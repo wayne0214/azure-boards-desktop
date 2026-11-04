@@ -159,6 +159,13 @@ export interface WorkItem {
   relations?: WorkItemRelation[]
 }
 
+/** Who to send a work item back to when testing fails again, and why; see `ado/sendback.rs`. */
+export interface SendBackPlan {
+  fixer: { displayName: string; uniqueName: string; id?: string | null; reason: 'pullRequest' | 'activated' | 'history'; detail: string } | null
+  /** The type's first not-started state, e.g. Proposed. */
+  state: string
+}
+
 export interface Comment {
   id: number
   text: string

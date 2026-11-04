@@ -84,6 +84,42 @@ export function handedOffOrder(types: TypesByProject) {
   return (a: WorkItem, b: WorkItem) => rank(a) - rank(b) || String(a.fields['System.ChangedDate'] ?? '').localeCompare(String(b.fields['System.ChangedDate'] ?? ''))
 }
 
+export type MineTab = 'active' | 'test' | 'others' | 'resolved'
+export const MINE_TABS: MineTab[] = ['active', 'test', 'others', 'resolved']
+
+const priorityOf = (it: WorkItem) => { const p = it.fields['Microsoft.VSTS.Common.Priority']; return typeof p === 'number' ? p : 9 }
+const changedOf = (it: WorkItem) => String(it.fields['System.ChangedDate'] ?? '')
+
+/**
+ * What each tab lists, after the planning toggle, search and project filter. Each tab has its own order:
+ * my work most urgent first, then most recently touched; items to test oldest first so nothing waits forever;
+ * work handed off longest waiting first; resolved and closed items most recent first.
+ */
+export function myWorkTabs(opts: {
+  items: WorkItem[] | null; others: WorkItem[] | null; closed: WorkItem[] | null
+  types: TypesByProject; planning: PlanningByProject; showPlanning: boolean; search: string; project: string | null
+}): Record<MineTab | 'closed', WorkItem[]> {
+  const { types, planning, showPlanning, search, project } = opts
+  const keep = (it: WorkItem) => isShown(it, planning, showPlanning) && matchesSearch(it, search) && (!project || projectOf(it) === project)
+  const mine = (opts.items ?? []).filter((it) => keep(it) && !isFinished(it, types))
+  // An item reassigned to me since the last load is already in my own tabs.
+  const mineIds = new Set((opts.items ?? []).map((it) => it.id))
+  return {
+    active: mine.filter((it) => !isReadyToTest(it) && !isResolved(it, types)).sort((a, b) => priorityOf(a) - priorityOf(b) || changedOf(b).localeCompare(changedOf(a))),
+    test: mine.filter(isReadyToTest).sort((a, b) => changedOf(a).localeCompare(changedOf(b))),
+    others: (opts.others ?? []).filter((it) => keep(it) && !mineIds.has(it.id) && !isFinished(it, types)).sort(handedOffOrder(types)),
+    resolved: mine.filter((it) => isResolved(it, types)).sort((a, b) => changedOf(b).localeCompare(changedOf(a))),
+    closed: (opts.closed ?? []).filter(keep).sort((a, b) => changedOf(b).localeCompare(changedOf(a))),
+  }
+}
+
+/** Projects with anything in My Work, for the project filter. */
+export const myWorkProjects = (...lists: (WorkItem[] | null)[]) =>
+  [...new Set(lists.flatMap((l) => (l ?? []).map(projectOf)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+
+/** How far back the Closed view of Assigned to others looks. */
+export const CLOSED_DAYS = 30
+
 /** Changed by someone else after the given time. */
 export const isUnseen = (it: WorkItem, since: number | null, me = useAppStore.getState().account()) => {
   if (since === null) return false
@@ -116,6 +152,13 @@ const readSeen = (org: string): number | null => {
 }
 const writeSeen = (org: string, at: number) => { try { localStorage.setItem(seenKey(org), String(at)) } catch { /* ignore */ } }
 
+const readOrgKey = (k: string, org: string) => { try { return localStorage.getItem(`${k}.${org}`) } catch { return null } }
+const writeOrgKey = (k: string, org: string | null, v: string | null) => {
+  if (!org) return
+  try { if (v === null) localStorage.removeItem(`${k}.${org}`); else localStorage.setItem(`${k}.${org}`, v) } catch { /* this session only */ }
+}
+const readTab = (org: string): MineTab => { const t = readOrgKey('mine.tab', org); return MINE_TABS.includes(t as MineTab) ? (t as MineTab) : 'active' }
+
 const PLANNING_KEY = 'mine.showPlanning'
 const readShowPlanning = () => { try { return localStorage.getItem(PLANNING_KEY) === '1' } catch { return false } }
 
@@ -127,6 +170,15 @@ interface MyWorkState {
   items: WorkItem[] | null
   /** Open work I created or was once assigned, now with someone else. Kept apart so it never counts toward the badge. */
   others: WorkItem[] | null
+  /** Work handed off that closed in the last CLOSED_DAYS days; loaded when the Closed view is first opened. */
+  closed: WorkItem[] | null
+  closedLoading: boolean
+  closedError: string | null
+  /** The tab shown, and the project the lists are narrowed to (null for all); remembered per organization. */
+  tab: MineTab
+  project: string | null
+  /** Assigned to others shows open work or what has closed. */
+  othersMode: 'open' | 'closed'
   loading: boolean
   error: string | null
   lastLoaded: number | null
@@ -146,6 +198,10 @@ interface MyWorkState {
   loadTypes(projects: string[]): Promise<void>
   loadMembers(project: string): Promise<void>
   setSearch(q: string): void
+  setTab(tab: MineTab): void
+  setProject(project: string | null): void
+  setOthersMode(mode: 'open' | 'closed'): void
+  loadClosed(opts?: { silent?: boolean }): Promise<void>
   setShowPlanning(show: boolean): void
   /** Call when the view opens (entering) and closes. */
   markSeen(entering: boolean): void
@@ -157,6 +213,12 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
   org: null,
   items: null,
   others: null,
+  closed: null,
+  closedLoading: false,
+  closedError: null,
+  tab: 'active',
+  project: null,
+  othersMode: 'open',
   loading: false,
   error: null,
   lastLoaded: null,
@@ -170,7 +232,7 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
 
   load: async (opts) => {
     const org = useAppStore.getState().activeOrg
-    if (!org) { set({ org: null, items: null, others: null, error: null, types: {}, planning: {}, members: {} }); return }
+    if (!org) { set({ org: null, items: null, others: null, closed: null, error: null, types: {}, planning: {}, members: {} }); return }
     if (loadingOrg === org) return
     const fresh = get().org !== org
     if (fresh) {
@@ -178,7 +240,7 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
       // Opening the view (markSeen) moves the clock on and keeps this value for the unseen dots.
       const seen = readSeen(org) ?? Date.now()
       writeSeen(org, seen)
-      set({ org, items: null, others: null, error: null, types: {}, planning: {}, members: {}, search: '', seenAt: seen, highlightSince: null })
+      set({ org, items: null, others: null, closed: null, closedError: null, error: null, types: {}, planning: {}, members: {}, search: '', seenAt: seen, highlightSince: null, tab: readTab(org), project: readOrgKey('mine.project', org), othersMode: 'open' })
     }
     loadingOrg = org
     set({ loading: true, ...(opts?.silent ? {} : { error: null }) })
@@ -197,6 +259,8 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
       void api().cacheSet(`${org}/mine-others`, res)
       void get().loadTypes([...new Set(res.map(projectOf))])
     }).catch(() => undefined)
+    // A refresh keeps the Closed view current once it has been opened.
+    if (!fresh && get().closed !== null) void get().loadClosed({ silent: true })
     try {
       const res = await api().myWork(org)
       if (useAppStore.getState().activeOrg !== org) return
@@ -246,6 +310,28 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
   },
 
   setSearch: (search) => set({ search }),
+  setTab: (tab) => { writeOrgKey('mine.tab', get().org, tab); set({ tab }) },
+  setProject: (project) => { writeOrgKey('mine.project', get().org, project); set({ project }) },
+  setOthersMode: (othersMode) => {
+    set({ othersMode })
+    if (othersMode === 'closed' && get().closed === null) void get().loadClosed()
+  },
+
+  loadClosed: async (opts) => {
+    const org = get().org
+    if (!org || get().closedLoading) return
+    set({ closedLoading: true, ...(opts?.silent ? {} : { closedError: null }) })
+    try {
+      const res = await api().closedByOthers(org, CLOSED_DAYS)
+      if (get().org !== org) return
+      set({ closed: res, closedError: null })
+      void get().loadTypes([...new Set(res.map(projectOf))])
+    } catch (e) {
+      if (get().org === org && (!opts?.silent || get().closed === null)) set({ closedError: errorMessage(e) })
+    } finally {
+      if (get().org === org) set({ closedLoading: false })
+    }
+  },
   setShowPlanning: (showPlanning) => {
     try { localStorage.setItem(PLANNING_KEY, showPlanning ? '1' : '0') } catch { /* remembered for this session only */ }
     set({ showPlanning })
@@ -261,7 +347,7 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
 
   upsert: (it) => {
     const merge = (list: WorkItem[] | null) => (list ? list.map((x) => (x.id === it.id ? { ...x, ...it, fields: { ...x.fields, ...it.fields } } : x)) : list)
-    set((s) => ({ items: merge(s.items), others: merge(s.others) }))
+    set((s) => ({ items: merge(s.items), others: merge(s.others), closed: merge(s.closed) }))
   },
-  remove: (id) => set((s) => ({ items: s.items ? s.items.filter((x) => x.id !== id) : s.items, others: s.others ? s.others.filter((x) => x.id !== id) : s.others })),
+  remove: (id) => set((s) => ({ items: s.items ? s.items.filter((x) => x.id !== id) : s.items, others: s.others ? s.others.filter((x) => x.id !== id) : s.others, closed: s.closed ? s.closed.filter((x) => x.id !== id) : s.closed })),
 }))

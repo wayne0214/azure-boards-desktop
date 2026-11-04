@@ -538,11 +538,11 @@ mod tests {
     #[test]
     fn build_service_is_found_by_project_id_or_name() {
         let pid = "A44A834E-d17b-49bc-9bb8-448454d350b9";
-        let name = "Test Project Build Service (dxdhub)";
+        let name = "Test Project Build Service (contoso)";
         assert_eq!(build_descriptor("h1", pid), format!("Microsoft.TeamFoundation.ServiceIdentity;h1:Build:{pid}"));
         let by_id = json!({ "descriptor": "Microsoft.TeamFoundation.ServiceIdentity;h1:Build:a44a834e-d17b-49bc-9bb8-448454d350b9", "providerDisplayName": "Renamed" });
-        let by_name = json!({ "descriptor": "x", "providerDisplayName": "test project build service (DXDHUB)" });
-        let collection = json!({ "descriptor": "Microsoft.TeamFoundation.ServiceIdentity;h1:Build:h1", "providerDisplayName": "Project Collection Build Service (dxdhub)" });
+        let by_name = json!({ "descriptor": "x", "providerDisplayName": "test project build service (CONTOSO)" });
+        let collection = json!({ "descriptor": "Microsoft.TeamFoundation.ServiceIdentity;h1:Build:h1", "providerDisplayName": "Project Collection Build Service (contoso)" });
         assert!(is_build_service(&by_id, pid, name));
         assert!(is_build_service(&by_name, pid, name));
         assert!(!is_build_service(&collection, pid, name));

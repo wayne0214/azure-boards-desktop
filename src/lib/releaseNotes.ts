@@ -10,6 +10,29 @@ export interface ReleaseNote {
 /** Shown once in What's New after an update to that version. Newest first; add one per release. */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.7.0',
+    highlights: [
+      {
+        title: 'My Work, one tab at a time',
+        detail: 'Assigned to me, Ready to test, Assigned to others and Resolved are now tabs with counts, instead of sections and project groups to open and close. A Project column shows where each item lives, and the project menu narrows every tab to one project. Press 1 to 4 to switch tabs.',
+      },
+      {
+        title: 'Look back at the bugs you filed',
+        detail: 'Assigned to others has an Open and a Closed view. Closed lists what you filed or handed off that closed in the last 30 days, newest first, with who closed it.',
+      },
+      {
+        title: 'Send it back when the problem is still there',
+        detail: 'Press Send back on an item in Ready to test, or on a closed one, when testing finds the problem again. Boards finds who fixed it, from the linked pull request, who moved it to Active or who held it before you, and sends it back to them in its first state (Proposed) with your comment and screenshots. Pick someone else if it guessed wrong.',
+      },
+    ],
+    more: [
+      'Branch lists in New pull request and Start work put the newest branches first and hide those already merged into the default branch; show them with one click.',
+      'My Work opens on the tab and project you last used in each organization.',
+      'A tab with changes by others since you last looked has a dot.',
+      'Your AI tool can send an item back too, and show who it would go to before it does.',
+    ],
+  },
+  {
     version: '1.6.0',
     highlights: [
       {

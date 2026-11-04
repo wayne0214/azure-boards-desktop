@@ -91,7 +91,7 @@ describe('serializeSteps', () => {
 })
 
 describe('text mode', () => {
-  const shared = new Map([['Login as Clinician', 4711]])
+  const shared = new Map([['Login as Dispatcher', 4711]])
 
   it('renders items as lines', () => {
     const items = parseSteps(SAMPLE)
@@ -99,7 +99,7 @@ describe('text mode', () => {
   })
 
   it('parses lines into steps and shared references', () => {
-    const out = textToSteps('1. Open => Shown\n2. /Login as Clinician\n3. Press OK', [], shared)
+    const out = textToSteps('1. Open => Shown\n2. /Login as Dispatcher\n3. Press OK', [], shared)
     expect(out).toEqual([
       { kind: 'step', id: null, action: '<P>Open</P>', expected: '<P>Shown</P>' },
       { kind: 'shared', id: null, ref: 4711 },

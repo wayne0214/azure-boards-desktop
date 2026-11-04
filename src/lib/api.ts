@@ -1,4 +1,6 @@
+import type { BranchInfo } from '@/lib/pr/branchChoices'
 import type {
+  SendBackPlan,
   Board,
   BoardQuery,
   BoardRef,
@@ -43,6 +45,8 @@ export interface Api {
   myWork(org: string): Promise<WorkItem[]>
   /** Open items I created or was once assigned, now assigned to someone else. */
   assignedToOthers(org: string): Promise<WorkItem[]>
+  /** The same work once closed, in the last `days` days, newest first. */
+  closedByOthers(org: string, days: number): Promise<WorkItem[]>
   /** Types at the project's requirement and portfolio backlog levels (User Story, Requirement, Feature, Epic…). */
   planningTypes(org: string, project: string): Promise<string[]>
   /** Work items that mentioned the user in the last week. */
@@ -103,6 +107,10 @@ export interface Api {
   setParent(org: string, project: string, id: number, parentId: number | null): Promise<WorkItem>
   deleteWorkItem(org: string, project: string, id: number): Promise<void>
   addComment(org: string, project: string, id: number, text: string): Promise<Comment>
+  /** Who fixed the item, and the state it would go back to. */
+  sendBackPlan(org: string, project: string, id: number): Promise<SendBackPlan>
+  /** Back to `toState`, assigned to `assignTo`, with a comment (HTML) saying what is wrong. */
+  sendBack(org: string, project: string, id: number, rev: number | null, assignTo: string, toState: string, comment: string): Promise<WorkItem>
 
   /** Returns a data: URL for an Azure DevOps attachment, fetched with the user's token. */
   fetchAttachment(org: string, url: string): Promise<string>
@@ -165,7 +173,8 @@ export interface Api {
   prRemoveReviewer(org: string, repoId: string, prId: number, reviewerId: string): Promise<void>
   prUpdate(org: string, repoId: string, prId: number, body: unknown): Promise<PullRequest>
   prCreate(org: string, repoId: string, body: unknown): Promise<PullRequest>
-  prBranches(org: string, repoId: string): Promise<{ name: string; objectId: string }[]>
+  /** Branches with, when Azure DevOps reports them, how far each is ahead of the default branch and its last commit date. */
+  prBranches(org: string, repoId: string): Promise<BranchInfo[]>
   prGet(org: string, repoId: string, prId: number): Promise<PullRequest>
   prChecks(org: string, projectId: string, repoId: string, prId: number): Promise<Pick<PrDetail, 'statuses' | 'policies'>>
   /** Create a branch from `base` and link it to the work item; `linked` is false when only the link failed. */

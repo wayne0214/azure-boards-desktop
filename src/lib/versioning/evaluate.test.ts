@@ -2,26 +2,26 @@ import { describe, expect, it } from 'vitest'
 import { BUILD_SERVICE_BITS, overall, versioningSteps, type VersioningFacts } from './evaluate'
 import { CZ_TOML, WORKFLOW_PATH, defaultNames, workflowVar, workflowYaml } from './template'
 
-const repo = { id: 'r1', name: 'Scoliosis App' }
-const project = 'AI Scoliosis'
+const repo = { id: 'r1', name: 'Mobile App' }
+const project = 'Contoso Mobile'
 const yaml = workflowYaml(defaultNames(project))
 const base: VersioningFacts = { branches: [], stable: null, policies: {}, errors: {} }
 const ready: VersioningFacts = {
   branches: ['master', 'develop'], stable: 'master', hasTags: true, czToml: CZ_TOML, workflow: yaml,
-  pipeline: { id: 7, name: 'scoliosis-app-version-bump-classic' }, lastRun: { id: 1, state: 'completed', result: 'succeeded' },
-  secureFile: { id: 'sf', name: 'ai-scoliosis-versioning-gpg-private.asc' }, secureFileAuthorized: true, repoAuthorized: true,
-  buildService: { name: 'AI Scoliosis Build Service (dxd)', allow: BUILD_SERVICE_BITS }, policies: {}, errors: {},
+  pipeline: { id: 7, name: 'mobile-app-version-bump-classic' }, lastRun: { id: 1, state: 'completed', result: 'succeeded' },
+  secureFile: { id: 'sf', name: 'contoso-mobile-versioning-gpg-private.asc' }, secureFileAuthorized: true, repoAuthorized: true,
+  buildService: { name: 'Contoso Mobile Build Service (contoso)', allow: BUILD_SERVICE_BITS }, policies: {}, errors: {},
 }
 const byId = (f: VersioningFacts) => Object.fromEntries(versioningSteps(f, repo, project).steps.map((s) => [s.id, s]))
 
 describe('defaultNames', () => {
   it('follows the guide: one bot and one secure file per project', () => {
-    expect(defaultNames(project)).toMatchObject({ botName: 'AI Scoliosis Versioning Automation', botEmail: 'ai-scoliosis-versioning@automation.invalid', secureFile: 'ai-scoliosis-versioning-gpg-private.asc' })
+    expect(defaultNames(project)).toMatchObject({ botName: 'Contoso Mobile Versioning Automation', botEmail: 'contoso-mobile-versioning@automation.invalid', secureFile: 'contoso-mobile-versioning-gpg-private.asc' })
   })
 
   it('round-trips through the workflow file', () => {
-    expect(workflowVar(yaml, 'GPG_SECURE_FILE')).toBe('ai-scoliosis-versioning-gpg-private.asc')
-    expect(workflowVar(yaml, 'GIT_BOT_NAME')).toBe('AI Scoliosis Versioning Automation')
+    expect(workflowVar(yaml, 'GPG_SECURE_FILE')).toBe('contoso-mobile-versioning-gpg-private.asc')
+    expect(workflowVar(yaml, 'GIT_BOT_NAME')).toBe('Contoso Mobile Versioning Automation')
     expect(workflowVar(workflowYaml({ ...defaultNames(project), botName: 'Name: with "colon"' }), 'GIT_BOT_NAME')).toBe('Name: with "colon"')
   })
 })
@@ -47,7 +47,7 @@ describe('versioningSteps', () => {
     const afterFiles = { ...base, branches: ['master'], stable: 'master' as const, czToml: CZ_TOML, workflow: yaml, secureFile: null }
     let s = byId(afterFiles)
     expect([s.files.state, s.pipeline.state, s['secure-file'].state, s.authorize.state]).toEqual(['done', 'todo', 'todo', 'waiting'])
-    expect(s['secure-file'].fix).toMatchObject({ step: 'secure-file', name: 'ai-scoliosis-versioning-gpg-private.asc' })
+    expect(s['secure-file'].fix).toMatchObject({ step: 'secure-file', name: 'contoso-mobile-versioning-gpg-private.asc' })
 
     s = byId({ ...afterFiles, pipeline: { id: 7, name: 'p' }, secureFile: { id: 'sf', name: 'x' }, secureFileAuthorized: false, repoAuthorized: false, buildService: null })
     expect(s.authorize.fix).toEqual({ step: 'authorize', pipelineId: 7, secureFileId: 'sf' })
