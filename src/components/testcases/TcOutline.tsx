@@ -103,7 +103,7 @@ export function TcOutline({ tree, coverage, srsTypeName, labels }: { tree: ReqTr
     }
     const unlinked = filtering ? coverage.unlinked.filter(tcOk) : coverage.unlinked
     if (unlinked.length) {
-      out.push({ kind: 'group', key: 'gnone', label: 'Not linked to any SRS' })
+      out.push({ kind: 'group', key: 'gnone', label: `Not linked to any ${labels.srs}` })
       unlinked.forEach((t) => out.push({ kind: 'tc', key: `tu-${t.id}`, test: t, srsId: null, depth: 0, parent: null }))
     }
     return out
@@ -186,7 +186,7 @@ export function TcOutline({ tree, coverage, srsTypeName, labels }: { tree: ReqTr
         <div className="tc-body" ref={listRef} tabIndex={0} onKeyDown={onKey}>
           {rows.length === 0 ? (
             filtering ? <Empty title="Nothing matches">Try another filter or search.</Empty> : (
-              <Empty icon={<FlaskConical size={28} />} title="No test cases yet">Write requirements first, then a test case for each SRS that needs one.</Empty>
+              <Empty icon={<FlaskConical size={28} />} title="No test cases yet">Press New test case to write one now and link it to an SRS later, or write requirements first and add a test case under each SRS.</Empty>
             )
           ) : (
             <div className="tc-list" role="tree">

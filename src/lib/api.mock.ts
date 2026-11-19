@@ -470,13 +470,14 @@ export const mockApi: Api = {
     return structuredClone(items.filter(handedOff))
   },
   // Demo: what the user filed or handed off and is now closed; one went back to them when it closed.
-  closedByOthers: async () => {
+  closedByOthers: async (_org, days) => {
     await delay(300)
+    const ages = [2, 12, 45, 200]
     const closedBy = (i: WorkItem) => (i.fields['System.AssignedTo'] as Identity | undefined) ?? people[0]
     return structuredClone(items.filter((i) => [1141, 1212, 1214, 1215].includes(i.id)).map((i, n) => ({
       ...i,
-      fields: { ...i.fields, 'System.State': 'Closed', 'System.ChangedDate': daysAgo(n * 4 + 1), 'Microsoft.VSTS.Common.ClosedDate': daysAgo(n * 4 + 1), 'Microsoft.VSTS.Common.ClosedBy': closedBy(i) },
-    })))
+      fields: { ...i.fields, 'System.State': 'Closed', 'System.ChangedDate': daysAgo(ages[n]), 'Microsoft.VSTS.Common.ClosedDate': daysAgo(ages[n]), 'Microsoft.VSTS.Common.ClosedBy': closedBy(i) },
+    })).filter((_i, n) => days === null || ages[n] <= days))
   },
   workItemTypes: async () => { await delay(150); return structuredClone(types) },
   // Demo projects use the Agile process: User Story is the requirement level, Feature and Epic the portfolio.

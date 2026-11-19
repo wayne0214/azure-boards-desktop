@@ -46,7 +46,8 @@ export interface Api {
   /** Open items I created or was once assigned, now assigned to someone else. */
   assignedToOthers(org: string): Promise<WorkItem[]>
   /** The same work once closed, in the last `days` days, newest first. */
-  closedByOthers(org: string, days: number): Promise<WorkItem[]>
+  /** Closed work I filed or handed off, newest first; `days` null for all of it. */
+  closedByOthers(org: string, days: number | null): Promise<WorkItem[]>
   /** Types at the project's requirement and portfolio backlog levels (User Story, Requirement, Feature, Epic…). */
   planningTypes(org: string, project: string): Promise<string[]>
   /** Work items that mentioned the user in the last week. */

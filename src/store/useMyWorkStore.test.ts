@@ -210,4 +210,25 @@ describe('My Work tabs', () => {
     await useMyWorkStore.getState().load()
     expect(useMyWorkStore.getState()).toMatchObject({ tab: 'others', project: 'Contoso Mobile', othersMode: 'open', closed: null })
   })
+
+  it('looks further back for closed work when asked, and remembers how far', async () => {
+    await loadApi()
+    useAppStore.setState((st) => ({ activeOrg: 'demo-org', settings: { ...st.settings, accounts: [{ org: 'demo-org', userId: 'u1', userName: 'Wayne Lai' }] } }))
+    useMyWorkStore.setState({ org: null })
+    await useMyWorkStore.getState().load()
+    expect(useMyWorkStore.getState().closedDays).toBe(30)
+    useMyWorkStore.getState().setOthersMode('closed')
+    // Changing the range while the first load is still running must end on the new range's list.
+    useMyWorkStore.getState().setClosedDays(null)
+    await new Promise((r) => setTimeout(r, 900))
+    const all = useMyWorkStore.getState().closed?.length ?? 0
+    useMyWorkStore.getState().setClosedDays(30)
+    expect(useMyWorkStore.getState().closed).toBeNull()
+    await new Promise((r) => setTimeout(r, 500))
+    expect(useMyWorkStore.getState().closed?.length).toBeLessThan(all)
+    useMyWorkStore.getState().setClosedDays(null)
+    useMyWorkStore.setState({ org: null })
+    await useMyWorkStore.getState().load()
+    expect(useMyWorkStore.getState().closedDays).toBeNull()
+  })
 })

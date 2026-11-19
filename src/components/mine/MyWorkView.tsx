@@ -9,7 +9,7 @@ import { errorMessage } from '@/lib/types'
 import { Empty } from '@/components/ui/Empty'
 import { useAppStore } from '@/store/useAppStore'
 import { useBoardStore } from '@/store/useBoardStore'
-import { CLOSED_DAYS, isUnseen, matchesSearch, myWorkProjects, myWorkTabs, planningCount, stateCategory, typeOf, useMyWorkStore, type MineTab, type TypesByProject } from '@/store/useMyWorkStore'
+import { CLOSED_LIMIT, CLOSED_RANGES, closedRange, isUnseen, matchesSearch, myWorkProjects, myWorkTabs, planningCount, stateCategory, typeOf, useMyWorkStore, type MineTab, type TypesByProject } from '@/store/useMyWorkStore'
 import { usePrStore } from '@/store/usePrStore'
 import { useUiStore } from '@/store/useUiStore'
 import { WikiUpdatesStrip } from '@/components/wiki/WikiUpdates'
@@ -46,6 +46,7 @@ export function MyWorkView() {
   const items = useMyWorkStore((s) => s.items)
   const others = useMyWorkStore((s) => s.others)
   const closed = useMyWorkStore((s) => s.closed)
+  const closedDays = useMyWorkStore((s) => s.closedDays)
   const closedLoading = useMyWorkStore((s) => s.closedLoading)
   const closedError = useMyWorkStore((s) => s.closedError)
   const tab = useMyWorkStore((s) => s.tab)
@@ -169,7 +170,7 @@ export function MyWorkView() {
   if ((!items || items.length === 0) && shown === 0 && !shownProject) return <Empty icon={<Inbox size={40} strokeWidth={1.2} />} title={`Nothing assigned to ${account?.userName ?? 'you'}`}>When work items are assigned to you in any project, they will appear here.</Empty>
 
   const unseenIn = (k: MineTab) => lists[k].some((it) => isUnseen(it, highlightSince))
-  const emptyText = showClosed ? `Nothing you handed off has closed in the last ${CLOSED_DAYS} days.` : current === 'others' ? 'Nothing you handed off is open.' : current === 'test' ? 'Nothing to test.' : current === 'resolved' ? 'Nothing resolved.' : 'Nothing open.'
+  const emptyText = showClosed ? `Nothing you handed off has closed ${closedRange(closedDays).phrase}.` : current === 'others' ? 'Nothing you handed off is open.' : current === 'test' ? 'Nothing to test.' : current === 'resolved' ? 'Nothing resolved.' : 'Nothing open.'
   const cols = 8 + (showProjectCol ? 1 : 0)
 
   return (
@@ -188,8 +189,13 @@ export function MyWorkView() {
         {current === 'others' && (
           <div className="segmented" role="group" aria-label="Open or closed">
             <button type="button" className={othersMode === 'open' ? 'on' : ''} onClick={() => useMyWorkStore.getState().setOthersMode('open')}>Open</button>
-            <button type="button" className={othersMode === 'closed' ? 'on' : ''} onClick={() => useMyWorkStore.getState().setOthersMode('closed')} title={`Closed in the last ${CLOSED_DAYS} days`}>Closed{closed ? ` · ${lists.closed.length}` : ''}</button>
+            <button type="button" className={othersMode === 'closed' ? 'on' : ''} onClick={() => useMyWorkStore.getState().setOthersMode('closed')} title="What you filed or handed off that has closed">Closed{closed ? ` · ${lists.closed.length}` : ''}</button>
           </div>
+        )}
+        {showClosed && (
+          <select className="input tp-filter" aria-label="How far back" value={closedDays ?? 'all'} onChange={(e) => useMyWorkStore.getState().setClosedDays(e.target.value === 'all' ? null : Number(e.target.value))}>
+            {CLOSED_RANGES.map((r) => <option key={r.label} value={r.days ?? 'all'}>{r.label}</option>)}
+          </select>
         )}
         {(allProjects.length > 1 || shownProject) && (
           <select className="input tp-filter" aria-label="Project" value={shownProject ?? ''} onChange={(e) => useMyWorkStore.getState().setProject(e.target.value || null)}>
@@ -217,6 +223,7 @@ export function MyWorkView() {
               <ItemRow key={it.id} it={it} types={types} who={current === 'others' ? (showClosed ? 'closedBy' : 'assignee') : null} showProject={showProjectCol} closedView={showClosed}
                 selected={selectedId === it.id} unseen={isUnseen(it, highlightSince)} prs={prsByItem.get(it.id) ?? []} onOpen={() => void openItem(it)} onMenu={() => contextMenu(it)} onOpenPr={openPr} />
             ))}
+            {showClosed && (closed?.length ?? 0) >= CLOSED_LIMIT && <tr><td colSpan={cols} className="faint">Showing the newest {CLOSED_LIMIT} closed items. Search or pick a shorter range to narrow them.</td></tr>}
           </tbody>
         </table>
       </div>
