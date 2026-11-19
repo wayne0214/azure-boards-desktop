@@ -10,6 +10,20 @@ export interface ReleaseNote {
 /** Shown once in What's New after an update to that version. Newest first; add one per release. */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.8.0',
+    highlights: [
+      {
+        title: 'Closed work, as far back as you need',
+        detail: 'Closed in Assigned to others no longer stops at 30 days. Choose the last 90 days, the last year or all time from the menu beside it, and Boards remembers your choice for each organization.',
+      },
+      {
+        title: 'Write a test case before its SRS',
+        detail: 'New test case in Test Cases writes a test case that is not linked to an SRS yet. It sits under Not linked to any SRS until you link one from the editor.',
+      },
+    ],
+    more: [],
+  },
+  {
     version: '1.7.0',
     highlights: [
       {

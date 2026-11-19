@@ -547,18 +547,23 @@ pub async fn assigned_to_others(client: &AdoClient, available_fields: &FieldMap)
     get_items_batch(client, "", &ids, &fields).await
 }
 
-/// The same work once it is closed, from the last `days` days, newest first: the bugs a tester filed and can look back on.
+/// How many closed items one load brings back, newest first.
+pub const CLOSED_LIMIT: u32 = 1000;
+
+/// The same work once it is closed, newest first: the bugs a tester filed and can look back on. `days` limits it to
+/// the last so many days; without it everything counts, up to `CLOSED_LIMIT`.
 /// A closed bug often goes back to the person who filed it, so items I created count whoever holds them now.
-pub async fn closed_by_others(client: &AdoClient, available_fields: &FieldMap, days: u32) -> AppResult<Vec<Value>> {
+pub async fn closed_by_others(client: &AdoClient, available_fields: &FieldMap, days: Option<u32>) -> AppResult<Vec<Value>> {
+    let since = days.map(|d| format!("AND [System.ChangedDate] >= @Today - {d} ")).unwrap_or_default();
     let query = format!(
         "SELECT [System.Id] FROM WorkItems WHERE \
          ([System.CreatedBy] = @Me OR ([System.AssignedTo] EVER @Me AND [System.AssignedTo] <> @Me)) \
          AND [System.State] IN ('Closed', 'Done', 'Completed') \
-         AND [System.ChangedDate] >= @Today - {days} \
+         {since}\
          AND [System.WorkItemType] NOT IN ('Test Case', 'Shared Steps', 'Test Plan', 'Test Suite') \
          ORDER BY [System.ChangedDate] DESC"
     );
-    let ids = run_wiql(client, "", &query, 300).await?;
+    let ids = run_wiql(client, "", &query, CLOSED_LIMIT).await?;
     let fields = select_fields(available_fields, &["Microsoft.VSTS.Common.ClosedBy".to_string()]);
     get_items_batch(client, "", &ids, &fields).await
 }

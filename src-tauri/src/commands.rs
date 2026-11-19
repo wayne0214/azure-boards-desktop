@@ -244,10 +244,10 @@ pub async fn assigned_to_others(state: State<'_, AppState>, org: String) -> AppR
 }
 
 #[tauri::command]
-pub async fn closed_by_others(state: State<'_, AppState>, org: String, days: u32) -> AppResult<Vec<Value>> {
+pub async fn closed_by_others(state: State<'_, AppState>, org: String, days: Option<u32>) -> AppResult<Vec<Value>> {
     let client = state.client(&org).await?;
     let fields = state.fields(&client).await?;
-    api::closed_by_others(&client, &fields, days.clamp(1, 365)).await
+    api::closed_by_others(&client, &fields, days.map(|d| d.clamp(1, 3650))).await
 }
 
 /// Who fixed the item (see `ado::sendback`) and the state it goes back to, for the Send back sheet.

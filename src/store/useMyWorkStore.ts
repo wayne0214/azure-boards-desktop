@@ -117,8 +117,17 @@ export function myWorkTabs(opts: {
 export const myWorkProjects = (...lists: (WorkItem[] | null)[]) =>
   [...new Set(lists.flatMap((l) => (l ?? []).map(projectOf)).filter(Boolean))].sort((a, b) => a.localeCompare(b))
 
-/** How far back the Closed view of Assigned to others looks. */
+/** How far back the Closed view of Assigned to others can look; null is everything. */
+export const CLOSED_RANGES: { days: number | null; label: string; phrase: string }[] = [
+  { days: 30, label: 'Last 30 days', phrase: 'in the last 30 days' },
+  { days: 90, label: 'Last 90 days', phrase: 'in the last 90 days' },
+  { days: 365, label: 'Last year', phrase: 'in the last year' },
+  { days: null, label: 'All time', phrase: 'yet' },
+]
 export const CLOSED_DAYS = 30
+/** The most closed items one load brings back; the backend stops at the same number. */
+export const CLOSED_LIMIT = 1000
+export const closedRange = (days: number | null) => CLOSED_RANGES.find((r) => r.days === days) ?? CLOSED_RANGES[0]
 
 /** Changed by someone else after the given time. */
 export const isUnseen = (it: WorkItem, since: number | null, me = useAppStore.getState().account()) => {
@@ -157,6 +166,10 @@ const writeOrgKey = (k: string, org: string | null, v: string | null) => {
   if (!org) return
   try { if (v === null) localStorage.removeItem(`${k}.${org}`); else localStorage.setItem(`${k}.${org}`, v) } catch { /* this session only */ }
 }
+const readClosedDays = (org: string): number | null => {
+  const v = readOrgKey('mine.closedDays', org)
+  return v === 'all' ? null : closedRange(Number(v)).days
+}
 const readTab = (org: string): MineTab => { const t = readOrgKey('mine.tab', org); return MINE_TABS.includes(t as MineTab) ? (t as MineTab) : 'active' }
 
 const PLANNING_KEY = 'mine.showPlanning'
@@ -170,8 +183,10 @@ interface MyWorkState {
   items: WorkItem[] | null
   /** Open work I created or was once assigned, now with someone else. Kept apart so it never counts toward the badge. */
   others: WorkItem[] | null
-  /** Work handed off that closed in the last CLOSED_DAYS days; loaded when the Closed view is first opened. */
+  /** Work handed off that has closed, as far back as closedDays; loaded when the Closed view is first opened. */
   closed: WorkItem[] | null
+  /** How many days back Closed looks (null for all time); remembered per organization. */
+  closedDays: number | null
   closedLoading: boolean
   closedError: string | null
   /** The tab shown, and the project the lists are narrowed to (null for all); remembered per organization. */
@@ -201,6 +216,7 @@ interface MyWorkState {
   setTab(tab: MineTab): void
   setProject(project: string | null): void
   setOthersMode(mode: 'open' | 'closed'): void
+  setClosedDays(days: number | null): void
   loadClosed(opts?: { silent?: boolean }): Promise<void>
   setShowPlanning(show: boolean): void
   /** Call when the view opens (entering) and closes. */
@@ -214,6 +230,7 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
   items: null,
   others: null,
   closed: null,
+  closedDays: CLOSED_DAYS,
   closedLoading: false,
   closedError: null,
   tab: 'active',
@@ -240,7 +257,7 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
       // Opening the view (markSeen) moves the clock on and keeps this value for the unseen dots.
       const seen = readSeen(org) ?? Date.now()
       writeSeen(org, seen)
-      set({ org, items: null, others: null, closed: null, closedError: null, error: null, types: {}, planning: {}, members: {}, search: '', seenAt: seen, highlightSince: null, tab: readTab(org), project: readOrgKey('mine.project', org), othersMode: 'open' })
+      set({ org, items: null, others: null, closed: null, closedLoading: false, closedError: null, error: null, types: {}, planning: {}, members: {}, search: '', seenAt: seen, highlightSince: null, tab: readTab(org), project: readOrgKey('mine.project', org), othersMode: 'open', closedDays: readClosedDays(org) })
     }
     loadingOrg = org
     set({ loading: true, ...(opts?.silent ? {} : { error: null }) })
@@ -317,19 +334,31 @@ export const useMyWorkStore = create<MyWorkState>((set, get) => ({
     if (othersMode === 'closed' && get().closed === null) void get().loadClosed()
   },
 
+  setClosedDays: (closedDays) => {
+    if (closedDays === get().closedDays) return
+    writeOrgKey('mine.closedDays', get().org, closedDays === null ? 'all' : String(closedDays))
+    set({ closedDays, closed: null, closedError: null })
+    void get().loadClosed()
+  },
+
   loadClosed: async (opts) => {
     const org = get().org
+    const days = get().closedDays
     if (!org || get().closedLoading) return
     set({ closedLoading: true, ...(opts?.silent ? {} : { closedError: null }) })
     try {
-      const res = await api().closedByOthers(org, CLOSED_DAYS)
-      if (get().org !== org) return
+      const res = await api().closedByOthers(org, days)
+      // The range changed while this was loading; the load that follows brings the right list.
+      if (get().org !== org || get().closedDays !== days) return
       set({ closed: res, closedError: null })
       void get().loadTypes([...new Set(res.map(projectOf))])
     } catch (e) {
-      if (get().org === org && (!opts?.silent || get().closed === null)) set({ closedError: errorMessage(e) })
+      if (get().org === org && get().closedDays === days && (!opts?.silent || get().closed === null)) set({ closedError: errorMessage(e) })
     } finally {
-      if (get().org === org) set({ closedLoading: false })
+      if (get().org === org) {
+        set({ closedLoading: false })
+        if (get().closedDays !== days) void get().loadClosed()
+      }
     }
   },
   setShowPlanning: (showPlanning) => {
