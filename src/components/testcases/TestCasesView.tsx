@@ -1,4 +1,4 @@
-import { FileSpreadsheet, FileText, FlaskConical, ListTree, PlayCircle, RefreshCw } from 'lucide-react'
+import { FileSpreadsheet, FileText, FlaskConical, ListTree, Loader2, PlayCircle, Plus, RefreshCw } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useMemo, useState } from 'react'
 import { Empty } from '@/components/ui/Empty'
@@ -27,7 +27,7 @@ export function TestCasesView() {
   const ctx = useBoardStore((s) => s.ctx)
   const ctxLoading = useAppStore((s) => s.contextLoading)
   const req = useReqStore()
-  const s = useTcStore(useShallow((st) => ({ cfg: st.cfg, error: st.error, load: st.load, loadedAt: st.loadedAt, loading: st.loading, mode: st.mode, setMode: st.setMode, tests: st.tests })))
+  const s = useTcStore(useShallow((st) => ({ cfg: st.cfg, create: st.create, creating: st.creating, error: st.error, load: st.load, loadedAt: st.loadedAt, loading: st.loading, mode: st.mode, setMode: st.setMode, tests: st.tests })))
   const [importing, setImporting] = useState(false)
 
   useEffect(() => {
@@ -62,6 +62,8 @@ export function TestCasesView() {
   const labels = { di: req.cfg?.tiers[1].label ?? 'DI', srs: srsLabel }
   const loading = (s.loading && s.tests.length === 0) || (req.loading && req.items.length === 0)
   const reload = () => { void s.load(); void req.load() }
+  // A test case can be written before its SRS exists; it lands under "Not linked to any SRS" until one is linked.
+  const newTest = async () => { if (await s.create(null)) s.setMode('outline') }
 
   return (
     <div className="req">
@@ -76,6 +78,11 @@ export function TestCasesView() {
           ))}
         </div>
         <span className="grow" />
+        {coverage && (
+          <button type="button" className="btn" title="New test case, not linked to an SRS yet" disabled={s.creating} onClick={() => void newTest()}>
+            {s.creating ? <Loader2 size={14} className="spin" /> : <Plus size={14} />} New test case
+          </button>
+        )}
         {coverage && <button type="button" className="btn" onClick={() => setImporting(true)}><FileSpreadsheet size={14} /> Import</button>}
         <button type="button" className="icon-btn" title="Reload" onClick={reload} disabled={s.loading}><RefreshCw size={16} className={s.loading ? 'spin' : ''} /></button>
       </div>

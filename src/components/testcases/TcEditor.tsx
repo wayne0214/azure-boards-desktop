@@ -118,7 +118,7 @@ export function TcEditor({ cfg, test, tree }: { cfg: TcConfig; test: WorkItem; t
       <div className="tc-link-wrap">
         {picking
           ? <SrsPicker tree={tree} exclude={linked.map((l) => l.id)} onPick={(id) => void s.linkSrs(test.id, id)} onClose={() => setPicking(false)} />
-          : <button type="button" className="tc-link-add" onClick={() => setPicking(true)}><Link2 size={14} /> Link another SRS</button>}
+          : <button type="button" className="tc-link-add" onClick={() => setPicking(true)}><Link2 size={14} /> {linked.length ? 'Link another SRS' : 'Link an SRS'}</button>}
       </div>
 
       <div className="tc-label">Preconditions</div>
