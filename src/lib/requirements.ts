@@ -12,6 +12,8 @@ export interface Tier {
   idField?: FieldDef
   /** The type's main text: for SRS the "Software Requirement Specification" field. */
   textField?: FieldDef
+  /** The main text is stored as plain text, not rich text. */
+  textPlain?: boolean
 }
 
 export interface ReqConfig {
@@ -25,6 +27,7 @@ export interface ReqConfig {
 }
 
 const ACCEPTANCE = 'Microsoft.VSTS.Common.AcceptanceCriteria'
+const MAX_LABEL = 16
 const REQ_TYPES = ['Requirement', 'User Story', 'Product Backlog Item']
 
 /** Work out the hierarchy and its fields from the project's process; null if it has no Epic > Feature > Requirement. */
@@ -37,9 +40,12 @@ export function reqConfig(ctx: TeamContext | null): ReqConfig | null {
   if (!epic || !feature || !req) return null
   const tier = (level: 0 | 1 | 2, type: WorkItemType, fallback: string): Tier => {
     const idField = idLikeField(type)
-    const label = idField?.name.replace(/\s*(id|no|number|ref|code)\s*$/i, '').trim() || fallback
+    // A long field name ("Subsystem Requirement Specification ID") is no short label; use the tier's usual one.
+    const stem = idField?.name.replace(/\s*(id|no|number|ref|code)\s*$/i, '').trim()
+    const label = stem && stem.length <= MAX_LABEL ? stem : fallback
     const text = descriptionField(ctx, type) ?? (level === 2 ? undefined : { referenceName: 'System.Description', name: 'Description' })
-    return { level, type, label, idField, textField: text }
+    const textPlain = !!text && !text.referenceName.startsWith('System.') && fieldKind(ctx, text) !== 'html'
+    return { level, type, label, idField, textField: text, textPlain }
   }
   const tiers: [Tier, Tier, Tier] = [tier(0, epic, 'UN'), tier(1, feature, 'DI'), tier(2, req, 'SRS')]
   if (!tiers[2].textField) tiers[2].textField = { referenceName: 'System.Description', name: 'Description' }
@@ -84,6 +90,16 @@ export interface ReqTree {
 }
 
 export const fieldText = (item: WorkItem, ref: string | undefined) => (ref ? String(item.fields[ref] ?? '').trim() : '')
+const HTML_TAG = /<\/?(p|div|br|span|ul|ol|li|b|i|u|strong|em|table|img|a|h[1-6])\b/i
+const escText = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+/** A node's main text as HTML: rich text as stored, plain text escaped with its line breaks kept. */
+export function textHtml(n: ReqNode): string {
+  const raw = fieldText(n.item, n.tier.textField?.referenceName)
+  if (!n.tier.textPlain || HTML_TAG.test(raw)) return raw
+  return raw.split(/\n{2,}/).filter((p) => p.trim()).map((p) => `<p>${escText(p).replace(/\n/g, '<br>')}</p>`).join('')
+}
+
 /** Plain text of a field that may be stored as rich text (some ID fields come back as "<div>SRS-001</div>"). */
 export function plainText(v: unknown): string {
   return String(v ?? '')
@@ -252,7 +268,7 @@ function gapsOf(cfg: ReqConfig, n: ReqNode): string[] {
   if (n.tier.idField && !idOf(n)) g.push(`No ${n.tier.idField.name}`)
   if (below && n.children.length === 0) g.push(`No ${below.label}`)
   if (n.tier.level === 2) {
-    if (!htmlToText(fieldText(n.item, n.tier.textField?.referenceName))) g.push(`No ${n.tier.textField?.name ?? 'specification'}`)
+    if (!htmlToText(textHtml(n))) g.push(`No ${n.tier.textField?.name ?? 'specification'}`)
     if (cfg.acceptanceField && !htmlToText(fieldText(n.item, cfg.acceptanceField.referenceName))) g.push('No acceptance criteria')
     if (cfg.methodField && !fieldText(n.item, cfg.methodField.referenceName)) g.push('No verification method')
   }
@@ -288,7 +304,7 @@ function srsTable(cfg: ReqConfig, rows: ReqNode[], diId: (n: ReqNode) => string)
   const cell = (n: ReqNode, key: string) => {
     if (key === 'id') return esc(idOf(n) || `#${n.item.id}`)
     if (key === 'spec') {
-      const spec = fieldText(n.item, n.tier.textField?.referenceName) || `<em>${esc(String(n.item.fields['System.Title'] ?? ''))}</em>`
+      const spec = textHtml(n) || `<em>${esc(String(n.item.fields['System.Title'] ?? ''))}</em>`
       // A pending change means this text may not be final; say so in the document itself.
       const pending = n.changes.map((c) => `<p class="doc-change">Change pending: CR #${c.id} ${esc(String(c.fields['System.Title'] ?? ''))}</p>`).join('')
       return spec + pending
@@ -309,7 +325,7 @@ export function buildDocument(cfg: ReqConfig, tree: ReqTree, opts: { rootId?: nu
   const [un, di] = cfg.tiers
   const heading = (n: ReqNode) => `${idOf(n) ? `${esc(idOf(n))} ` : ''}${esc(String(n.item.fields['System.Title'] ?? ''))}`
   const text = (n: ReqNode) => {
-    const html = fieldText(n.item, n.tier.textField?.referenceName)
+    const html = textHtml(n)
     return htmlToText(html) || /<img\b/i.test(html) ? `<div class="doc-text">${html}</div>` : ''
   }
   const out: string[] = []
@@ -343,7 +359,7 @@ export function buildCsv(cfg: ReqConfig, tree: ReqTree): string {
   const lines = [head.map(csvCell).join(',')]
   const row = (u: ReqNode | null, d: ReqNode | null, s: ReqNode) => lines.push([
     u ? idOf(u) : '', u?.item.fields['System.Title'] ?? '', d ? idOf(d) : '', d?.item.fields['System.Title'] ?? '',
-    idOf(s), s.item.fields['System.Title'], htmlToText(fieldText(s.item, s.tier.textField?.referenceName)),
+    idOf(s), s.item.fields['System.Title'], htmlToText(textHtml(s)),
     ...(cfg.acceptanceField ? [htmlToText(fieldText(s.item, cfg.acceptanceField.referenceName))] : []),
     s.item.fields['System.State'], s.item.id,
   ].map(csvCell).join(','))

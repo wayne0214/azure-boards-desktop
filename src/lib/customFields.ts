@@ -60,14 +60,65 @@ export function isIdLike(f: FieldDef): boolean {
   return /\b(id|no|number|ref|code)\b/i.test(f.name) && !/description/i.test(f.name) && !(f.allowedValues && f.allowedValues.length > 0)
 }
 
-/** A short identifier-like field (e.g. "UN ID", "SRS ID") suitable for showing on a card. */
+/** Key fields that win when a type still carries an older ID field next to them (same list as fields.rs). */
+const KEY_NAMES = ['needs id', 'system requirement specification id', 'subsystem requirement specification id']
+
+/** The type's key: a short identifier-like field (e.g. "Needs ID", "SRS ID") shown on cards and used to find items. */
 export function idLikeField(type: WorkItemType | undefined): FieldDef | undefined {
-  return customFieldsFor(type).find(isIdLike)
+  const ids = customFieldsFor(type).filter(isIdLike)
+  return ids.find((f) => KEY_NAMES.includes(f.name.trim().toLowerCase())) ?? ids[0]
 }
+
+export interface InspectorFields {
+  /** The type's key (e.g. "Needs ID"), shown with the write-up it identifies rather than in the property grid. */
+  key?: FieldDef
+  /** Short fields for the property grid: required fields and those with a value. */
+  rows: FieldDef[]
+  /** Plain-text write-ups, shown full width like Description. */
+  text: FieldDef[]
+  /** Rich-text fields, each with its own section. */
+  rich: FieldDef[]
+  /** Empty optional fields, kept out of the way until asked for. */
+  hidden: FieldDef[]
+}
+
+const LONG_VALUE = 60
+const isEmpty = (v: unknown) => v === undefined || v === null || (typeof v === 'string' && v.trim() === '')
+
+/** Where each of the type's custom fields goes in the inspector, given the item's values. */
+export function inspectorFields(ctx: TeamContext | null, type: WorkItemType | undefined, values: Record<string, unknown>): InspectorFields {
+  const key = idLikeField(type)
+  const out: InspectorFields = { key, rows: [], text: [], rich: [], hidden: [] }
+  for (const d of customFieldsFor(type)) {
+    const kind = fieldKind(ctx, d)
+    const v = values[d.referenceName]
+    if (d === key) continue
+    if (kind === 'html') out.rich.push(d)
+    else if (kind === 'text' && !isIdLike(d) && isWriteUp(ctx, d, v)) out.text.push(d)
+    else if (d.alwaysRequired || !isEmpty(v)) out.rows.push(d)
+    else out.hidden.push(d)
+  }
+  return out
+}
+
+/** A text field that holds prose: named like one, or carrying a long or multi-line value. */
+function isWriteUp(ctx: TeamContext | null, d: FieldDef, v: unknown): boolean {
+  if (/description|specification|\bspec\b|statements?/i.test(d.name)) return true
+  if (isEmpty(v)) return false
+  const s = String(v)
+  return ctx?.fieldTypes?.[d.referenceName] === 'plainText' || s.length > LONG_VALUE || s.includes('\n')
+}
+
+/** Main text fields that win when a type still carries an older one next to them; these may be plain text. */
+const TEXT_NAMES = ['user needs and stakeholder needs statements', 'system requirement specification', 'subsystem and component level requirement specification']
 
 /** The type's own long-text field (e.g. "Software Requirement Specification", "User Need Description"). */
 export function descriptionField(ctx: TeamContext | null, type: WorkItemType | undefined): FieldDef | undefined {
-  const html = customFieldsFor(type).filter((f) => fieldKind(ctx, f) === 'html')
+  const defs = customFieldsFor(type)
+  const kindOf = (f: FieldDef) => fieldKind(ctx, f)
+  const current = defs.find((f) => TEXT_NAMES.includes(f.name.trim().toLowerCase()) && (kindOf(f) === 'html' || kindOf(f) === 'text'))
+  if (current) return current
+  const html = defs.filter((f) => kindOf(f) === 'html')
   return html.find((f) => /description|specification|\bspec\b/i.test(f.name)) ?? html[0]
 }
 
