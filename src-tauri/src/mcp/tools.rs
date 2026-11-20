@@ -222,7 +222,7 @@ async fn run(app: &AppHandle, name: &str, args: &Value) -> Result<Value, AppErro
                 "name": t.get("name"),
                 "states": t.get("states").and_then(Value::as_array).map(|s| s.iter().filter_map(|x| x.get("name").cloned()).collect::<Vec<_>>()),
                 // The field keys like SRS-182 are matched on, when one is detected; otherwise pass `keyFields` to stage_import.
-                "keyField": t.get("fieldDefs").and_then(Value::as_array).and_then(|f| f.iter().find(|d| fields::id_like(d))).and_then(|d| d.get("referenceName")),
+                "keyField": t.get("fieldDefs").and_then(Value::as_array).and_then(|f| fields::key_def(f)).and_then(|d| d.get("referenceName")),
                 "fields": t.get("fieldDefs").and_then(Value::as_array).map(|f| f.iter().map(|d| json!({
                     "referenceName": d.get("referenceName"),
                     "name": d.get("name"),

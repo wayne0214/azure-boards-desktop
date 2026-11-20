@@ -6,7 +6,7 @@ import { RichText } from '@/components/inspector/RichText'
 import { Sheet } from '@/components/ui/Sheet'
 import { hydrateImages } from '@/lib/attachments'
 import { stateColor } from '@/lib/format'
-import { fieldText, idOf, plainText, type ReqNode, type ReqTree } from '@/lib/requirements'
+import { fieldText, idOf, plainText, textHtml, type ReqNode, type ReqTree } from '@/lib/requirements'
 import { STEPS, type TcConfig } from '@/lib/testcases/config'
 import { srsLinks } from '@/lib/testcases/coverage'
 import { paramNames, parseTestData, serializeTestData, type TestData } from '@/lib/testcases/params'
@@ -143,7 +143,7 @@ function SrsCard({ id, node, tree, onUnlink, change, onReviewed }: { id: number;
   const reqCfg = useReqStore((r) => r.cfg)
   const org = useAppStore((a) => a.activeOrg)
   const ref = useRef<HTMLDivElement>(null)
-  const spec = node ? fieldText(node.item, node.tier.textField?.referenceName) : ''
+  const spec = node ? textHtml(node) : ''
   const ac = node && reqCfg?.acceptanceField ? fieldText(node.item, reqCfg.acceptanceField.referenceName) : ''
 
   useEffect(() => {

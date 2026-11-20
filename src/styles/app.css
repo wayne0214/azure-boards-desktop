@@ -702,6 +702,12 @@ body.col-resizing { cursor: col-resize; user-select: none; -webkit-user-select: 
 .insp-grid .v { min-width: 0; }
 .insp-grid .req { color: var(--danger); margin-left: 3px; }
 .insp-grid select.field-input { appearance: auto; padding-right: 4px; }
+.insp-more { grid-column: 1 / -1; justify-self: start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 3px 6px 3px 2px; border-radius: 6px; font-size: var(--fs-sm); color: var(--text-2); }
+.insp-more:hover { background: var(--bg-hover); color: var(--text); }
+.insp-more .chev { transform: rotate(-90deg); transition: transform 0.12s; }
+.insp-more[aria-expanded="true"] .chev { transform: none; }
+.field-input.insp-key { display: block; width: 100%; max-width: 320px; font-family: var(--mono); }
+.textarea.insp-text { display: block; width: 100%; min-height: 0; resize: none; overflow: hidden; }
 .field-btn {
   display: inline-flex; align-items: center; gap: 7px;
   max-width: 100%;

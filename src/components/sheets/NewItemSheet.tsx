@@ -3,7 +3,7 @@ import { api } from '@/lib/api'
 import { restoreImageSources, uploadImageHtml } from '@/lib/attachments'
 import { identityKey, typeColor } from '@/lib/format'
 import { miniBugProject, rememberMiniBugProject } from '@/lib/pasteBug'
-import { REPRO_STEPS, customFieldsFor, descriptionField, fieldKind, isIdLike, symptomField, usesReproSteps } from '@/lib/customFields'
+import { REPRO_STEPS, descriptionField, fieldKind, idLikeField, isIdLike, symptomField, usesReproSteps } from '@/lib/customFields'
 import type { Project, TeamContext } from '@/lib/types'
 import { CustomFieldInput } from '@/components/ui/CustomFieldInput'
 import { HtmlEditor } from '@/components/inspector/RichText'
@@ -84,11 +84,14 @@ export function NewItemSheet() {
   const reproType = type === 'Bug' || usesReproSteps(wit)
   const symptomDef = ((d) => (d && (d.referenceName.startsWith('Microsoft.') || fieldKind(ctx, d) === 'html') ? d : undefined))(symptomField(wit))
   const customDefs = useMemo(() => {
-    const idDef = customFieldsFor(wit).find(isIdLike)
+    const idDef = idLikeField(wit)
     const descDef = descriptionField(ctx, wit)
     return [idDef, descDef].filter((d): d is NonNullable<typeof d> => Boolean(d) && d?.referenceName !== symptomDef?.referenceName)
   }, [wit, ctx, symptomDef?.referenceName])
-  const hasOwnDescription = customDefs.some((d) => fieldKind(ctx, d) === 'html')
+  // The type's own write-up, rich or plain, replaces Description on the form.
+  const ownText = descriptionField(ctx, wit)
+  const hasOwnDescription = !!ownText && customDefs.some((d) => d === ownText)
+  const plainOwnText = ownText && fieldKind(ctx, ownText) !== 'html' ? ownText : undefined
   // Bugs: Azure DevOps shows Repro Steps on the form, not Description.
   const longField = hasOwnDescription ? null : reproType ? REPRO_STEPS : 'System.Description'
   const missingRequired = customDefs.filter((d) => d.alwaysRequired && (custom[d.referenceName] === undefined || custom[d.referenceName] === null || custom[d.referenceName] === ''))
@@ -230,8 +233,10 @@ export function NewItemSheet() {
         {customDefs.map((d) => (
           <div className="form-row" key={d.referenceName}>
             <label htmlFor={`ni-${d.referenceName}`}>{d.name}{d.alwaysRequired && <span style={{ color: 'var(--danger)' }}> *</span>}</label>
-            <div style={{ maxWidth: fieldKind(ctx, d) === 'html' ? undefined : 320 }}>
-              <CustomFieldInput def={d} ctx={ctx} value={custom[d.referenceName]} onChange={(v) => setCustom((c) => ({ ...c, [d.referenceName]: v }))} forceKind={isIdLike(d) ? 'text' : undefined} />
+            <div style={{ maxWidth: fieldKind(ctx, d) === 'html' || d === plainOwnText ? undefined : 320 }}>
+              {d === plainOwnText ? (
+                <textarea id={`ni-${d.referenceName}`} className="textarea" value={String(custom[d.referenceName] ?? '')} onChange={(e) => setCustom((c) => ({ ...c, [d.referenceName]: e.target.value || null }))} placeholder={d.helpText ?? ''} spellCheck />
+              ) : <CustomFieldInput def={d} ctx={ctx} value={custom[d.referenceName]} onChange={(v) => setCustom((c) => ({ ...c, [d.referenceName]: v }))} forceKind={isIdLike(d) ? 'text' : undefined} />}
               {d.helpText && <div className="help">{d.helpText}</div>}
             </div>
           </div>
