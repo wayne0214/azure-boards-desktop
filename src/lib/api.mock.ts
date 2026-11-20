@@ -74,7 +74,7 @@ const types: WorkItemType[] = [
     ],
   },
   {
-    name: 'User Story', referenceName: 'Microsoft.VSTS.WorkItemTypes.UserStory', color: '0098C7', fieldDefs: [idField('Custom.SRSID', 'SRS ID'), { referenceName: 'Custom.SRSSpec', name: 'Software Requirement Specification' }, { referenceName: 'Custom.Rationale', name: 'Rationale' }, { referenceName: 'Microsoft.VSTS.Common.AcceptanceCriteria', name: 'Acceptance Criteria' }, riskField, methodField],
+    name: 'User Story', referenceName: 'Microsoft.VSTS.WorkItemTypes.UserStory', color: '0098C7', fieldDefs: [idField('Custom.SRSID', 'SRS ID'), { referenceName: 'Custom.SRSSpec', name: 'Software Requirement Specification' }, { referenceName: 'Custom.Rationale', name: 'Rationale' }, { referenceName: 'Microsoft.VSTS.Common.AcceptanceCriteria', name: 'Acceptance Criteria' }, riskField, methodField, { referenceName: 'Custom.InterfaceDescription', name: 'Interface Description' }, { referenceName: 'Custom.DFMEARef', name: 'DFMEA Reference' }, { referenceName: 'Custom.PFMEARef', name: 'PFMEA Reference' }],
     states: [
       { name: 'New', color: 'b2b2b2', category: 'Proposed' },
       { name: 'Active', color: '007acc', category: 'InProgress' },

@@ -3,12 +3,12 @@ import DOMPurify from 'dompurify'
 import { ArrowLeft, ChevronDown, ExternalLink, GitBranch, Link2, Plus, RefreshCw, Undo2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
-import { ACCEPTANCE_CRITERIA, REPRO_STEPS, acceptanceField, customFieldsFor, descriptionField, fieldKind, isIdLike, symptomField, usesReproSteps } from '@/lib/customFields'
+import { ACCEPTANCE_CRITERIA, REPRO_STEPS, acceptanceField, descriptionField, fieldKind, inspectorFields, isIdLike, symptomField, usesReproSteps } from '@/lib/customFields'
 import { hydrateImages } from '@/lib/attachments'
 import { htmlToText, identityKey, itemUrl, longDate, relativeTime, typeColor } from '@/lib/format'
 import type { Comment, WorkItem, WorkItemType } from '@/lib/types'
 import { Avatar } from '@/components/ui/Avatar'
-import { CustomFieldInput } from '@/components/ui/CustomFieldInput'
+import { CustomFieldInput, htmlToPlain } from '@/components/ui/CustomFieldInput'
 import { Dropdown, type Option } from '@/components/ui/Dropdown'
 import { useAppStore } from '@/store/useAppStore'
 import { projectOf, useBoardStore } from '@/store/useBoardStore'
@@ -123,19 +123,30 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
   const f = item.fields
   const type = String(f['System.WorkItemType'] ?? '')
   const wit = projectTypes.find((t) => t.name === type)
-  const allCustomDefs = customFieldsFor(wit)
+  const custom = inspectorFields(ctx, wit, f)
   const reproType = type === 'Bug' || usesReproSteps(wit)
   // Only a rich-text Symptom gets its own section; a plain one stays with the other fields.
   const symptomDef = ((d) => (d && (d.referenceName.startsWith('Microsoft.') || fieldKind(ctx, d) === 'html') ? d : undefined))(symptomField(wit))
   // Types not loaded yet (an item from another project) still show the field once it has a value.
   const acceptanceDef = acceptanceField(wit) ?? (ACCEPTANCE_CRITERIA in f ? { referenceName: ACCEPTANCE_CRITERIA, name: 'Acceptance Criteria' } : undefined)
-  const customDefs = allCustomDefs.filter((d) => fieldKind(ctx, d) !== 'html')
-  const htmlDefs = allCustomDefs.filter((d) => fieldKind(ctx, d) === 'html')
+  const htmlDefs = custom.rich
+  // Empty optional fields stay folded away; the choice does not carry over to the next item.
+  const [showEmpty, setShowEmpty] = useState(false)
+  useEffect(() => setShowEmpty(false), [item.id])
   // Acceptance Criteria follows the type's main text (e.g. Software Requirement Specification), not the other rich fields.
   const mainDef = descriptionField(ctx, wit)
-  const acceptanceAfter = acceptanceDef && mainDef && htmlDefs.some((d) => d.referenceName === mainDef.referenceName) ? mainDef.referenceName : null
+  const acceptanceAfter = acceptanceDef && mainDef && [...custom.text, ...htmlDefs].some((d) => d.referenceName === mainDef.referenceName) ? mainDef.referenceName : null
   const who = f['System.AssignedTo'] as { displayName?: string; uniqueName?: string; id?: string } | undefined
   const createdBy = f['System.CreatedBy'] as { displayName?: string; uniqueName?: string } | undefined
+  // The key sits right above the text it identifies; without such a section it leads the custom sections.
+  const sections = [...custom.text, ...htmlDefs.filter((d) => d.referenceName !== symptomDef?.referenceName)]
+  const keyBefore = custom.key ? (sections.find((d) => d.referenceName === mainDef?.referenceName) ?? sections[0])?.referenceName ?? null : null
+  const keyBlock = custom.key && (
+    <>
+      <div className="section-h">{custom.key.name}</div>
+      <KeyInput key={item.id} def={custom.key} value={f[custom.key.referenceName]} onSave={(v) => void updateFields(item.id, { [custom.key!.referenceName]: v })} />
+    </>
+  )
   const [menu, setMenu] = useState<null | 'who' | 'state' | 'iter' | 'pri'>(null)
   const whoBtn = useRef<HTMLButtonElement>(null)
   const stateBtn = useRef<HTMLButtonElement>(null)
@@ -248,10 +259,6 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
         />
 
         <div className="insp-grid">
-          {customDefs.map((d) => (
-            <CustomRow key={d.referenceName} def={d} value={f[d.referenceName]} onSave={(v) => void updateFields(item.id, { [d.referenceName]: v })} />
-          ))}
-
           <span className="k">Assigned to</span>
           <span className="v">
             <button ref={whoBtn} type="button" className={`field-btn ${who ? '' : 'empty'}`} onClick={() => setMenu('who')}>
@@ -326,6 +333,16 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
               <span className="faint" style={{ fontSize: 'var(--fs-xs)' }}>{relativeTime(f['System.CreatedDate'])}</span>
             </span>
           </span>
+
+          {[...custom.rows, ...(showEmpty ? custom.hidden : [])].map((d) => (
+            <CustomEditRow key={d.referenceName} def={d} value={f[d.referenceName]} onSave={(v) => void updateFields(item.id, { [d.referenceName]: v })} />
+          ))}
+          {custom.hidden.length > 0 && (
+            <button type="button" className="insp-more" aria-expanded={showEmpty} onClick={() => setShowEmpty((v) => !v)}>
+              <ChevronDown size={13} className="chev" />
+              {showEmpty ? 'Hide empty fields' : `Show ${custom.hidden.length} empty ${custom.hidden.length === 1 ? 'field' : 'fields'}`}
+            </button>
+          )}
         </div>
 
         {/* Bugs keep their write-up in Repro Steps; Description only shows there when it already has text. */}
@@ -335,8 +352,18 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
             <RichText project={project} html={f['System.Description'] as string | undefined} placeholder="Add a description…" onSave={(html) => void updateFields(item.id, { 'System.Description': html || null })} />
           </>
         )}
+        {!keyBefore && keyBlock}
+        {custom.text.map((d) => (
+          <div key={d.referenceName}>
+            {d.referenceName === keyBefore && keyBlock}
+            <div className="section-h">{d.name}{d.alwaysRequired && <span className="req" title="Required">*</span>}</div>
+            <PlainText value={f[d.referenceName]} placeholder={d.helpText || `Add ${d.name.toLowerCase()}…`} onSave={(v) => void updateFields(item.id, { [d.referenceName]: v })} />
+            {d.referenceName === acceptanceAfter && acceptance}
+          </div>
+        ))}
         {htmlDefs.filter((d) => d.referenceName !== symptomDef?.referenceName).map((d) => (
           <div key={d.referenceName}>
+            {d.referenceName === keyBefore && keyBlock}
             <div className="section-h">{d.name}{d.alwaysRequired && <span className="req" title="Required">*</span>}</div>
             <RichText project={project} html={f[d.referenceName] as string | undefined} placeholder={d.helpText || `Add ${d.name.toLowerCase()}…`} onSave={(html) => void updateFields(item.id, { [d.referenceName]: html || null })} />
             {d.referenceName === acceptanceAfter && acceptance}
@@ -397,18 +424,53 @@ function ItemDetails({ item, className, widthStyle }: { item: WorkItem; classNam
   )
 }
 
-function CustomRow({ def, value, onSave }: { def: import('@/lib/types').FieldDef; value: unknown; onSave: (v: unknown) => void }) {
-  if (isIdLike(def)) {
-    return (
-      <>
-        <span className="k">{def.name}</span>
-        <span className="v"><span className="field-text selectable">{htmlToText(String(value ?? '')) || <span className="faint">—</span>}</span></span>
-      </>
-    )
-  }
-  return <CustomEditRow def={def} value={value} onSave={onSave} />
+
+/** The item's key, edited in place: saves when focus leaves, Escape puts the saved value back. */
+function KeyInput({ def, value, onSave }: { def: import('@/lib/types').FieldDef; value: unknown; onSave: (v: string | null) => void }) {
+  // Some processes store the key as rich text ("<div>SRS-001</div>"); edit it as the plain text it is.
+  const saved = htmlToText(String(value ?? '')).trim()
+  const [v, setV] = useState(saved)
+  useEffect(() => setV(saved), [saved])
+  return (
+    <input
+      className="field-input insp-key"
+      value={v}
+      placeholder={def.helpText || `Add ${def.name}…`}
+      aria-label={def.name}
+      spellCheck={false}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={() => { if (v.trim() !== saved) onSave(v.trim() || null) }}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setV(saved); requestAnimationFrame(() => (e.target as HTMLInputElement).blur()) } }}
+    />
+  )
 }
 
+/** A plain-text write-up edited in place: grows with its text and saves when focus leaves. */
+function PlainText({ value, placeholder, onSave }: { value: unknown; placeholder: string; onSave: (v: string | null) => void }) {
+  const saved = htmlToPlain(String(value ?? ''))
+  const [v, setV] = useState(saved)
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => setV(saved), [saved])
+  useEffect(() => {
+    const el = ref.current
+    if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight + 2}px` }
+  }, [v])
+  return (
+    <textarea
+      ref={ref}
+      className="textarea insp-text"
+      rows={1}
+      value={v}
+      placeholder={placeholder}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={() => { if (v.trim() !== saved.trim()) onSave(v.trim() || null) }}
+      onKeyDown={(e) => { if (e.key === 'Escape') { setV(saved); (e.target as HTMLTextAreaElement).blur() } }}
+      spellCheck
+    />
+  )
+}
+
+/** One custom field in the property grid, edited in place. An ID stored as rich text is edited as plain text. */
 function CustomEditRow({ def, value, onSave }: { def: import('@/lib/types').FieldDef; value: unknown; onSave: (v: unknown) => void }) {
   const ctx = useBoardStore((s) => s.ctx)
   const [v, setV] = useState<unknown>(value)
@@ -418,7 +480,7 @@ function CustomEditRow({ def, value, onSave }: { def: import('@/lib/types').Fiel
     <>
       <span className="k">{def.name}{def.alwaysRequired && <span className="req" title="Required">*</span>}</span>
       <span className="v" onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLElement).blur() }}>
-        <CustomFieldInput def={def} ctx={ctx} value={v} onChange={(nv) => { setV(nv); if (typeof nv === 'boolean' || (def.allowedValues && def.allowedValues.length > 0)) onSave(nv) }} className="field-input" compact />
+        <CustomFieldInput def={def} ctx={ctx} value={v} onChange={(nv) => { setV(nv); if (typeof nv === 'boolean' || (def.allowedValues && def.allowedValues.length > 0)) onSave(nv) }} className="field-input" compact forceKind={isIdLike(def) ? 'text' : undefined} />
       </span>
     </>
   )

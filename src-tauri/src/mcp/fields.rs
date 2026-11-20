@@ -53,7 +53,16 @@ pub fn id_like(def: &Value) -> bool {
 
 /// The type's ID field (e.g. Custom.SRSID), if it has one.
 pub fn key_field(t: &TypeInfo) -> Option<String> {
-    t.defs.iter().find(|d| id_like(d)).map(|d| def_ref(d).to_string())
+    key_def(&t.defs).map(|d| def_ref(d).to_string())
+}
+
+/// Key fields that win when a type still carries an older ID field next to them (same list as customFields.ts).
+const KEY_NAMES: [&str; 3] = ["needs id", "system requirement specification id", "subsystem requirement specification id"];
+
+/// The key among a type's field definitions: a preferred name if present, else the first ID field.
+pub fn key_def(defs: &[Value]) -> Option<&Value> {
+    let preferred = |d: &&Value| KEY_NAMES.contains(&def_name(d).trim().to_ascii_lowercase().as_str());
+    defs.iter().filter(|d| id_like(d)).find(preferred).or_else(|| defs.iter().find(|d| id_like(d)))
 }
 
 /// Every ID field across the project's types, to find a parent by its key whatever its type.
@@ -148,6 +157,17 @@ mod tests {
         assert!(!id_like(&json!({ "referenceName": "Custom.IdeaDescription", "name": "ID description" })));
         assert!(!id_like(&json!({ "referenceName": "System.Id", "name": "ID" })));
         assert_eq!(all_key_fields(&[t(), t()]), vec!["Custom.SRSID".to_string()]);
+    }
+
+    #[test]
+    fn key_prefers_the_current_field_over_an_older_id_listed_first() {
+        let defs = vec![
+            json!({ "referenceName": "Custom.SRSID", "name": "SRS ID" }),
+            json!({ "referenceName": "Custom.SubsystemRequirementSpecificationID", "name": "Subsystem Requirement Specification ID" }),
+        ];
+        assert_eq!(key_def(&defs).map(def_ref), Some("Custom.SubsystemRequirementSpecificationID"));
+        assert_eq!(key_def(&defs[..1]).map(def_ref), Some("Custom.SRSID"));
+        assert!(key_def(&[]).is_none());
     }
 
     #[test]

@@ -10,8 +10,16 @@ export interface ReleaseNote {
 /** Shown once in What's New after an update to that version. Newest first; add one per release. */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: '1.8.0',
+    version: '1.9.0',
     highlights: [
+      {
+        title: 'The new requirement fields, read and shown properly',
+        detail: 'Boards now uses Needs ID, System Requirement Specification ID and Subsystem Requirement Specification ID as the key of an item, and User Needs and Stakeholder Needs Statements, System Requirement Specification and Subsystem and Component Level Requirement Specification as its main text, even where a type still carries the older fields. Requirements, test cases, the document export and your AI tool all read them.',
+      },
+      {
+        title: 'A tidier details panel',
+        detail: 'The key sits above the text it identifies and can be edited in place. Plain-text write-ups get a full-width section like Description, and empty optional fields fold away behind Show empty fields.',
+      },
       {
         title: 'Closed work, as far back as you need',
         detail: 'Closed in Assigned to others no longer stops at 30 days. Choose the last 90 days, the last year or all time from the menu beside it, and Boards remembers your choice for each organization.',
@@ -21,7 +29,11 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         detail: 'New test case in Test Cases writes a test case that is not linked to an SRS yet. It sits under Not linked to any SRS until you link one from the editor.',
       },
     ],
-    more: [],
+    more: [
+      'A specification stored as plain text keeps its line breaks in Requirements, in the document export and on the SRS card of a test case.',
+      'New work item gives a plain-text write-up a full text box in place of Description.',
+      'Requirement levels keep their short labels (UN, DI, SRS) when the ID field has a long name.',
+    ],
   },
   {
     version: '1.7.0',
